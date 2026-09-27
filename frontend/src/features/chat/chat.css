@@ -73,7 +73,7 @@
 
 .session-list-page .create-plan-wizard-actions {
   padding-top: 12px;
-  border-top: 1px solid #eef2f6;
+  border-top: 1px solid var(--line-soft);
 }
 
 .chat-session-list {
@@ -86,8 +86,8 @@
 }
 
 .chat-session-row.is-selected {
-  border-color: rgba(0, 123, 255, 0.45);
-  background: #f1f6fd;
+  border-color: rgba(30, 90, 168, 0.45);
+  background: var(--primary-soft);
 }
 
 .chat-session-meta {
@@ -106,14 +106,14 @@
 .chat-session-date {
   font-family: var(--font-body);
   font-size: 12px;
-  color: #8a94a0;
+  color: var(--ink-3);
 }
 
 .chat-sessions-empty {
   min-height: 160px;
   display: grid;
   place-items: center;
-  border: 1px dashed #dde4ec;
+  border: 1px dashed var(--line);
   border-radius: 12px;
 }
 
@@ -121,13 +121,13 @@
   margin: 0;
   font-family: var(--font-label);
   font-size: 0.86rem;
-  color: #6b7785;
+  color: var(--ink-3);
 }
 
 /* 전체 삭제는 왼쪽 끝, 새 대화는 오른쪽 끝 */
 .create-plan-wizard-button.session-delete-all {
   margin-right: auto;
-  color: #b02a37;
+  color: var(--danger);
 }
 
 .plan-action-btn:disabled {
@@ -161,7 +161,7 @@
 .chat-messages::-webkit-scrollbar-thumb,
 .chat-session-list::-webkit-scrollbar-thumb,
 .home-example-list::-webkit-scrollbar-thumb {
-  background: rgba(140, 160, 185, 0.55);
+  background: rgba(123, 147, 176, 0.55);
   border: 2px solid rgba(255, 255, 255, 0.88);
   border-radius: 999px;
 }
@@ -187,7 +187,7 @@
 .chat-empty-text {
   margin: 0 0 8px;
   font-size: 0.86rem;
-  color: #6b7785;
+  color: var(--ink-3);
 }
 
 .chat-examples {
@@ -199,7 +199,7 @@
 .chat-example {
   border: 1px solid var(--raised-border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--raised-shadow-sm);
   padding: 12px 14px;
   font-family: var(--font-body);
@@ -211,8 +211,8 @@
 }
 
 .chat-example:hover:not(:disabled) {
-  border-color: rgba(0, 123, 255, 0.3);
-  box-shadow: var(--raised-shadow-sm), 0 2px 8px rgba(0, 123, 255, 0.08);
+  border-color: rgba(30, 90, 168, 0.3);
+  box-shadow: var(--raised-shadow-sm), 0 2px 8px rgba(30, 90, 168, 0.08);
 }
 
 /* ---------------------------------------------------------------- 메시지 */
@@ -234,8 +234,8 @@
 }
 
 .user-message .message-content {
-  background: #e7f1ff;
-  border: 1px solid #d3e4fb;
+  background: var(--primary-soft);
+  border: 1px solid var(--primary-soft-strong);
   border-radius: 16px;
   padding: 9px 14px;
   color: var(--color-ink);
@@ -269,7 +269,7 @@
 .message-content {
   font-size: 15px;
   line-height: 1.65;
-  color: #1f2933;
+  color: var(--ink);
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: break-word;
@@ -286,7 +286,7 @@
   margin: 2px 0 12px;
   font-size: 13px;
   line-height: 1.55;
-  color: #6b7785;
+  color: var(--ink-3);
 }
 
 .trace-steps {
@@ -318,7 +318,7 @@
   display: inline-block;
   width: 10px;
   font-size: 10px;
-  color: #9aa4ae;
+  color: var(--slate);
   transition: transform 160ms ease;
 }
 
@@ -332,7 +332,7 @@
 
 .trace-thinking-title {
   font-style: italic;
-  color: #3c4650;
+  color: var(--ink-2);
 }
 
 .trace-thinking-preview {
@@ -342,17 +342,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-style: italic;
-  color: #9aa4ae;
+  color: var(--slate);
 }
 
 .trace-thinking-text {
   margin: 4px 0 0 16px;
   padding-left: 10px;
-  border-left: 2px solid #dfe6ee;
+  border-left: 2px solid var(--line);
   font-style: italic;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: #6b7785;
+  color: var(--ink-3);
 }
 
 /* 도구 호출: ● 이름 입력값 / ⎿ 결과 */
@@ -361,14 +361,14 @@
   align-items: baseline;
   flex-wrap: wrap;
   gap: 6px;
-  color: #3c4650;
+  color: var(--ink-2);
 }
 
 .trace-bullet {
   display: inline-block;
   width: 10px;
   font-size: 9px;
-  color: #2e9d6a;
+  color: var(--status-ok);
 }
 
 .trace-tool.is-running .trace-bullet {
@@ -377,7 +377,7 @@
 }
 
 .trace-tool.is-error .trace-bullet {
-  color: #dc3545;
+  color: var(--danger);
 }
 
 .trace-tool.is-error .trace-tool-label {
@@ -386,9 +386,9 @@
 
 /* 입력값만 고정폭 글꼴 (고정폭 글꼴에는 한글이 없어 이름까지 쓰면 글자 간격이 벌어진다) */
 .trace-tool-detail {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
-  color: #8a94a0;
+  color: var(--ink-3);
   overflow-wrap: anywhere;
 }
 
@@ -396,11 +396,11 @@
   display: block;
   padding-left: 16px;
   font-size: 12.5px;
-  color: #8a94a0;
+  color: var(--ink-3);
 }
 
 .trace-tool.is-error .trace-tool-result {
-  color: #b02a37;
+  color: var(--danger);
 }
 
 /* 기다리는 동안의 한 줄 (LiveLine): 도는 별표 · 지금 단계 · 지난 시간 */
@@ -448,7 +448,7 @@
 }
 
 .trace-time {
-  color: #8a94a0;
+  color: var(--ink-3);
 }
 
 @keyframes trace-blink {
@@ -489,7 +489,7 @@
   font-size: 1.4rem;
   margin: 0.8rem 0;
   padding-bottom: 0.3rem;
-  border-bottom: 1px solid #e8edf3;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .markdown-content h2 {
@@ -524,16 +524,16 @@
 }
 
 .markdown-content code {
-  background: #eef4ff;
+  background: var(--primary-soft);
   padding: 0.1rem 0.35rem;
   border-radius: 6px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.88em;
 }
 
 .markdown-content pre {
-  background: #f7f9fc;
-  border: 1px solid #e1e7ef;
+  background: var(--canvas);
+  border: 1px solid var(--line);
   padding: 0.8rem 1rem;
   border-radius: 10px;
   overflow-x: auto;
@@ -559,7 +559,7 @@
   border-spacing: 0;
   font-size: 14px;
   line-height: 1.5;
-  border: 1px solid #e1e7ef;
+  border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -571,7 +571,7 @@
   padding: 8px 12px;
   text-align: left;
   vertical-align: top;
-  border-bottom: 1px solid #e8edf3;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .markdown-table tr:last-child td {
@@ -580,15 +580,15 @@
 
 .markdown-table th + th,
 .markdown-table td + td {
-  border-left: 1px solid #e8edf3;
+  border-left: 1px solid var(--line-soft);
 }
 
 .markdown-table th {
-  background: #f7f9fc;
+  background: var(--canvas);
   font-family: var(--font-label);
   font-size: 12px;
   font-weight: 700;
-  color: #6c757d;
+  color: var(--ink-3);
   white-space: nowrap;
 }
 
@@ -604,7 +604,7 @@
   padding: 12px 12px 8px;
   border: 1px solid var(--raised-border);
   border-radius: var(--radius-md);
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--raised-shadow);
   max-width: 760px;
 }
@@ -622,7 +622,7 @@
 
 .artifact-loading {
   border-radius: 8px;
-  background: linear-gradient(90deg, #f3f6fa 0%, #e9eef5 50%, #f3f6fa 100%);
+  background: linear-gradient(90deg, var(--line-soft) 0%, var(--line-soft) 50%, var(--line-soft) 100%);
   background-size: 200% 100%;
   animation: artifact-shimmer 1.4s ease-in-out infinite;
 }
@@ -684,8 +684,8 @@
   max-width: 60%;
   height: auto;
   border-radius: 12px;
-  border: 1px solid #e1e7ef;
-  box-shadow: 0 8px 16px rgba(35, 47, 62, 0.1);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 16px rgba(10, 22, 40, 0.1);
   cursor: pointer;
   object-fit: contain;
   display: block;
@@ -705,7 +705,7 @@
 }
 
 .elapsed-time {
-  color: #8a94a0;
+  color: var(--ink-3);
 }
 
 .details-toggle {
@@ -759,7 +759,7 @@
 .trace-reveal .trace {
   margin: 10px 0 0;
   padding-top: 10px;
-  border-top: 1px solid #e8edf3;
+  border-top: 1px solid var(--line-soft);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -781,15 +781,15 @@
   gap: 10px;
   border: 1px solid var(--raised-border);
   border-radius: 14px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--composer-shadow);
   padding: 10px 10px 10px 14px;
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
 .composer:focus-within {
-  border-color: rgba(0, 123, 255, 0.56);
-  box-shadow: inset 0 0 0 1px rgba(0, 123, 255, 0.14), var(--composer-shadow);
+  border-color: rgba(30, 90, 168, 0.56);
+  box-shadow: inset 0 0 0 1px rgba(30, 90, 168, 0.14), var(--composer-shadow);
 }
 
 .composer-input {
@@ -803,12 +803,12 @@
   font-family: var(--font-body);
   font-size: 0.95rem;
   line-height: 1.5;
-  color: #1f2933;
+  color: var(--ink);
   max-height: 150px;
 }
 
 .composer-input::placeholder {
-  color: #a0aab5;
+  color: var(--slate);
 }
 
 .composer-actions {
@@ -837,7 +837,7 @@
 }
 
 .composer-send.is-cancel {
-  background: #3c4650;
+  background: var(--ink-2);
   box-shadow: none;
 }
 
@@ -864,9 +864,9 @@
   overflow-y: auto;
   border: 1px solid var(--raised-border);
   border-radius: 14px;
-  background: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 2px 4px rgba(35, 47, 62, 0.05),
-    0 18px 36px rgba(35, 47, 62, 0.14);
+  background: var(--surface);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 2px 4px rgba(10, 22, 40, 0.05),
+    0 18px 36px rgba(10, 22, 40, 0.14);
   padding: 8px;
   transform-origin: top center;
   animation: composer-suggest-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -906,7 +906,7 @@
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #3d7cc9;
+  color: var(--primary);
 }
 
 .composer-suggestions ul {
@@ -933,7 +933,7 @@
 
 .composer-suggestion:hover,
 .composer-suggestion:focus-visible {
-  background: #f1f6fd;
+  background: var(--primary-soft);
   outline: none;
 }
 
@@ -997,15 +997,15 @@
 
 /* ---------------------------------------------------------------- 변경 작업 승인 카드 (ApprovalCard.tsx)
    답변 아래에 둔다. 홈의 숫자 카드와 같은 흰 입체 카드(styles.css의 --raised-*)이고, 상태는 숫자 카드처럼 위쪽 3px 색 줄로
-   알린다: 승인을 기다리는 동안은 주황, 의심 신호가 있으면 빨강(과 맨 위의 빨간 띠).
-   결정한 뒤에는 색 줄 없는 한 줄로 접는다 (실패만 빨간 줄) */
+   알린다: 승인을 기다리는 동안은 주 색(파랑), 의심 신호가 있으면 빨강(과 맨 위의 빨간 띠. 위험한 승인이므로).
+   결정한 뒤에는 색 줄 없는 한 줄로 접는다 (실패만 빨간 줄). 빨강은 실패와 위험한 동작에만 쓴다 (styles.css) */
 
 .approval-card {
   margin-top: 12px;
   border: 1px solid var(--raised-border);
-  border-top: 3px solid #f0a020;
+  border-top: 3px solid var(--status-pending);
   border-radius: 14px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--raised-shadow);
   padding: 12px 16px 14px;
   display: grid;
@@ -1016,7 +1016,7 @@
 /* 방금 받은 답변의 카드가 나타날 때 (ChatMessage가 글을 다 보인 뒤 잠깐 쉬었다가 그린다):
    1) 카드가 아래에서 살짝 떠오르며 또렷해지고
    2) 안의 줄(머리 → 대상·변경·영향 → 호출 → 버튼)이 차례로 채워지고
-   3) 위쪽 상태 색(기다림 주황, 의심 신호 빨강)이 테두리 밖으로 한 번 번져 눈길을 끈다 */
+   3) 위쪽 상태 색(기다림 파랑, 의심 신호 빨강)이 테두리 밖으로 한 번 번져 눈길을 끈다 */
 .approval-card.is-entering {
   animation: approval-card-in 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -1070,24 +1070,24 @@
 /* 카드의 입체감 그림자(--raised-shadow)는 그대로 두고, 상태 색 번짐만 더했다 뺀다 */
 @keyframes approval-card-glow {
   from {
-    box-shadow: var(--raised-shadow), 0 0 0 0 rgba(240, 160, 32, 0.45);
+    box-shadow: var(--raised-shadow), 0 0 0 0 rgba(30, 90, 168, 0.35);
   }
   to {
-    box-shadow: var(--raised-shadow), 0 0 0 10px rgba(240, 160, 32, 0);
+    box-shadow: var(--raised-shadow), 0 0 0 10px rgba(30, 90, 168, 0);
   }
 }
 
 @keyframes approval-card-glow-alert {
   from {
-    box-shadow: var(--raised-shadow), 0 0 0 0 rgba(220, 53, 69, 0.4);
+    box-shadow: var(--raised-shadow), 0 0 0 0 rgba(180, 35, 24, 0.35);
   }
   to {
-    box-shadow: var(--raised-shadow), 0 0 0 10px rgba(220, 53, 69, 0);
+    box-shadow: var(--raised-shadow), 0 0 0 10px rgba(180, 35, 24, 0);
   }
 }
 
 .approval-card.is-tainted {
-  border-top-color: #dc3545;
+  border-top-color: var(--danger);
   padding-top: 0;
   overflow: hidden;
 }
@@ -1101,7 +1101,7 @@
 
 .approval-card.is-closed.is-failed {
   border-top-width: 3px;
-  border-top-color: #dc3545;
+  border-top-color: var(--danger);
 }
 
 /* 의심 신호: 카드 맨 위를 가로지르는 빨간 띠 (체류 신호, services/llm/approvals.py) */
@@ -1111,17 +1111,17 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  background: rgba(220, 53, 69, 0.08);
-  border-bottom: 1px solid rgba(220, 53, 69, 0.2);
+  background: var(--danger-soft);
+  border-bottom: 1px solid rgba(180, 35, 24, 0.2);
   font-size: 0.82rem;
   line-height: 1.45;
-  color: #3c4650;
+  color: var(--ink-2);
 }
 
 .approval-alert-icon {
   flex: none;
   margin-top: 1px;
-  color: #c0303f;
+  color: var(--danger);
 }
 
 .approval-alert-body {
@@ -1134,7 +1134,7 @@
   margin: 0;
   font-family: var(--font-label);
   font-weight: 700;
-  color: #b02a37;
+  color: var(--danger);
 }
 
 .approval-alert-list {
@@ -1144,7 +1144,7 @@
 
 .approval-alert-hint {
   margin: 0;
-  color: #5f6670;
+  color: var(--ink-3);
 }
 
 .approval-head {
@@ -1154,23 +1154,13 @@
   flex-wrap: wrap;
 }
 
-.approval-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 10px;
-  border-radius: 999px;
-  background: rgba(255, 153, 0, 0.18);
-  color: #9a5b00;
-  font-family: var(--font-label);
-  font-size: 12px;
-  font-weight: 700;
-}
+/* '승인 필요' 배지는 공통 배지(components/badge.css의 is-normal)를 쓴다 */
 
 .approval-tool {
   font-family: var(--font-label);
   font-size: 0.9rem;
   font-weight: 700;
-  color: #1f2933;
+  color: var(--ink);
 }
 
 .approval-timer {
@@ -1178,7 +1168,7 @@
   font-family: var(--font-label);
   font-size: 12px;
   font-weight: 600;
-  color: #9a5b00;
+  color: var(--status-pending);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1187,7 +1177,7 @@
   margin: 0;
   font-size: 0.9rem;
   line-height: 1.5;
-  color: #1f2933;
+  color: var(--ink);
   overflow-wrap: anywhere;
 }
 
@@ -1209,7 +1199,7 @@
   font-family: var(--font-label);
   font-size: 12px;
   font-weight: 600;
-  color: #8a94a0;
+  color: var(--ink-3);
 }
 
 .approval-fact dd {
@@ -1223,9 +1213,9 @@
   padding: 2px 8px;
   border: 1px solid var(--color-line);
   border-radius: 6px;
-  background: #fff;
+  background: var(--surface);
   font-size: 12px;
-  color: #3c4650;
+  color: var(--ink-2);
   overflow-wrap: anywhere;
 }
 
@@ -1240,26 +1230,26 @@
 .approval-before {
   font-size: 0.92rem;
   font-weight: 600;
-  color: #8a94a0;
+  color: var(--ink-3);
   text-decoration: line-through;
-  text-decoration-color: rgba(138, 148, 160, 0.7);
+  text-decoration-color: rgba(123, 147, 176, 0.7);
 }
 
 .approval-arrow {
-  color: #9aa4b1;
+  color: var(--slate);
 }
 
 .approval-after {
   font-size: 1.12rem;
   font-weight: 800;
-  color: #111827;
+  color: var(--ink);
   text-decoration: none;
 }
 
 .approval-warning {
   font-size: 0.86rem;
   line-height: 1.45;
-  color: #3c4650;
+  color: var(--ink-2);
 }
 
 /* 승인하면 실제로 실행될 호출 한 줄 (가리거나 줄이지 않는다) */
@@ -1267,10 +1257,10 @@
   display: block;
   padding: 7px 10px;
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.045);
+  background: rgba(10, 22, 40, 0.045);
   font-size: 12px;
   line-height: 1.5;
-  color: #3c4650;
+  color: var(--ink-2);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -1293,7 +1283,7 @@
   font-family: var(--font-label);
   font-size: 0.84rem;
   font-weight: 600;
-  color: #1f2933;
+  color: var(--ink);
   cursor: pointer;
 }
 
@@ -1301,21 +1291,21 @@
   width: 15px;
   height: 15px;
   margin: 0;
-  accent-color: #d03b3b;
+  accent-color: var(--danger);
   cursor: pointer;
 }
 
 .plan-create-button.approval-approve-risky {
-  background: #d03b3b;
-  box-shadow: 0 8px 16px rgba(208, 59, 59, 0.2);
+  background: var(--danger);
+  box-shadow: 0 8px 16px rgba(180, 35, 24, 0.2);
 }
 
 .plan-create-button.approval-approve-risky:hover:not(:disabled) {
-  background: #b92f2f;
+  background: var(--danger-hover);
 }
 
 .plan-create-button.approval-approve-risky:disabled {
-  background: #e7a3a3;
+  background: rgba(180, 35, 24, 0.4);
   box-shadow: none;
   cursor: not-allowed;
 }
@@ -1344,12 +1334,12 @@
 }
 
 .approval-row-toggle:hover {
-  background: rgba(15, 23, 42, 0.04);
+  background: rgba(10, 22, 40, 0.04);
 }
 
 .approval-row-toggle:focus-visible,
 .approval-copy:focus-visible {
-  outline: 2px solid rgba(0, 123, 255, 0.45);
+  outline: 2px solid rgba(30, 90, 168, 0.45);
   outline-offset: 1px;
 }
 
@@ -1358,11 +1348,11 @@
   font-family: var(--font-label);
   font-size: 0.84rem;
   font-weight: 700;
-  color: #1f2933;
+  color: var(--ink);
 }
 
 .approval-card.is-failed .approval-row-status {
-  color: #b02a37;
+  color: var(--danger);
 }
 
 .approval-row-text {
@@ -1371,17 +1361,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.84rem;
-  color: #3c4650;
+  color: var(--ink-2);
 }
 
 .approval-row-change {
-  color: #6c757d;
+  color: var(--ink-3);
 }
 
 .approval-row-caret {
   flex: none;
   margin-left: auto;
-  color: #8a94a0;
+  color: var(--ink-3);
   transition: transform 160ms ease;
 }
 
@@ -1398,18 +1388,18 @@
   padding: 0 10px;
   border: 1px solid var(--raised-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--raised-shadow-sm);
   font-family: var(--font-label);
   font-size: 12px;
   font-weight: 600;
-  color: #5f6670;
+  color: var(--ink-3);
   cursor: pointer;
 }
 
 .approval-copy:hover {
   color: var(--color-primary);
-  border-color: rgba(0, 123, 255, 0.35);
+  border-color: rgba(30, 90, 168, 0.35);
 }
 
 /* 펼친 내용: 한 줄 아래에 구분선을 두고 기다리던 때와 같은 본문 + 결과 문장 */
@@ -1432,19 +1422,19 @@
 .approval-status {
   font-family: var(--font-label);
   font-weight: 600;
-  color: #3c4650;
+  color: var(--ink-2);
 }
 
 .approval-result {
   padding: 0 16px 12px 44px;
-  color: #b02a37;
+  color: var(--danger);
   overflow-wrap: anywhere;
 }
 
 .approval-trail {
   margin: 0;
   font-size: 12px;
-  color: #5f6670;
+  color: var(--ink-3);
   overflow-wrap: anywhere;
 }
 
@@ -1471,8 +1461,8 @@
   margin-left: 6px;
   padding: 0 7px;
   border-radius: 999px;
-  background: rgba(220, 53, 69, 0.12);
-  color: #b02a37;
+  background: var(--danger-soft);
+  color: var(--danger);
   font-family: var(--font-label);
   font-size: 11px;
   font-weight: 700;
