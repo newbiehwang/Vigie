@@ -77,6 +77,6 @@ export interface DashboardData {
     // 최근 것부터. 관리자(admins 그룹)가 아니면 null: 누가 무엇을 바꿨나(CloudTrail·감사 로그)는 관리자만 본다.
     // 대화의 CloudTrail 조회가 관리자 전용인 것과 같은 범위 (services/llm/dashboard_view.py). 화면은 카드를 그리지 않는다
     changes: DashboardChange[] | null; // 최근 10개까지 (카드 높이가 고정이라 한 번에 그만큼만 보인다)
-    changesTotal?: number | null; // 24시간 안의 전체 변경 수 (10개보다 많으면 카드가 'N건 중 최근 10건'을 보인다)
+    changesTotal?: number | null; // 24시간 안의 전체 변경 수 (화면은 쓰지 않는다. 최근 변경 카드는 최근 10건만 보인다)
     findings: DashboardFinding[];
 }

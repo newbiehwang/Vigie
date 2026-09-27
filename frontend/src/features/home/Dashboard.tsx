@@ -381,7 +381,6 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                             <section className="dash-card dash-enter" style={enter(6)} aria-labelledby="dash-service-title">
                                 <header className="dash-card-head">
                                     <h3 id="dash-service-title">서비스별 비용</h3>
-                                    <span className="dash-card-aside">{usd(data.cost.monthToDate)}</span>
                                 </header>
                                 <ServiceBars items={data.cost.byService} />
                             </section>
@@ -481,12 +480,6 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                         <h3 id="dash-change-title">
                                             최근 변경 <Freshness data={data} section="changes" />
                                         </h3>
-                                        {/* 10개보다 많으면 몇 개 중 몇 개인지 (서버가 24시간 안의 전체 수를 준다) */}
-                                        {(data.changesTotal ?? 0) > Math.min(data.changes.length, MAX_CHANGES) ? (
-                                            <span className="dash-card-aside">
-                                                24시간 {data.changesTotal}건 중 최근 {Math.min(data.changes.length, MAX_CHANGES)}건
-                                            </span>
-                                        ) : null}
                                     </header>
                                     {data.changes.length ? (
                                         <ol className="dash-changes">
