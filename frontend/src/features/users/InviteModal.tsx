@@ -1,7 +1,7 @@
 // 사용자 초대 팝업창. 사용자 관리 머리의 + 버튼으로 연다. 모양과 여닫는 효과는 이 앱의 다른 팝업창(기록 팝업창,
 // 대화 목록)과 같은 create-plan-model이다: 화면을 어둡게 덮고 가운데에 뜬다, 오른쪽 위 ✕, 닫을 때 접히는 효과.
 //   사용자 초대                                            ✕
-//   초대한 이메일로 임시 비밀번호가 든 메일이 갑니다. 임시 계정은 7일 동안 유효합니다.
+//   입력한 이메일로 임시 비밀번호가 포함된 초대 메일을 보냅니다. 임시 비밀번호는 7일간 유효합니다.
 //   이메일  [name@example.com                ]
 //   (오류: 이미 있는 사용자입니다)
 //                                     [취소] [다음]
@@ -108,7 +108,7 @@ export function InviteModal({ onInvited, onClose }: { onInvited: (user: ManagedU
                     <h3 id="users-invite-title" className="create-plan-step-heading">
                         사용자 초대
                     </h3>
-                    <p>초대한 이메일로 임시 비밀번호가 든 메일이 갑니다. 임시 계정은 7일 동안 유효합니다.</p>
+                    <p>입력한 이메일로 임시 비밀번호가 포함된 초대 메일을 보냅니다. 임시 비밀번호는 7일간 유효합니다.</p>
                 </div>
                 {confirming ? (
                     <div className="users-invite-form users-invite-confirm">

@@ -12,7 +12,7 @@ export async function listUsers(q = '', cursor?: string | null): Promise<UsersPa
     return data;
 }
 
-// 초대: 임시 비밀번호가 든 메일이 간다 (7일). 일반 사용자로 시작한다
+// 초대: 임시 비밀번호가 포함된 초대 메일을 보낸다 (임시 비밀번호는 7일간 유효). 일반 사용자로 시작한다
 export async function inviteUser(email: string): Promise<ManagedUser> {
     const { data } = await axios.post<ManagedUser>('/users', { email });
     return data;
