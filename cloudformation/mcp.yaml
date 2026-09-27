@@ -98,7 +98,8 @@ Resources:
               commands:
                 - echo Build started on `date`
                 - echo Building the Docker image...
-                - docker build -t $REPOSITORY_URI:$MCP_ECR_IMAGE_TAG .
+                # AWS_REGION: 이미지를 만들 때 공식 MCP 도구 목록 스냅샷을 적으며 서버를 불러오는데, boto3가 리전을 찾는다 (Dockerfile)
+                - docker build --build-arg AWS_REGION=$AWS_REGION -t $REPOSITORY_URI:$MCP_ECR_IMAGE_TAG .
                 
             post_build:
               commands:
