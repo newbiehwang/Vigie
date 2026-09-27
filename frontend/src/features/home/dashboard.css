@@ -809,12 +809,23 @@
   overflow-wrap: anywhere;
 }
 
-/* 최근 변경 (시간 줄) */
+/* 최근 변경 (시간 줄)
+   카드 높이를 고정한다: 줄 하나의 높이(--change-row)를 정하고, 목록 칸을 --change-rows(10)줄만큼 잡는다.
+   변경이 적으면 아래가 비고, 많아도 서버·화면이 10개까지만 그려 카드가 늘지 않는다.
+   줄마다 요약·출처를 한 줄씩만 보이고 넘치면 …로 자른다 (줄 높이가 늘지 않게) */
+.dash-card--changes {
+  --change-row: 52px;
+  grid-template-rows: auto calc(var(--change-rows, 10) * var(--change-row));
+  align-content: start;
+}
+
 .dash-changes {
   margin: 0;
   padding: 0;
   list-style: none;
   display: grid;
+  grid-auto-rows: var(--change-row);
+  align-content: start;
 }
 
 .dash-changes li {
@@ -822,6 +833,7 @@
   display: flex;
   gap: 12px;
   padding: 0 0 14px;
+  min-width: 0;
 }
 
 .dash-changes li:last-child {
@@ -863,12 +875,18 @@
   font-size: 0.84rem;
   line-height: 1.45;
   color: #1f2933;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dash-change-meta {
   font-size: 12px;
+  line-height: 1.4;
   color: #8a94a0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dash-changes li.is-app .dash-change-source {
