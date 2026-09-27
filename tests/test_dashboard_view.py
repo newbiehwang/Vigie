@@ -53,11 +53,11 @@ def test_resources_get_status_from_state_and_usage(view):
     assert rows["wga-llm-test"]["status"] == "fail" and rows["wga-llm-test"]["detail"].startswith("오류율 10.0%")
     assert rows["wga-mcp-test"]["status"] == "warn" and rows["wga-mcp-test"]["errors24h"] == 1
     assert rows["wga-idle-test"]["status"] == "none"
-    assert rows["wga-new-test"]["detail"] == "사용량을 아직 모으지 않았습니다"  # usage를 모으기 전에 생긴 함수
+    assert rows["wga-new-test"]["detail"] == "사용량 데이터 없음"  # usage를 모으기 전에 생긴 함수
     assert rows["i-batch"]["status"] == "warn" and "유휴" in rows["i-batch"]["detail"]
     assert rows["i-bad"]["status"] == "fail" and rows["i-off"]["status"] == "none"
     assert rows["i-web"]["label"] == "web" and rows["i-web"]["status"] == "ok"
-    assert rows["open-bucket"]["detail"] == "퍼블릭 액세스 차단 2개 꺼짐"
+    assert rows["open-bucket"]["detail"] == "퍼블릭 액세스 차단 2개 해제"
     assert result["counts"] == {"fail": 3, "warn": 3, "ok": 2, "none": 3}
     assert [row["status"] for row in result["rows"]][:3] == ["fail"] * 3  # 문제 먼저
 

@@ -9,7 +9,7 @@ AWS는 부르지 않는다 (DynamoDB만 읽는다).
     changes   → changes (CloudTrail) + 감사 로그의 executed(이 앱에서 승인해 실행). 같은 요청 ID면 한 번만
     cost      → cost
     (실시간)   → approvals (볼 수 있는 대기 요청만, approvals.can_view)
-- 한 번도 모으지 못한 구역은 null이다. 화면은 그 칸에 '아직 모으지 않았습니다'를 보인다.
+- 한 번도 모으지 못한 구역은 null이다. 화면은 그 칸에 '데이터가 존재하지 않습니다.'를 보인다.
 - sections에 구역마다 모은 때·성공 여부를 담아, 화면이 '모으지 못함 · 마지막 성공 N분 전'을 보일 수 있게 한다.
 """
 import time
@@ -31,11 +31,11 @@ def _lambda_row(function: Dict[str, Any], usage: Optional[Dict[str, Any]]) -> Di
     row: Dict[str, Any] = {"id": name, "kind": "Lambda"}
     counts = (usage or {}).get("functions", {}).get(name)
     if counts is None:
-        return {**row, "status": "none", "detail": "사용량을 아직 모으지 않았습니다"}
+        return {**row, "status": "none", "detail": "사용량 데이터 없음"}
     errors, invocations = counts.get("errors", 0), counts.get("invocations", 0)
     row["errors24h"] = errors
     if not invocations:
-        return {**row, "status": "none", "detail": "지난 24시간 호출 없음"}
+        return {**row, "status": "none", "detail": "호출 없음"}
     rate = errors / invocations
     if rate >= FAIL_ERROR_RATE:
         return {**row, "status": "fail", "detail": f"오류율 {rate * 100:.1f}% (호출 {invocations:,}번)"}
@@ -55,7 +55,7 @@ def _ec2_row(instance: Dict[str, Any], usage: Optional[Dict[str, Any]]) -> Dict[
     if instance.get("checks") == "impaired":
         return {**row, "status": "fail", "detail": "상태 검사 실패"}
     if cpu is not None and cpu < IDLE_CPU:
-        return {**row, "status": "warn", "detail": f"CPU 평균 {cpu}% (14일) · 유휴"}
+        return {**row, "status": "warn", "detail": f"최근 14일 CPU 평균 {cpu}% · 유휴"}
     if instance.get("checks") == "initializing":
         return {**row, "status": "ok", "detail": "상태 검사 진행 중"}
     return {**row, "status": "ok", "detail": "상태 검사 통과" + (f" · CPU 평균 {cpu}%" if cpu is not None else "")}
@@ -65,8 +65,8 @@ def _s3_row(bucket: Dict[str, Any]) -> Dict[str, Any]:
     off = bucket.get("blockOff") or []
     if off:
         return {"id": bucket["name"], "kind": "S3", "status": "warn",
-                "detail": f"퍼블릭 액세스 차단 {len(off)}개 꺼짐"}
-    return {"id": bucket["name"], "kind": "S3", "status": "ok", "detail": "퍼블릭 액세스 차단 4개 모두 켜짐"}
+                "detail": f"퍼블릭 액세스 차단 {len(off)}개 해제"}
+    return {"id": bucket["name"], "kind": "S3", "status": "ok", "detail": "퍼블릭 액세스 차단 모두 적용"}
 
 
 def build_resources(alarms: Optional[Dict[str, Any]], resources: Optional[Dict[str, Any]],
@@ -102,12 +102,12 @@ def build_findings(resources: Optional[Dict[str, Any]], usage: Optional[Dict[str
             if i.get("state") == "running" and cpu.get(i["id"]) is not None and cpu[i["id"]] < IDLE_CPU]
     if idle:
         findings.append({"kind": "idle-ec2", "status": "warn", "title": f"유휴 EC2 인스턴스 {len(idle)}대",
-                         "detail": f"{_names(idle)} · 14일 CPU 평균 {IDLE_CPU:g}% 미만"})
+                         "detail": f"{_names(idle)} · 최근 14일 CPU 평균 {IDLE_CPU:g}% 미만"})
     logs = resources.get("logs") or {}
     if logs.get("neverExpire"):
         findings.append({"kind": "log-retention", "status": "warn",
                          "title": f"보존 기간 미설정 로그 그룹 {logs['neverExpire']}개",
-                         "detail": f"{_names([g['name'] for g in logs.get('groups', [])])} · 로그가 기한 없이 누적됨"})
+                         "detail": _names([g['name'] for g in logs.get('groups', [])])})
     return findings
 
 
