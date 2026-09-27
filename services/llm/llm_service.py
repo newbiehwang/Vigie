@@ -73,6 +73,20 @@ MODELS_CACHE_SECONDS = 3600  # 모델 목록은 자주 바뀌지 않는다. Lamb
 COLD_MODELS_TIMEOUT = 5  # 목록이 아직 없을 때(새 컨테이너) 기다리는 시간. 넘으면 FALLBACK_MODEL로 답한다
 # 대화 기록은 최근 것만 보낸다 (오래된 대화까지 매번 보내면 입력이 커져 첫 응답이 늦어지고 요금이 는다)
 MAX_HISTORY_MESSAGES = 20
+# 인사·감사처럼 도구가 필요 없는 짧은 말. 도구 목록·MCP·사고 없이 바로 답한다 (is_small_talk).
+# 말 전체가 이것뿐일 때만 (뒤에 질문이 붙으면 평소처럼): "안녕", "고마워요!", "hi" / 아님: "안녕, 로그 봐줘"
+SMALL_TALK = re.compile(
+    r"^(안녕(하세요|하십니까)?|하이|헬로|반가워(요)?|반갑습니다|고마워(요)?|감사(해요|합니다)?|땡큐|"
+    r"수고(하셨습니다|했어요?|해요|하세요)?|잘\s?(가|있어)|좋은\s?(아침|하루)(이에요|입니다)?|"
+    r"hi|hello|hey|thanks?|thank\s+you|good\s+(morning|night))"
+    r"[\s!.~?^ㅎㅋㅠㅜ:)]*$", re.IGNORECASE)
+SMALL_TALK_MAX_CHARS = 20
+
+
+def is_small_talk(text: str) -> bool:
+    """도구가 필요 없는 인사·감사인가 (짧고, 말 전체가 SMALL_TALK일 때만)."""
+    text = (text or "").strip()
+    return 0 < len(text) <= SMALL_TALK_MAX_CHARS and bool(SMALL_TALK.match(text))
 # 목록을 한 번도 받지 못했을 때만 쓰는 모델 (Models API 장애 등). 평소에는 쓰이지 않는다
 FALLBACK_MODEL = {"id": "claude-sonnet-5", "display_name": "Claude Sonnet 5", "thinking": "adaptive"}
 _models_cache = {"at": 0.0, "models": []}
@@ -349,9 +363,11 @@ def get_client(timer=None):
                 model_id=model_id
             )
 
-        # 세션 초기화 및 도구 로드 (MCP Lambda가 차가우면 오래 걸린다: 공식 MCP 서버를 불러온다)
-        with timer.step("mcp_init"):
-            client_cache[model_id].initialize()
+        # 세션 초기화 및 도구 로드. Anthropic 클라이언트는 도구가 필요한 질문에서 처음 준비한다 (lazy_tools:
+        # 인사에는 MCP를 부르지 않는다). 그렇지 않은 클라이언트(Bedrock)는 여기서 준비한다
+        if not getattr(client_cache[model_id], "lazy_tools", False):
+            with timer.step("mcp_init"):
+                client_cache[model_id].initialize()
 
         print(f"클라이언트 초기화 완료 - 모델 ID: {model_id}")
 
@@ -449,13 +465,19 @@ def handle_llm1_with_mcp(body, origin, caller_id=None, caller_email=None):
         # 사용자 입력 처리 시작 시간 기록
         question_time = datetime.now(timezone.utc)
 
+        # 인사·감사: 도구 목록·MCP·사고 없이 바로 답한다 (받는 클라이언트만. 변경 작업 설명 요청은 평소처럼)
+        small_talk = (not action_id and is_small_talk(user_input)
+                      and getattr(client, "supports_small_talk", False))
+        answer_options = {"use_tools": False} if small_talk else {}
+
         # 세션 기반 처리 (개선된 방식 - messages 배열 사용)
         if slack_user_id and slack_previous_questions:
             print("=== slack 유저 확인 ===")
             response_text = client.process_user_input_with_history(
                 user_input,
                 system_prompt,
-                slack_previous_questions
+                slack_previous_questions,
+                **answer_options
             )
         elif is_cached and session_id and chat_table:
             try:
@@ -478,24 +500,25 @@ def handle_llm1_with_mcp(body, origin, caller_id=None, caller_email=None):
                     response_text = client.process_user_input_with_history(
                         user_input,
                         system_prompt,
-                        previous_messages
+                        previous_messages,
+                        **answer_options
                     )
                 
                 else:
                     print("=== 세션 메시지 없음 ===")
                     print("일반 모드로 처리")
-                    response_text = client.process_user_input(user_input, system_prompt)
+                    response_text = client.process_user_input(user_input, system_prompt, **answer_options)
 
             except Exception as e:
                 print(f"=== 세션 캐싱 오류 ===")
                 print(f"오류: {str(e)}")
                 print("일반 모드로 폴백")
-                response_text = client.process_user_input(user_input, system_prompt)
+                response_text = client.process_user_input(user_input, system_prompt, **answer_options)
         else:
             # 일반 처리 (기존 방식)
             print("=== 일반 모드 ===")
             print(f"is_cached: {is_cached}, session_id: {session_id}, chat_table: {chat_table is not None}")
-            response_text = client.process_user_input(user_input, system_prompt)
+            response_text = client.process_user_input(user_input, system_prompt, **answer_options)
 
         # 디버그 로그 가져오기 (추가된 get_debug_log 메서드 사용)
         debug_log = client.get_debug_log() if hasattr(client, "get_debug_log") else []
@@ -577,7 +600,7 @@ def handle_llm1_with_mcp(body, origin, caller_id=None, caller_email=None):
         # 감사 로그에는 사용자가 받은 답변(가린 뒤의 글자) 그대로. Slack으로 보낼 때 바꾸는 주소는 곧 만료되므로 넣지 않는다
         audit.request_finished(True, answer=response_text, usage=usage_of(client))
         emit_request_metrics(progress, redactor, approvals)
-        timer.log(ok=True, model=getattr(client, "model_id", None), tools=len(tools_used))
+        timer.log(ok=True, model=getattr(client, "model_id", None), tools=len(tools_used), smallTalk=small_talk)
 
         # 응답 시간 기록 및 경과 시간 계산
         response_time = datetime.now(timezone.utc)

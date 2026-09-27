@@ -74,7 +74,7 @@ def client(aws):
     made = mcp_anthropic_client.AnthropicMCPClient(mcp_url="https://example.invalid", api_key="k",
                                                    model_id="claude-sonnet-5")
     made.tools = [{"name": "describe_log_groups", "description": "로그 그룹", "inputSchema": {"type": "object"},
-                   "annotations": {"wga/risk": "read"}}]
+                   "_meta": {"wga/risk": "read"}}]
     made.tool_search = False
     made.redactor = Redactor([ACCOUNT])
     made.progress = ProgressReporter()  # 표 없이 단계만 모은다

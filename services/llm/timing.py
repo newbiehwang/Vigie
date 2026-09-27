@@ -8,6 +8,7 @@
 - 값은 로그에만 남고 화면·감사 로그에는 넣지 않는다.
 """
 import json
+import threading
 import time
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator
@@ -18,6 +19,7 @@ class Stopwatch:
         self._enabled = enabled
         self._start = time.perf_counter()
         self.steps: Dict[str, Dict[str, int]] = {}
+        self._lock = threading.Lock()  # 도구를 함께 부르면 여러 스레드가 더한다
 
     @classmethod
     def off(cls) -> "Stopwatch":
@@ -27,9 +29,10 @@ class Stopwatch:
     def add(self, name: str, ms: float) -> None:
         if not self._enabled:
             return
-        step = self.steps.setdefault(name, {"ms": 0, "n": 0})
-        step["ms"] += int(ms)
-        step["n"] += 1
+        with self._lock:
+            step = self.steps.setdefault(name, {"ms": 0, "n": 0})
+            step["ms"] += int(ms)
+            step["n"] += 1
 
     @contextmanager
     def step(self, name: str) -> Iterator[None]:
