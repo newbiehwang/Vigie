@@ -80,6 +80,13 @@ Parameters:
     Default: placeholder.example.com
     Description: McpFunctionUrl
 
+  # 인증 메일 Lambda 코드의 버전 (deploy.sh가 배포 버킷에 auth-messages/…-<버전>.zip으로 올린 뒤 넘긴다).
+  # 비어 있으면 Lambda 없이 Cognito 기본 메일을 쓴다. 처음 만들 때는 배포 버킷이 아직 없어 비워 두고, 버킷이 생긴 뒤의 업데이트에서 채운다
+  CodeVersion:
+    Type: String
+    Default: ''
+    Description: Code version of the Cognito custom message Lambda package (empty = default Cognito emails)
+
 Conditions:
   ShouldCreateBucket: !Equals [!Ref BucketExists, "false"]
   ShouldCreateOutputBucket: !Equals [!Ref OutputBucketExists, "false"]
@@ -91,6 +98,7 @@ Conditions:
   IsProd: !Equals [!Ref Environment, "prod"]
   IsTest: !Equals [!Ref Environment, "test"]
   IsDev: !Equals [!Ref Environment, "dev"]
+  HasAuthMessages: !Not [!Equals [!Ref CodeVersion, ""]]
 
 Resources:
   # S3 Buckets
@@ -421,6 +429,11 @@ Resources:
           Required: false
       EmailConfiguration:
         EmailSendingAccount: COGNITO_DEFAULT
+      # 인증 메일(가입 인증·비밀번호 재설정·초대 등)을 메일마다 다른 제목·HTML 본문으로 만든다 (services/auth_messages)
+      LambdaConfig: !If
+        - HasAuthMessages
+        - CustomMessage: !GetAtt AuthMessagesFunction.Arn
+        - !Ref AWS::NoValue
       # 자체 가입을 연다. 가입한 사용자는 조회만 할 수 있고, AWS를 바꾸는 작업은 approvers 그룹이 승인해야 실행된다
       # (services/llm/approvals.py). 조회 범위(IAM 정책·버킷 목록·비용)는 docs/threat-model.md R2에 남은 위험으로 적었다
       AdminCreateUserConfig:
@@ -432,6 +445,83 @@ Resources:
           EmailMessage: 'Vigie 계정이 만들어졌습니다. 아이디 {username} / 임시 비밀번호 {####} 로 로그인한 뒤 새 비밀번호를 정하세요. 임시 비밀번호는 7일 동안 쓸 수 있습니다.'
       UserPoolTags:
         Environment: !Ref Environment
+
+  # ---- 인증 메일 (Cognito Custom message 트리거, services/auth_messages/lambda_function.py)
+  # Cognito가 메일을 보내기 직전에 불러 제목·본문을 받는다. AWS를 부르지 않으므로 로그 쓰기 권한만 준다
+  AuthMessagesRole:
+    Type: AWS::IAM::Role
+    Condition: HasAuthMessages
+    Properties:
+      RoleName: !Sub 'vigie-auth-messages-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  AuthMessagesLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: HasAuthMessages
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_158
+            comment: CloudWatch Logs 기본 암호화를 쓴다. 고객 관리 KMS 키는 월 비용이 들어 두지 않는다
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/vigie-auth-messages-${Environment}'
+      RetentionInDays: 14
+
+  AuthMessagesFunction:
+    Type: AWS::Lambda::Function
+    Condition: HasAuthMessages
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_116
+            comment: Cognito가 동기로 부르고 결과를 바로 쓴다. 다시 처리할 비동기 이벤트가 없어 DLQ를 두지 않는다
+          - id: CKV_AWS_117
+            comment: AWS를 부르지 않고 글자만 만든다. VPC가 필요 없다
+          - id: CKV_AWS_173
+            comment: 환경 변수는 앱 주소와 로고 주소뿐이라 비밀이 없다
+          - id: CKV_AWS_115
+            comment: 가입·초대 때만 불리는 짧은 함수라 동시 실행 수를 따로 묶지 않는다 (계정 한도 안에서 돈다)
+    Properties:
+      FunctionName: !Sub 'vigie-auth-messages-${Environment}'
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Code:
+        S3Bucket: !Sub 'vigie-deployment-${AWS::AccountId}-${Environment}'
+        S3Key: !Sub 'auth-messages/auth-messages-lambda-${Environment}-${CodeVersion}.zip'
+      Timeout: 5
+      MemorySize: 128
+      Role: !GetAtt AuthMessagesRole.Arn
+      TracingConfig:
+        Mode: PassThrough
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: !Ref AuthMessagesLogGroup
+      Environment:
+        Variables:
+          # 초대 메일의 'Vigie 열기' 버튼과 메일 맨 위 로고 (프론트엔드에 올린 PNG: frontend/public/vigie-email-logo.png)
+          APP_URL: !Sub 'https://${Environment}.${FrontendRedirectDomain}'
+          LOGO_URL: !Sub 'https://${Environment}.${FrontendRedirectDomain}/vigie-email-logo.png'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Cognito(이 사용자 풀만)가 함수를 부를 수 있게 한다
+  AuthMessagesPermission:
+    Type: AWS::Lambda::Permission
+    Condition: HasAuthMessages
+    Properties:
+      FunctionName: !GetAtt AuthMessagesFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
 
   # 관리자 그룹: 이 그룹의 사용자는 모든 사람의 감사 로그를 본다 (GET /audit).
   # 그룹 추가는 관리자가 사용자 관리 탭(services/llm/user_admin.py)이나 deploy.sh의 ADMIN_EMAIL로 한다 (가입만으로는 들어갈 수 없다)
