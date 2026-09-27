@@ -16,6 +16,8 @@ from audit_trace import query_trace
 from approvals import (APPROVED, DENIED, FINISHED, ApprovalError, ApprovalRequester, ApprovalStore, approval_mode,
                        can_view, check_decision, execute_approved, follow_up_prompt, public_view)
 from mcp_client import MCPClient
+from common.dashboard_store import DashboardStore
+from dashboard_view import app_changes_from_audit, build_view, pending_approvals
 import metrics
 from system_prompt import build_system_prompt
 from artifacts import Artifacts
@@ -54,6 +56,9 @@ audit_sink = CloudWatchSink(os.environ.get("AUDIT_LOG_GROUP"))
 # 변경 작업 승인 (approvals.py). 테이블이 없으면 변경 도구는 쓸 수 없다 (승인 요청을 만들지 못해 거절된다)
 PENDING_ACTIONS_TABLE = os.environ.get("PENDING_ACTIONS_TABLE")
 approval_store = ApprovalStore(boto3.resource("dynamodb").Table(PENDING_ACTIONS_TABLE)) if PENDING_ACTIONS_TABLE else None
+# 홈 대시보드 (dashboard_view.py): 수집 Lambda(services/dashboard)가 구역마다 모아 둔 값. 없으면 GET /dashboard는 503
+DASHBOARD_TABLE = os.environ.get("DASHBOARD_TABLE")
+dashboard_store = DashboardStore(boto3.resource("dynamodb").Table(DASHBOARD_TABLE)) if DASHBOARD_TABLE else None
 
 
 # ---------------------------------------------------------------- 모델: 요청할 때 최신 Sonnet
@@ -607,6 +612,30 @@ def handle_audit(params, caller_id, claims, origin):
         return cors_response(200, query_audit(audit_table, caller_id, claims, params), origin)
     except AuditQueryError as error:
         return cors_response(error.status, {"error": str(error)}, origin)
+
+
+def handle_dashboard(claims, origin):
+    """GET /dashboard: 홈 대시보드 (dashboard_view.py). 로그인한 사용자 누구나 본다 (조회만, 대화로 물을 수 있는 것과 같은 범위).
+    AWS는 부르지 않고 모아 둔 구역과 승인 대기·감사 로그만 읽는다. 승인 대기는 이 사용자가 볼 수 있는 것만 센다."""
+    caller_id = (claims or {}).get("sub")
+    if not caller_id:
+        return cors_response(401, {"error": "로그인이 필요합니다."}, origin)
+    if dashboard_store is None:
+        return cors_response(503, {"error": "대시보드 테이블이 설정되지 않았습니다."}, origin)
+    now = int(time.time())
+    try:
+        approvals = pending_approvals(approval_store, can_view, caller_id, groups_of(claims), now)
+    except Exception as error:  # 승인 대기를 못 읽어도 나머지는 보인다
+        print(f"대시보드 승인 대기 조회 실패: {error}")
+        approvals = {"pending": 0, "unavailable": True}
+    try:
+        app_changes = app_changes_from_audit(audit_table, now)
+    except Exception as error:
+        print(f"대시보드 변경 기록 조회 실패: {error}")
+        app_changes = []
+    view = build_view(dashboard_store.get_all(), env=os.environ.get("ENV", "dev"),
+                      region=os.environ.get("AWS_REGION", ""), approvals=approvals, app_changes=app_changes, now=now)
+    return cors_response(200, view, origin)
 
 
 def usage_of(client):

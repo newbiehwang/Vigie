@@ -308,6 +308,7 @@
 }
 
 .dash-kpi-label {
+  width: 100%;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -366,6 +367,54 @@
 .dash-delta-note {
   font-weight: 500;
   color: #8a94a0;
+}
+
+/* 얼마나 새 값인가 (Freshness): 카드 머리 오른쪽의 작은 글자. 실패하면 빨강 */
+.dash-fresh {
+  margin-left: auto;
+  padding-left: 6px;
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 600;
+  color: #9aa4b1;
+  white-space: nowrap;
+}
+
+.dash-card-head h3 .dash-fresh {
+  margin-left: 8px;
+  padding-left: 0;
+}
+
+.dash-fresh.is-stale {
+  color: var(--dash-fail-ink);
+}
+
+.dash-fresh.is-missing {
+  color: #aab3be;
+}
+
+/* 한 번도 모으지 못한 숫자 카드 */
+.dash-kpi.is-empty {
+  cursor: default;
+  background: #fafbfd;
+}
+
+.dash-kpi.is-empty:hover {
+  border-color: var(--color-line);
+  box-shadow: none;
+}
+
+.dash-kpi.is-empty .dash-kpi-value {
+  color: #c3cad3;
+}
+
+.dash-notyet {
+  padding: 18px 0;
+  text-align: center;
+}
+
+.dash-table-more {
+  margin-top: 4px;
 }
 
 /* ---------------------------------------------------------------- 카드 */
