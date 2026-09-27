@@ -15,7 +15,7 @@ AWS는 부르지 않는다 (DynamoDB만 읽는다).
   대화의 CloudTrail 조회(lookup_events)·감사 로그와 같이 관리자(admins 그룹)만 본다 (docs/threat-model.md T41).
   일반 사용자에게는 null이고 sections에도 넣지 않는다. 화면은 null이면 카드를 그리지 않는다.
 - changes는 최근 MAX_CHANGES개까지만 준다. 카드 높이가 고정이라 한 번에 그만큼만 보인다.
-  24시간 안의 전체 건수는 changesTotal (화면이 '24시간 N건 중 최근 10건'을 보인다).
+  24시간 안의 전체 건수는 changesTotal (API에만 두고 화면에는 보이지 않는다).
 """
 import time
 from datetime import datetime, timedelta, timezone
