@@ -2,6 +2,7 @@
      [■ 알람]    is-strong  남색(ink)으로 채운다. 지금 봐야 하는 것 (울리는 알람, 지금 확인할 것)
      [□ 승인 대기] is-normal  파랑(primary) 테두리. 누군가 해야 할 일이 남은 것 (승인 대기, 확인 필요, 관리자)
      · 정상      is-quiet   테두리 없이 글자와 회청색 점. 문제없는 것 (정상, 완료, 성공, 참고)
+     · 정보 없음  is-quiet is-empty  점이 옅은 선 색이고 글자도 옅다 (모으지 못한 것)
      [□ 실패]    is-fail    빨강 테두리. 실행한 작업이 실패한 것에만 (알람·리소스 상태에는 쓰지 않는다)
    배지 안에는 늘 글자가 있어 색만으로 뜻을 전하지 않는다 */
 .badge {
@@ -51,4 +52,12 @@
   color: var(--status-fail);
   border-color: var(--status-fail);
   background: var(--surface);
+}
+
+.badge.is-quiet.is-empty {
+  color: var(--ink-3);
+}
+
+.badge.is-quiet.is-empty::before {
+  background: var(--status-none);
 }
