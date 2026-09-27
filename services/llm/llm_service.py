@@ -670,7 +670,9 @@ def handle_audit(params, caller_id, claims, origin):
 
 def handle_dashboard(claims, origin):
     """GET /dashboard: 홈 대시보드 (dashboard_view.py). 로그인한 사용자 누구나 본다 (조회만, 대화로 물을 수 있는 것과 같은 범위).
-    AWS는 부르지 않고 모아 둔 구역과 승인 대기·감사 로그만 읽는다. 승인 대기는 이 사용자가 볼 수 있는 것만 센다."""
+    AWS는 부르지 않고 모아 둔 구역과 승인 대기·감사 로그만 읽는다. 승인 대기는 이 사용자가 볼 수 있는 것만 센다.
+    최근 변경(CloudTrail·감사 로그의 누가 무엇을 바꿨나)은 관리자에게만 준다. 대화에서 CloudTrail 조회가 관리자 전용인 것과
+    같은 범위다 (tool_access.py). 일반 사용자에게는 감사 로그도 읽지 않는다"""
     caller_id = (claims or {}).get("sub")
     if not caller_id:
         return cors_response(401, {"error": "로그인이 필요합니다."}, origin)
@@ -682,13 +684,16 @@ def handle_dashboard(claims, origin):
     except Exception as error:  # 승인 대기를 못 읽어도 나머지는 보인다
         print(f"대시보드 승인 대기 조회 실패: {error}")
         approvals = {"pending": 0, "unavailable": True}
-    try:
-        app_changes = app_changes_from_audit(audit_table, now)
-    except Exception as error:
-        print(f"대시보드 변경 기록 조회 실패: {error}")
-        app_changes = []
+    show_changes = tool_access.role_of(groups_of(claims)) == tool_access.ADMIN
+    app_changes = []
+    if show_changes:
+        try:
+            app_changes = app_changes_from_audit(audit_table, now)
+        except Exception as error:
+            print(f"대시보드 변경 기록 조회 실패: {error}")
     view = build_view(dashboard_store.get_all(), env=os.environ.get("ENV", "dev"),
-                      region=os.environ.get("AWS_REGION", ""), approvals=approvals, app_changes=app_changes, now=now)
+                      region=os.environ.get("AWS_REGION", ""), approvals=approvals, app_changes=app_changes, now=now,
+                      show_changes=show_changes)
     return cors_response(200, view, origin)
 
 

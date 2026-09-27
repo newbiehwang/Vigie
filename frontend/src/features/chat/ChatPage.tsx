@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ToastHost, useToast } from '@/components/Toast';
-import { EXAMPLE_QUESTIONS } from '@/features/home/examples';
+import { useAuthStore } from '@/auth/authStore';
+import { examplesFor } from '@/features/home/examples';
 import { useChatStore } from '@/stores/chatStore';
 import { ChatMessage } from './ChatMessage';
 import { Composer } from './Composer';
@@ -13,6 +14,8 @@ import './chat.css';
 const NEAR_BOTTOM = 120; // 이만큼 안쪽까지 내려와 있으면 새 글이 올 때 따라 내려간다
 
 export function ChatPage() {
+    // 빈 대화의 예시 질문: 분류마다 첫 질문. 관리자가 아니면 관리자 전용 질문을 뺀다 (examples.ts)
+    const user = useAuthStore((s) => s.user);
     const currentSession = useChatStore((s) => s.currentSession);
     const waiting = useChatStore((s) => s.waitingForResponse);
     const error = useChatStore((s) => s.error);
@@ -110,7 +113,7 @@ export function ChatPage() {
                                 <p className="chat-empty-title">무엇이 궁금하세요?</p>
                                 <p className="chat-empty-text">질문을 입력하거나 아래 예시를 눌러 보세요.</p>
                                 <div className="chat-examples">
-                                    {EXAMPLE_QUESTIONS.filter((_, i) => i % 2 === 0).map(({ question }) => (
+                                    {examplesFor(user).filter((_, i) => i % 2 === 0).map(({ question }) => (
                                         <button
                                             key={question}
                                             type="button"

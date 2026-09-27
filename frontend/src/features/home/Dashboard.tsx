@@ -7,7 +7,7 @@
 //   └────────────────────────────────────────────────────────────────────┘
 //   [울리는 알람 1/24] [Lambda 오류 37 ▁▂▅] [이번 달 비용 $362] [승인 대기 1]   ← 숫자 카드
 //   [일별 비용 (막대 · 평균 점선 · 남은 날 점선 칸)      ] [서비스별 비용 (가로 막대)]
-//   [리소스 상태 (분포 막대 + 정렬되는 표)              ] [최근 변경 (시간 줄)     ]
+//   [리소스 상태 (분포 막대 + 정렬되는 표)              ] [최근 변경 (시간 줄)     ]   ← 최근 변경은 관리자만
 //   [개선 권고 (카드 여러 개)                                                       ]
 // - AI에게 묻는 곳은 '지금 확인할 것'의 줄뿐이다 (누르면 그 내용을 질문으로 새 대화). 숫자 카드·표·개선 권고는 보기만 한다.
 // - 설명 글은 두지 않는다: 확인할 것이 없으면 그 상자를 아예 그리지 않고, 값이 없는 칸은 '데이터가 존재하지 않습니다'만.
@@ -22,6 +22,7 @@
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDashboard } from '@/api/dashboard';
+import { useAuthStore } from '@/auth/authStore';
 import { LoadingCard, useMinimumVisible } from '@/components/LoadingCard';
 import { RefreshButton } from '@/components/RefreshButton';
 import { useToast } from '@/components/Toast';
@@ -29,7 +30,7 @@ import { Composer } from '@/features/chat/Composer';
 import type { DashboardData, DashboardResource, HealthStatus, SectionName, SectionState } from '@/types/dashboard';
 import { getErrorText } from '@/utils/formatters';
 import { DailyCostChart, ServiceBars, Sparkbars, STATUS_LABEL, STATUS_ORDER, StatusBar, usd } from './DashboardCharts';
-import { EXAMPLE_QUESTIONS } from './examples';
+import { examplesFor } from './examples';
 
 // ---------------------------------------------------------------- 시간 글자
 const nowSeconds = () => Math.floor(Date.now() / 1000);
@@ -152,6 +153,9 @@ const SORT_LABEL: Record<SortKey, string> = { status: '상태', name: '리소스
 
 export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
     const navigate = useNavigate();
+    // 예시 질문: 관리자가 아니면 관리자 전용 도구가 필요한 질문(CloudTrail·IAM)을 뺀다 (examples.ts)
+    const user = useAuthStore((s) => s.user);
+    const suggestions = useMemo(() => examplesFor(user), [user]);
     const { show: showToast } = useToast();
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -255,7 +259,7 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                     // 예시 질문은 입력칸을 누르면 아래에 펼쳐진다. 자리 글은 좁은 화면에서도 한 줄로 짧게
                     placeholder="무엇이든 물어보세요"
                     onSend={onAsk}
-                    suggestions={EXAMPLE_QUESTIONS}
+                    suggestions={suggestions}
                 />
             </div>
 
@@ -400,8 +404,8 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                             </section>
                         )}
 
-                        {/* 리소스 · 변경 */}
-                        <div className="dash-row">
+                        {/* 리소스 · 변경. 최근 변경은 관리자에게만 온다(일반 사용자는 null): 없으면 리소스 표가 한 줄을 다 쓴다 */}
+                        <div className={data.changes ? 'dash-row' : 'dash-row dash-row--single'}>
                             <section className="dash-card dash-card--wide dash-enter" style={enter(7)} aria-labelledby="dash-resource-title">
                                 <header className="dash-card-head">
                                     <h3 id="dash-resource-title">
@@ -466,33 +470,35 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                 ) : null}
                             </section>
 
-                            <section className="dash-card dash-enter" style={enter(8)} aria-labelledby="dash-change-title">
-                                <header className="dash-card-head">
-                                    <h3 id="dash-change-title">
-                                        최근 변경 <Freshness data={data} section="changes" />
-                                    </h3>
-                                </header>
-                                {data.changes.length ? (
-                                    <ol className="dash-changes">
-                                        {data.changes.map((change) => (
-                                            <li key={`${change.at}-${change.summary}`} className={`is-${change.source}`}>
-                                                <span className="dash-change-dot" aria-hidden="true" />
-                                                <span className="dash-change-body">
-                                                    <span className="dash-change-summary">{change.summary}</span>
-                                                    <span className="dash-change-meta">
-                                                        {ago(change.at)} · {change.actor} ·{' '}
-                                                        <span className="dash-change-source">
-                                                            {change.source === 'app' ? '이 앱에서 승인' : 'CloudTrail'}
+                            {data.changes ? (
+                                <section className="dash-card dash-enter" style={enter(8)} aria-labelledby="dash-change-title">
+                                    <header className="dash-card-head">
+                                        <h3 id="dash-change-title">
+                                            최근 변경 <Freshness data={data} section="changes" />
+                                        </h3>
+                                    </header>
+                                    {data.changes.length ? (
+                                        <ol className="dash-changes">
+                                            {data.changes.map((change) => (
+                                                <li key={`${change.at}-${change.summary}`} className={`is-${change.source}`}>
+                                                    <span className="dash-change-dot" aria-hidden="true" />
+                                                    <span className="dash-change-body">
+                                                        <span className="dash-change-summary">{change.summary}</span>
+                                                        <span className="dash-change-meta">
+                                                            {ago(change.at)} · {change.actor} ·{' '}
+                                                            <span className="dash-change-source">
+                                                                {change.source === 'app' ? '이 앱에서 승인' : 'CloudTrail'}
+                                                            </span>
                                                         </span>
                                                     </span>
-                                                </span>
-                                            </li>
-                                        ))}
-                                    </ol>
-                                ) : (
-                                    <NotYet />
-                                )}
-                            </section>
+                                                </li>
+                                            ))}
+                                        </ol>
+                                    ) : (
+                                        <NotYet />
+                                    )}
+                                </section>
+                            ) : null}
                         </div>
 
                         {/* 개선 권고 */}
