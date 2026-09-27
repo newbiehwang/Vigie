@@ -34,7 +34,7 @@ export function LoginPage({
         <main className="login-shell">
             <section className="login-card" aria-label="로그인">
                 <div className="login-brand">
-                    <LogoMark showName={false} />
+                    <LogoMark />
                     <div className="login-brand-text">
                         <h1 className="login-title">로그인</h1>
                         <p className="login-description">AWS 인증이 필요합니다.</p>
