@@ -98,10 +98,14 @@ export function FacetSidebar({
     onChange: (next: Selection) => void;
 }) {
     return (
+        // 바깥(nav)은 세로로 스크롤하고, 안쪽이 여러 단으로 나뉜다 (창 높이가 고정이라 단을 나누는 상자가 스크롤까지 맡으면
+        // 넘치는 거르기가 아래가 아니라 옆 단으로 밀려나 보이지 않는다)
         <nav className="audit-facets" aria-label="거르기">
-            {FACETS.map((facet) => (
-                <FacetGroup key={facet.id} facet={facet} records={records} selection={selection} onChange={onChange} />
-            ))}
+            <div className="audit-facets-columns">
+                {FACETS.map((facet) => (
+                    <FacetGroup key={facet.id} facet={facet} records={records} selection={selection} onChange={onChange} />
+                ))}
+            </div>
         </nav>
     );
 }
