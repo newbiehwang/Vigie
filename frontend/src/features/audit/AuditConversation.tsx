@@ -11,7 +11,7 @@
 //   사고 과정·실행 시간·승인 카드는 아래 항목 표와 다른 기록에 있으므로 여기서는 보이지 않는다
 import { useEffect, useMemo, useState } from 'react';
 import { fetchAnswer } from '@/api/audit';
-import agentLogo from '@/assets/agent-logo.png';
+import vigieMark from '@/assets/brand/vigie-mark.svg';
 import type { AuditAnswer, AuditRecord } from '@/types/audit';
 import { splitArtifacts } from '@/utils/artifacts';
 import { escapeHtml, parseMarkdown } from '@/utils/markdown';
@@ -112,7 +112,7 @@ export function AuditConversation({ record }: { record: AuditRecord }) {
             </div>
             <div className="message bot-message">
                 <div className="message-avatar" aria-hidden="true">
-                    <img src={agentLogo} alt="" />
+                    <img src={vigieMark} alt="" />
                 </div>
                 <div className="message-body">
                     <AnswerBody record={record} />

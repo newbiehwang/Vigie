@@ -5,7 +5,7 @@
 // AI가 AWS를 바꾸려 했으면 답변 아래에 승인 카드가 나온다 (inference.pendingActions, ApprovalCard).
 // 답변 속 ![제목](artifact://…)은 결과물(차트·다이어그램)이다. inference.artifacts로 풀어 ArtifactView로 그린다.
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import agentLogo from '@/assets/agent-logo.png';
+import vigieMark from '@/assets/brand/vigie-mark.svg';
 import type { PendingAction } from '@/types/actions';
 import type { ChatMessageType } from '@/types/chat';
 import { artifactsOf, splitArtifacts } from '@/utils/artifacts';
@@ -71,7 +71,7 @@ function ChatMessageView({ message }: { message: ChatMessageType }) {
         >
             {!isUser ? (
                 <div className="message-avatar" aria-hidden="true">
-                    <img src={agentLogo} alt="" />
+                    <img src={vigieMark} alt="" />
                 </div>
             ) : null}
 
