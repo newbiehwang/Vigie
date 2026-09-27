@@ -33,6 +33,7 @@ SAVED_STEP_LIMIT = 40  # 대화 기록: 단계 수
 INPUT_VALUE_LIMIT = 200  # 도구 입력값 하나
 ERROR_LIMIT = 300  # 도구 오류 메시지
 SEARCH_FOUND_LIMIT = 20  # 도구 검색 한 번에 찾은 도구 이름 (기본 5개, 모델이 limit로 늘릴 수 있다)
+LIVE_SAVE_SECONDS = 0.8  # 스트리밍 중 사고 요약을 저장하는 간격 (글자가 올 때마다 쓰면 DynamoDB 쓰기가 너무 많다)
 
 
 def _clip(text: str, limit: int) -> str:
@@ -66,6 +67,7 @@ class ProgressReporter:
         self._tool_started: Dict[str, float] = {}
         self.phase = "thinking"
         self.steps: List[Dict[str, Any]] = []
+        self._live_saved = 0.0  # 스트리밍 중인 사고 요약을 마지막으로 저장한 때
         self._save()  # 화면이 첫 조회에서 바로 '생각하는 중'을 보도록 시작하자마자 한 번 저장한다
 
     # ---------------------------------------------------------------- 단계
@@ -74,9 +76,33 @@ class ProgressReporter:
         self.phase = "thinking"
         self._save()
 
-    def thought(self, text: str) -> None:
-        """모델이 돌려준 사고 요약 한 덩어리."""
+    def thinking_live(self, text: str) -> None:
+        """스트리밍 중인 사고 요약 (지금까지 받은 전부). 같은 단계를 늘려 가며 LIVE_SAVE_SECONDS마다 저장한다.
+        화면은 첫 응답이 다 오기를 기다리지 않고 1~2초 안에 생각하는 내용을 보기 시작한다."""
         text = (text or "").strip()
+        if not text:
+            return
+        if self.steps and self.steps[-1].get("live"):
+            self.steps[-1]["text"] = _clip(text, PROGRESS_TEXT_LIMIT)
+        else:
+            self.steps.append({"type": "thinking", "text": _clip(text, PROGRESS_TEXT_LIMIT), "live": True})
+        now = time.time()
+        if now - self._live_saved >= LIVE_SAVE_SECONDS:
+            self._live_saved = now
+            self._save()
+
+    def thought(self, text: str) -> None:
+        """모델이 돌려준 사고 요약 한 덩어리 (다 받은 것). 스트리밍 중이던 단계가 있으면 그 단계를 마무리한다."""
+        text = (text or "").strip()
+        live = self.steps[-1] if self.steps and self.steps[-1].get("live") else None
+        if live is not None:
+            live.pop("live")
+            if text:
+                live["text"] = _clip(text, PROGRESS_TEXT_LIMIT)
+            elif not live["text"]:
+                self.steps.pop()
+            self._save()
+            return
         if not text:
             return
         self.steps.append({"type": "thinking", "text": _clip(text, PROGRESS_TEXT_LIMIT)})
@@ -127,7 +153,7 @@ class ProgressReporter:
         """답변의 inference.steps로 저장할 단계 (사고 요약을 더 짧게, 단계 수도 제한)."""
         saved = []
         for step in self.steps[:SAVED_STEP_LIMIT]:
-            step = dict(step)
+            step = {key: value for key, value in step.items() if key != "live"}
             if step["type"] == "thinking":
                 step["text"] = _clip(step["text"], SAVED_TEXT_LIMIT)
             saved.append(step)
