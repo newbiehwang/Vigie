@@ -8,6 +8,7 @@
 모델 목록과 출시일은 테스트용 예시다 (Anthropic Models API 응답과 같은 모양).
 """
 import json
+import threading
 
 import pytest
 
@@ -83,7 +84,12 @@ def test_new_sonnet_is_picked_up_without_a_deploy(llm, monkeypatch):
     llm._models_cache["at"] = 0.0
     newer = {"id": "claude-sonnet-6", "display_name": "Claude Sonnet 6", "created_at": "2026-12-01T00:00:00Z"}
     serve(llm, monkeypatch, [{"data": [newer] + MODELS, "has_more": False}])
+    # 뒤에서 받는 조회를 잠시 붙잡아 둔다 (가짜 조회는 순식간이라, 붙잡지 않으면 확인하기 전에 끝날 수 있다)
+    gate = threading.Event()
+    refresh = llm._refresh_models
+    monkeypatch.setattr(llm, "_refresh_models", lambda timeout=10: (gate.wait(5), refresh(timeout)))
     assert llm.current_model()["id"] == NEWEST_SONNET
+    gate.set()
     llm._models_refresh.join(timeout=5)
     assert llm.current_model()["id"] == "claude-sonnet-6"
 
