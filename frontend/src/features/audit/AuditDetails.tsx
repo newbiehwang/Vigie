@@ -158,13 +158,9 @@ export function Details({ record }: { record: AuditRecord }) {
 // 결과 열: 변경 작업은 사건(승인 요청·승인·거절·실행·실패), 나머지는 성공·실패
 export function ResultBadge({ record }: { record: AuditRecord }) {
     const event = record.kind === 'action' ? ACTION_EVENTS[record.event ?? ''] : undefined;
-    if (event) return <span className={`plan-status-badge ${event.className}`}>{event.label}</span>;
+    if (event) return <span className={`badge ${event.className}`}>{event.label}</span>;
     const failed = record.status === 'error';
-    return (
-        <span className={`plan-status-badge ${failed ? 'audit-status-error' : 'plan-status-complete'}`}>
-            {failed ? '실패' : '성공'}
-        </span>
-    );
+    return <span className={`badge ${failed ? 'is-fail' : 'is-quiet'}`}>{failed ? '실패' : '성공'}</span>;
 }
 
 // 도구 칸: 질문·변경 작업·사용자 관리는 종류를, 도구 호출은 도구 이름을 보인다 (목록 행과 기록 팝업창 제목이 같이 쓴다).
@@ -198,7 +194,7 @@ export function Flags({ record }: { record: AuditRecord }) {
                 </span>
             ) : null}
             {redacted ? (
-                <span className="audit-flag is-redacted" title="Claude로 보내기 전에 가린 값의 수">
+                <span className="audit-flag" title="Claude로 보내기 전에 가린 값의 수">
                     가림 {redacted}
                 </span>
             ) : null}

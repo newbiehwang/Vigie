@@ -10,7 +10,7 @@
   border-radius: 16px;
   border: 1px solid var(--color-line);
   background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 14px 34px rgba(35, 47, 62, 0.1);
+  box-shadow: 0 14px 34px rgba(10, 22, 40, 0.1);
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -43,7 +43,7 @@
   border: 0;
   border-radius: 10px;
   background: var(--color-primary);
-  color: #fff;
+  color: var(--surface);
   font-family: var(--font-label);
   font-size: 0.84rem;
   font-weight: 700;
@@ -53,7 +53,7 @@
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  box-shadow: 0 8px 16px rgba(0, 123, 255, 0.18);
+  box-shadow: 0 8px 16px rgba(30, 90, 168, 0.18);
   transition: transform 140ms ease, filter 140ms ease;
 }
 
@@ -63,7 +63,7 @@
 }
 
 .plan-create-button:focus-visible {
-  outline: 2px solid rgba(0, 123, 255, 0.4);
+  outline: 2px solid rgba(30, 90, 168, 0.4);
   outline-offset: 2px;
 }
 
@@ -83,7 +83,7 @@
   font-weight: 800;
   letter-spacing: 0.01em;
   line-height: 1.3;
-  color: #1f2933;
+  color: var(--ink);
 }
 
 .plan-panel-title {
@@ -92,14 +92,14 @@
   font-size: clamp(1.3rem, 2.6vw, 1.9rem);
   font-weight: 800;
   letter-spacing: -0.015em;
-  color: #1f2933;
+  color: var(--ink);
 }
 
 .plan-reload-button:disabled {
   opacity: 0.6;
   cursor: wait;
   transform: none;
-  background: #eef4fb;
+  background: var(--primary-soft);
 }
 
 .plan-table {
@@ -115,20 +115,20 @@
   display: flex;
   align-items: center;
   padding: 8px 16px 10px;
-  border-bottom: 1px solid #e8edf3;
+  border-bottom: 1px solid var(--line-soft);
   gap: 12px;
   position: sticky;
   top: 0;
   z-index: 6;
-  background: #fff;
-  color: #6c757d; /* 정렬 머리글(components/SortHeader)이 이 색을 물려받는다 */
+  background: var(--surface);
+  color: var(--ink-3); /* 정렬 머리글(components/SortHeader)이 이 색을 물려받는다 */
 }
 
 .plan-table-header span {
   font-family: var(--font-label);
   font-size: 12px;
   font-weight: 600;
-  color: #6c757d;
+  color: var(--ink-3);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -168,7 +168,7 @@
   align-items: center;
   padding: 14px 16px;
   gap: 12px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--raised-shadow-sm);
   border: 1px solid var(--raised-border);
   border-radius: 12px;
@@ -183,13 +183,13 @@
 }
 
 .plan-table-row.is-clickable:focus-visible {
-  outline: 2px solid rgba(0, 123, 255, 0.32);
+  outline: 2px solid rgba(30, 90, 168, 0.32);
   outline-offset: 2px;
 }
 
 .plan-table-row:hover {
-  border-color: rgba(0, 123, 255, 0.3);
-  box-shadow: var(--raised-shadow-sm), 0 2px 8px rgba(0, 123, 255, 0.08);
+  border-color: rgba(30, 90, 168, 0.3);
+  box-shadow: var(--raised-shadow-sm), 0 2px 8px rgba(30, 90, 168, 0.08);
 }
 
 .plan-table-row.is-action-open {
@@ -228,25 +228,15 @@
 }
 
 .plan-status-active {
-  background: rgba(0, 123, 255, 0.1);
-  color: #007bff;
-}
-
-.plan-status-complete {
-  background: rgba(88, 167, 121, 0.15);
-  color: #3f8a61;
-}
-
-.plan-status-pending {
-  background: rgba(120, 120, 120, 0.14);
-  color: #5f6670;
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 .plan-row-date,
 .plan-row-creator {
   font-family: var(--font-body);
   font-size: 13px;
-  color: #555;
+  color: var(--ink-2);
   flex-shrink: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -278,7 +268,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: #6c757d;
+  color: var(--ink-3);
   font-size: 16px;
   padding: 4px 6px;
   border-radius: 6px;
@@ -287,8 +277,8 @@
 }
 
 .plan-action-btn:hover {
-  background: rgba(0, 123, 255, 0.08);
-  color: #007bff;
+  background: rgba(30, 90, 168, 0.08);
+  color: var(--primary);
 }
 
 .plan-row-action-menu {
@@ -297,9 +287,9 @@
   right: 0;
   width: 132px;
   border-radius: 10px;
-  border: 1px solid #dfe6ee;
+  border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 10px 22px rgba(35, 47, 62, 0.16);
+  box-shadow: 0 10px 22px rgba(10, 22, 40, 0.16);
   padding: 6px;
   display: grid;
   gap: 4px;
@@ -312,7 +302,7 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #1f2933;
+  color: var(--ink);
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -326,11 +316,11 @@
 }
 
 .plan-row-action-menu-item:hover {
-  background: #f1f6fd;
+  background: var(--primary-soft);
 }
 
 .plan-row-action-menu-item.is-danger {
-  color: #dc3545;
+  color: var(--danger);
 }
 
 .plan-row-action-menu-item:disabled {
@@ -356,9 +346,9 @@
   padding: 0 8px;
   border: 1px solid var(--raised-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--raised-shadow-sm);
-  color: #23364d;
+  color: var(--ink);
   font-size: 14px;
   font-family: var(--font-label);
   cursor: pointer;
@@ -367,8 +357,8 @@
 }
 
 .plan-pagination-btn:hover:not(:disabled):not(.is-active) {
-  border-color: rgba(0, 123, 255, 0.4);
-  background: rgba(0, 123, 255, 0.05);
+  border-color: rgba(30, 90, 168, 0.4);
+  background: rgba(30, 90, 168, 0.05);
 }
 
 .plan-pagination-btn:disabled {
@@ -377,16 +367,16 @@
 }
 
 .plan-pagination-page.is-active {
-  background: #007bff;
-  border-color: #007bff;
-  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--surface);
   font-weight: 600;
   cursor: default;
 }
 
 .plan-pagination-page.is-active:hover {
-  background: #007bff;
-  border-color: #007bff;
+  background: var(--primary);
+  border-color: var(--primary);
 }
 
 .plan-row-icon {
@@ -401,8 +391,8 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  background: rgba(0, 123, 255, 0.1);
-  color: #007bff;
+  background: rgba(30, 90, 168, 0.1);
+  color: var(--primary);
 }
 
 .plan-row-name {
@@ -443,7 +433,7 @@
 }
 
 .plan-panel-body::-webkit-scrollbar-thumb {
-  background: rgba(140, 160, 185, 0.55);
+  background: rgba(123, 147, 176, 0.55);
   border: 2px solid rgba(255, 255, 255, 0.88);
   border-radius: 999px;
 }
@@ -455,7 +445,7 @@
 .plan-body-loading {
   min-height: 100%;
   border-radius: 12px;
-  background: rgba(250, 252, 255, 0.52);
+  background: rgba(245, 247, 250, 0.52);
   backdrop-filter: blur(1.2px);
   display: grid;
   place-items: center;
@@ -464,7 +454,7 @@
 
 .plan-panel-empty,
 .plan-panel-error {
-  border: 1px dashed #dde4ec;
+  border: 1px dashed var(--line);
   border-radius: 12px;
   min-height: 180px;
   display: grid;
@@ -477,14 +467,14 @@
   margin: 0;
   font-family: var(--font-label);
   font-size: 0.9rem;
-  color: #6b7785;
+  color: var(--ink-3);
 }
 
 .plan-inline-spinner {
   width: 24px;
   height: 24px;
   border-radius: 999px;
-  border: 3px solid rgba(0, 123, 255, 0.2);
+  border: 3px solid rgba(30, 90, 168, 0.2);
   border-top-color: var(--color-primary);
   animation: spin 0.85s linear infinite;
   margin-bottom: 10px;
@@ -508,9 +498,9 @@
 .loading-card {
   width: min(320px, calc(100% - 32px));
   border-radius: 14px;
-  border: 1px solid rgba(223, 230, 238, 0.92);
+  border: 1px solid rgba(214, 222, 232, 0.92);
   background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 20px 34px rgba(15, 23, 42, 0.24);
+  box-shadow: 0 20px 34px rgba(10, 22, 40, 0.24);
   padding: 18px 16px;
   display: grid;
   justify-items: center;
@@ -521,7 +511,7 @@
   width: 28px;
   height: 28px;
   border-radius: 999px;
-  border: 3px solid rgba(0, 123, 255, 0.22);
+  border: 3px solid rgba(30, 90, 168, 0.22);
   border-top-color: var(--color-primary);
   animation: spin 0.85s linear infinite;
 }
@@ -532,7 +522,7 @@
   font-size: 0.92rem;
   font-weight: 700;
   letter-spacing: -0.01em;
-  color: #1f4f86;
+  color: var(--primary);
 }
 
 .plan-panel-error-title {
@@ -540,21 +530,21 @@
   font-family: var(--font-label);
   font-size: 0.94rem;
   font-weight: 700;
-  color: #b02a37;
+  color: var(--danger);
 }
 
 .plan-panel-error-message {
   margin: 6px 0 12px;
   font-family: var(--font-body);
   font-size: 0.84rem;
-  color: #8f3b44;
+  color: var(--ink-2);
 }
 
 .plan-loading-bubble {
-  border: 1px solid #dfe6ee;
+  border: 1px solid var(--line);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 12px 24px rgba(35, 47, 62, 0.14);
+  box-shadow: 0 12px 24px rgba(10, 22, 40, 0.14);
   min-width: 164px;
   padding: 12px 14px;
   display: grid;
@@ -571,14 +561,14 @@
   font-family: var(--font-label);
   font-size: 0.82rem;
   font-weight: 700;
-  color: #1f4f86;
+  color: var(--primary);
 }
 
 .create-plan-model-overlay {
   position: fixed;
   inset: 0;
   z-index: 90;
-  background: rgba(15, 23, 42, 0.34);
+  background: rgba(10, 22, 40, 0.34);
   backdrop-filter: blur(1.5px);
   display: grid;
   place-items: center;
@@ -595,9 +585,9 @@
   height: min(940px, calc(100vh - 48px));
   max-height: calc(100vh - 36px);
   border-radius: 14px;
-  border: 1px solid rgba(223, 230, 238, 0.95);
+  border: 1px solid rgba(214, 222, 232, 0.95);
   background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 22px 34px rgba(15, 23, 42, 0.26);
+  box-shadow: 0 22px 34px rgba(10, 22, 40, 0.26);
   overflow: hidden;
   position: relative;
   display: flex;
@@ -638,7 +628,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 12px 16px;
-  border-bottom: 1px solid #e6ebf1;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .create-plan-model-header h2 {
@@ -646,14 +636,14 @@
   font-family: var(--font-headline);
   font-size: 1.05rem;
   font-weight: 700;
-  color: #1f2933;
+  color: var(--ink);
 }
 
 .create-plan-model-header button {
-  border: 1px solid #d6dee8;
+  border: 1px solid var(--line);
   border-radius: 9px;
-  background: #f5f8fc;
-  color: #4a6078;
+  background: var(--canvas);
+  color: var(--ink-2);
   font-family: var(--font-label);
   font-size: 0.78rem;
   font-weight: 700;
@@ -663,7 +653,7 @@
 }
 
 .create-plan-model-header button:hover {
-  background: #eaf2fc;
+  background: var(--primary-soft);
 }
 
 .create-plan-model-stage.is-create {
@@ -690,16 +680,16 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(15, 23, 42, 0.4);
+  background: rgba(10, 22, 40, 0.4);
   backdrop-filter: blur(3px);
 }
 
 .confirm-delete-card {
   width: min(400px, 100%);
   border-radius: 16px;
-  border: 1px solid #dfe6ee;
+  border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 20px 44px rgba(35, 47, 62, 0.25);
+  box-shadow: 0 20px 44px rgba(10, 22, 40, 0.25);
   padding: 28px 28px 24px;
   display: flex;
   flex-direction: column;
@@ -709,13 +699,13 @@
 .confirm-delete-message {
   font-size: 15px;
   line-height: 1.6;
-  color: #1f2933;
+  color: var(--ink);
   margin: 0;
   word-break: keep-all;
 }
 
 .confirm-delete-message strong {
-  color: #b02a37;
+  color: var(--danger);
 }
 
 .confirm-delete-actions {
@@ -728,9 +718,9 @@
   padding: 8px 18px;
   border-radius: 8px;
   border: 1px solid var(--raised-border);
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--raised-shadow-sm);
-  color: #1f2933;
+  color: var(--ink);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -738,15 +728,15 @@
 }
 
 .confirm-delete-cancel-btn:hover {
-  background: #f1f4f8;
+  background: var(--line-soft);
 }
 
 .confirm-delete-btn {
   padding: 8px 18px;
   border-radius: 8px;
   border: 0;
-  background: #dc3545;
-  color: #fff;
+  background: var(--danger);
+  color: var(--surface);
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -754,7 +744,7 @@
 }
 
 .confirm-delete-btn:hover {
-  background: #b02a37;
+  background: var(--danger);
 }
 
 .confirm-delete-btn:disabled {
@@ -765,9 +755,9 @@
 .confirm-delete-error {
   margin: 0;
   font-size: 13px;
-  color: #b02a37;
-  background: #fdf1f2;
-  border: 1px solid #f3c2c7;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: 1px solid rgba(180, 35, 24, 0.25);
   border-radius: 8px;
   padding: 8px 12px;
   line-height: 1.5;
@@ -781,7 +771,7 @@
 }
 
 .confirm-delete-btn.is-primary:hover {
-  background: #0062cc;
+  background: var(--primary-hover);
 }
 
 .dialog-label {
@@ -790,16 +780,16 @@
   font-family: var(--font-label);
   font-size: 0.82rem;
   font-weight: 600;
-  color: #3c4650;
+  color: var(--ink-2);
 }
 
 /* AXPI에서 가져온 보조 버튼(다시 불러오기) 모양: 흰 바탕 테두리 버튼 */
 .plan-reload-button {
   border: 1px solid var(--raised-border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--raised-shadow-sm);
-  color: #3c4650;
+  color: var(--ink-2);
   font-family: var(--font-label);
   font-size: 0.84rem;
   font-weight: 700;
@@ -811,8 +801,8 @@
 }
 
 .plan-reload-button:hover {
-  border-color: rgba(0, 123, 255, 0.3);
-  background: #f1f6fd;
+  border-color: rgba(30, 90, 168, 0.3);
+  background: var(--primary-soft);
 }
 
 /* 아이콘만 있는 버튼 (새로 고침, components/RefreshButton.tsx) */
@@ -825,21 +815,21 @@
   flex-shrink: 0;
   border: 1px solid var(--raised-border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--raised-shadow-sm);
-  color: #3c4650;
+  color: var(--ink-2);
   cursor: pointer;
   transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
 .icon-button:hover:not(:disabled) {
-  border-color: rgba(0, 123, 255, 0.3);
-  background: #f1f6fd;
+  border-color: rgba(30, 90, 168, 0.3);
+  background: var(--primary-soft);
   color: var(--color-primary);
 }
 
 .icon-button:focus-visible {
-  outline: 2px solid rgba(0, 123, 255, 0.32);
+  outline: 2px solid rgba(30, 90, 168, 0.32);
   outline-offset: 2px;
 }
 
@@ -863,7 +853,7 @@
   justify-content: center;
   border: none;
   background: none;
-  color: #a9b6c6;
+  color: var(--slate);
   cursor: pointer;
   transition: color 120ms ease, transform 120ms ease;
 }
@@ -874,7 +864,7 @@
 }
 
 .vdt-model-close:hover {
-  color: #0062cc;
+  color: var(--primary-hover);
   transform: scale(1.12);
 }
 
@@ -882,7 +872,7 @@
   flex: 1;
   min-height: 0;
   padding: 44px 18px 18px;
-  background: linear-gradient(180deg, #ffffff 0%, #f9fbfe 100%);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--canvas) 100%);
   display: flex;
   transition: filter 180ms ease, opacity 180ms ease;
 }
@@ -893,7 +883,7 @@
   font-size: 1.26rem;
   font-weight: 800;
   letter-spacing: -0.015em;
-  color: #1f2933;
+  color: var(--ink);
 }
 
 .create-plan-step-description {
@@ -901,7 +891,7 @@
   font-family: var(--font-body);
   font-size: 0.88rem;
   line-height: 1.48;
-  color: #6b7785;
+  color: var(--ink-3);
 }
 
 .create-plan-wizard-actions {
@@ -936,17 +926,17 @@
 }
 
 .create-plan-wizard-button.is-secondary {
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--raised-shadow-sm);
   border-color: var(--raised-border);
-  color: #4a6078;
+  color: var(--ink-2);
 }
 
 .create-plan-wizard-button.is-primary {
   background: var(--color-primary);
   border-color: transparent;
-  color: #fff;
-  box-shadow: 0 8px 14px rgba(0, 123, 255, 0.2);
+  color: var(--surface);
+  box-shadow: 0 8px 14px rgba(30, 90, 168, 0.2);
 }
 
 /* ---------------------------------------------------------------- 검색창 (components/SearchBox.tsx: 감사 로그·사용자 관리) */
@@ -963,15 +953,15 @@
   padding: 0 10px 0 14px;
   border: 1px solid var(--raised-border);
   border-radius: 14px;
-  background: #fff;
-  color: #8a94a0;
+  background: var(--surface);
+  color: var(--ink-3);
   box-shadow: var(--raised-shadow);
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
 .search-box:focus-within {
-  border-color: rgba(0, 123, 255, 0.56);
-  box-shadow: inset 0 0 0 1px rgba(0, 123, 255, 0.14), var(--raised-shadow);
+  border-color: rgba(30, 90, 168, 0.56);
+  box-shadow: inset 0 0 0 1px rgba(30, 90, 168, 0.14), var(--raised-shadow);
 }
 
 .search-box input {
@@ -983,21 +973,21 @@
   background: transparent;
   font-family: var(--font-body);
   font-size: 0.9rem;
-  color: #1f2933;
+  color: var(--ink);
 }
 
 .search-box input::placeholder {
-  color: #a0aab5;
+  color: var(--slate);
 }
 
 .search-box kbd {
   padding: 1px 6px;
   border: 1px solid var(--color-line);
   border-radius: 5px;
-  background: #f5f8fc;
+  background: var(--canvas);
   font-family: var(--font-label);
   font-size: 11px;
-  color: #6c757d;
+  color: var(--ink-3);
 }
 
 /* ---------------------------------------------------------------- 알림 (components/Toast.tsx: 모든 탭의 상태 변경·경고·오류)
@@ -1013,10 +1003,10 @@
   justify-items: center;
   gap: 12px;
   padding: 18px 16px;
-  border: 1px solid rgba(223, 230, 238, 0.92);
+  border: 1px solid rgba(214, 222, 232, 0.92);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 20px 34px rgba(15, 23, 42, 0.24);
+  box-shadow: 0 20px 34px rgba(10, 22, 40, 0.24);
   cursor: pointer;
   transform: translateX(-50%);
   animation: panel-toast-in 160ms ease both;
@@ -1035,12 +1025,12 @@
   letter-spacing: -0.01em;
   line-height: 1.45;
   text-align: center;
-  color: #1f4f86;
+  color: var(--primary);
   overflow-wrap: anywhere;
 }
 
 .panel-toast.is-error .panel-toast-text {
-  color: #8f2330;
+  color: var(--danger);
 }
 
 @keyframes panel-toast-in {
@@ -1065,21 +1055,21 @@
    색은 --mark(진한 호·표시)와 --mark-soft(옅은 고리)로 정한다: 체크·진행 파랑, ! 빨강, ✕·– 회색 */
 .drawn-mark {
   --mark: var(--color-primary);
-  --mark-soft: rgba(0, 123, 255, 0.22);
+  --mark-soft: rgba(30, 90, 168, 0.22);
   display: block;
   flex: none;
   overflow: visible;
 }
 
 .drawn-mark.is-alert {
-  --mark: #d03b3b;
-  --mark-soft: rgba(208, 59, 59, 0.22);
+  --mark: var(--danger);
+  --mark-soft: rgba(180, 35, 24, 0.22);
 }
 
 .drawn-mark.is-cross,
 .drawn-mark.is-dash {
-  --mark: #7b8591;
-  --mark-soft: rgba(123, 133, 145, 0.22);
+  --mark: var(--ink-3);
+  --mark-soft: rgba(123, 147, 176, 0.22);
 }
 
 .drawn-mark-ring,

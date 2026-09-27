@@ -78,7 +78,7 @@ const EXAMPLES: Example[] = [
         answer: '바꾸려면 승인이 필요합니다. 아래 승인 요청을 확인해 주세요.',
         extra: (
             <div className="landing-approval">
-                <span className="landing-approval-badge">승인 필요</span>
+                <span className="badge is-normal">승인 필요</span>
                 <span className="landing-approval-title">로그 보존 기간 변경</span>
                 <span className="landing-approval-change">
                     <del>30일</del> → <b>14일</b>
