@@ -1,7 +1,7 @@
 import json
 import time
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 
 import requests
 from typing import Dict, Any, List, Optional, Tuple
@@ -22,8 +22,6 @@ HTTP = requests.Session()
 HTTP_TIMEOUT = (10, 300)
 # 한 응답에서 부른 조회 도구를 함께 부르는 최대 수 (_run_tools). MCP Lambda가 동시에 여러 개 뜬다
 MAX_PARALLEL_TOOLS = 4
-# 인사처럼 도구가 필요 없는 짧은 말에 답할 때의 최대 출력 토큰 (사고 없이 바로 답한다, use_tools=False)
-SMALL_TALK_MAX_TOKENS = 1024
 
 
 class StreamError(Exception):
@@ -35,7 +33,7 @@ class AnthropicMCPClient:
 
     def __init__(self, mcp_url: str, api_key: str = None, model_id: str = None,
                  session_id: str = None, max_retries: int = 5, max_iterations: int = 15,
-                 thinking: Optional[Dict[str, Any]] = None):
+                 thinking: Optional[Dict[str, Any]] = None, tool_cache=None):
         """
         Anthropic MCP 클라이언트 초기화
 
@@ -47,6 +45,7 @@ class AnthropicMCPClient:
             max_retries: 작업 상태 확인을 위한 최대 재시도 횟수
             max_iterations: 도구 호출을 위한 최대 반복 횟수
             thinking: 요청에 넣을 사고 설정 (llm_service.thinking_config가 모델에 맞게 정한다. None이면 넣지 않음)
+            tool_cache: 저장해 둔 도구 목록 (tool_cache.ToolCache). 있으면 첫 질문에서 MCP 연결을 기다리지 않는다
         """
         self.mcp_client = MCPClient(mcp_url, None, session_id)
         if not model_id:
@@ -61,6 +60,10 @@ class AnthropicMCPClient:
             "content-type": "application/json"
         }
         self.tools = []
+        # 도구 목록 저장소와, 저장한 목록으로 먼저 답하는 동안 뒤에서 하는 MCP 연결 (_prepare_tools, tool_cache.py)
+        self.tool_cache = tool_cache
+        self._connecting: Optional[Future] = None
+        self._background = ThreadPoolExecutor(max_workers=1)
         self.messages = []
         self.max_retries = max_retries
         self.max_iterations = max_iterations
@@ -97,8 +100,7 @@ class AnthropicMCPClient:
 
     # system에 블록 목록(system_prompt.build_system_blocks: 캐시되는 본문 + 요청 시각)을 받는다
     supports_system_blocks = True
-    # 도구 없이 바로 답하기(use_tools=False)를 받는다. MCP 세션·도구 목록은 도구가 필요한 질문에서 처음 준비한다
-    supports_small_talk = True
+    # MCP 세션·도구 목록은 get_client가 아니라 첫 질문에서 스스로 준비한다 (_prepare_tools)
     lazy_tools = True
 
     def _time(self, name: str):
@@ -184,14 +186,59 @@ class AnthropicMCPClient:
 
     def initialize(self) -> str:
         """
-        MCP 세션 초기화 및 도구 목록 로드
+        MCP 세션 초기화 및 도구 목록 로드 (받은 목록은 저장해 둔다)
 
         Returns:
             세션 ID
         """
-        session_id = self.mcp_client.initialize()
-        self.tools = self.mcp_client.list_tools()
-        return session_id
+        self.tools = self._connect()
+        return self.mcp_client.session_id
+
+    def _connect(self) -> List[Dict[str, Any]]:
+        """MCP 세션을 열고 도구 목록을 받아 저장소에 넣는다 (목록이 바뀌었을 때만 쓴다). 뒤에서 도는 스레드에서도 부른다."""
+        self.mcp_client.initialize()
+        tools = self.mcp_client.list_tools()
+        if self.tool_cache is not None:
+            self.tool_cache.save(tools)
+        return tools
+
+    def _prepare_tools(self) -> None:
+        """질문 전에 도구 목록을 준비한다 (tool_cache.py 모듈 설명).
+        - 이미 있으면(따뜻한 컨테이너) 그대로 쓴다.
+        - 저장한 목록이 있으면 그것으로 모델을 바로 부르고, MCP 연결은 뒤에서 한다. 도구가 필요 없는 말("안녕")은
+          MCP를 기다리지 않고 답한다. 도구를 부를 때 연결을 기다린다 (_ensure_connected).
+        - 저장한 목록이 없으면(처음 배포, 저장소를 읽지 못함) 예전처럼 연결을 기다린다."""
+        if self.tools:
+            return
+        cached = self.tool_cache.load() if self.tool_cache is not None else None
+        if cached:
+            self.tools = cached
+            timer = self.timer  # 이 요청의 시간 기록 (연결이 요청보다 늦게 끝나면 기록되지 않는다)
+
+            def connect():
+                from timing import Stopwatch
+                with (timer or Stopwatch.off()).step("mcp_connect"):
+                    return self._connect()
+
+            self._connecting = self._background.submit(connect)
+            return
+        with self._time("mcp_init"):
+            self.initialize()
+
+    def _ensure_connected(self) -> None:
+        """MCP를 부르기 전: 뒤에서 하던 연결을 기다리고, 새로 받은 목록으로 바꾼다. 도구의 위험도(변경 도구면 승인 요청)는
+        저장해 둔 목록이 아니라 이 새 목록으로 정한다. 뒤의 연결이 실패했으면 여기서 한 번 더 연결한다 (실패하면 오류)."""
+        connecting, self._connecting = self._connecting, None
+        if connecting is None:
+            return
+        with self._time("mcp_wait"):
+            try:
+                self.tools = connecting.result()
+                return
+            except Exception as error:
+                print(f"뒤에서 한 MCP 연결이 실패해 다시 연결합니다: {error}")
+        with self._time("mcp_init"):
+            self.initialize()
 
     def _convert_tools_format(self):
         """
@@ -493,6 +540,7 @@ class AnthropicMCPClient:
             if task_info['status'] in ['complete', 'error']:
                 continue
 
+            self._ensure_connected()  # 상태 확인 도구도 MCP로 부른다 (뒤에서 하던 연결을 먼저 기다린다)
             for retry in range(self.max_retries):
                 # 작업 상태 확인
                 status_checked = False
@@ -805,8 +853,7 @@ class AnthropicMCPClient:
                     }
                 }
 
-    def invoke_with_tools(self, prompt: str, system_prompt: str = None, previous_messages: list = None,
-                          use_tools: bool = True) -> Dict[
+    def invoke_with_tools(self, prompt: str, system_prompt: str = None, previous_messages: list = None) -> Dict[
         str, Any]:
         """
         MCP 도구를 사용하여 Anthropic 모델 호출
@@ -819,10 +866,8 @@ class AnthropicMCPClient:
         Returns:
             Anthropic 모델 응답 (표준 형식으로 변환됨)
         """
-        # 세션 및 도구가 초기화되지 않은 경우 (도구가 필요한 질문에서 처음 준비한다. 인사에는 MCP를 부르지 않는다)
-        if use_tools and not self.tools:
-            with self._time("mcp_init"):
-                self.initialize()
+        # 세션 및 도구가 초기화되지 않은 경우 (저장해 둔 목록이 있으면 MCP 연결을 기다리지 않는다)
+        self._prepare_tools()
 
         # 시스템 프롬프트 저장 (나중에 재사용)
         if system_prompt:
@@ -874,8 +919,8 @@ class AnthropicMCPClient:
                 "content": prompt
             })
 
-        # Anthropic 도구 형식으로 변환 (도구 없이 답하면 빈 목록)
-        anthropic_tools = self._convert_tools_format() if use_tools else []
+        # Anthropic 도구 형식으로 변환
+        anthropic_tools = self._convert_tools_format()
 
         # 디버그 로그에 사용 가능한 도구 기록
         self.debug_log.append({
@@ -907,15 +952,16 @@ class AnthropicMCPClient:
             # 대화에도 캐시 표시를 둔다: 다음 반복에서 앞 대화(도구 결과, 검색으로 찾은 도구 정의)를 캐시로 읽는다
             payload = {
                 "model": self.model_id,
-                "max_tokens": MAX_TOKENS if use_tools else SMALL_TALK_MAX_TOKENS,
+                "max_tokens": MAX_TOKENS,
                 "messages": tool_search.with_cache_breakpoint(self.messages)
             }
-            # 사고 과정: 화면에 보여 주려면 사고 요약을 받아야 한다 (display: summarized). 인사에는 생각하지 않고 바로 답한다
-            if self.thinking and use_tools:
+            # 사고 과정: 화면에 보여 주려면 사고 요약을 받아야 한다 (display: summarized).
+            # 적응형 사고(adaptive)는 생각할지·얼마나 할지를 모델이 정한다 (인사에는 거의 생각하지 않는다)
+            if self.thinking:
                 payload["thinking"] = self.thinking
 
             # 도구가 있는 경우 추가 (도구 검색이 도중에 꺼졌을 수 있어 반복마다 다시 만든다)
-            anthropic_tools = self._convert_tools_format() if use_tools else []
+            anthropic_tools = self._convert_tools_format()
             if anthropic_tools:
                 payload["tools"] = anthropic_tools
                 # 마지막 반복에서는 도구 호출 중지 (도구가 없으면 tool_choice를 보낼 수 없다)
@@ -1098,6 +1144,8 @@ class AnthropicMCPClient:
         - 변경 도구는 승인 요청을 만든다 (AWS를 바꾸지 않는다). 차례로 만든다
         - 진행 상황·감사 로그·결과물 정리는 이 스레드에서만 한다 (둘 다 한 번에 하나씩 쓰는 기록이다).
           끝나는 차례로 알려 도구마다 걸린 시간이 맞게 한다. 모델에 돌려주는 결과는 부른 차례 그대로다"""
+        # 저장해 둔 목록으로 답하던 중이면 여기서 MCP 연결을 기다린다 (위험도를 새 목록으로 정한다)
+        self._ensure_connected()
         results: List[Optional[Dict[str, Any]]] = [None] * len(tool_uses)
         running = {}
         with ThreadPoolExecutor(max_workers=max(1, min(MAX_PARALLEL_TOOLS, len(tool_uses)))) as pool:
@@ -1220,7 +1268,7 @@ class AnthropicMCPClient:
 
         return str(response)
 
-    def process_user_input(self, user_input: str, system_prompt: str = None, use_tools: bool = True) -> str:
+    def process_user_input(self, user_input: str, system_prompt: str = None) -> str:
         """
         사용자 입력 처리 및 최종 텍스트 응답 반환
 
@@ -1249,7 +1297,7 @@ class AnthropicMCPClient:
         })
 
         # LLM이 모든 필요한 도구를 사용하여 완전한 응답 생성
-        response = self.invoke_with_tools(user_input, system_prompt, use_tools=use_tools)
+        response = self.invoke_with_tools(user_input, system_prompt)
 
         # 응답에서 텍스트 추출
         output_message = response.get('output', {}).get('message', {})
@@ -1288,7 +1336,7 @@ class AnthropicMCPClient:
         return final_text
 
     def process_user_input_with_history(self, user_input: str, system_prompt: str = None,
-                                        previous_messages: list = None, use_tools: bool = True) -> str:
+                                        previous_messages: list = None) -> str:
         """
         이전 대화 기록을 포함하여 사용자 입력 처리
 
@@ -1316,7 +1364,7 @@ class AnthropicMCPClient:
         })
 
         # LLM이 모든 필요한 도구를 사용하여 완전한 응답 생성 (이전 메시지 포함)
-        response = self.invoke_with_tools(user_input, system_prompt, previous_messages, use_tools=use_tools)
+        response = self.invoke_with_tools(user_input, system_prompt, previous_messages)
 
         # 응답에서 텍스트 추출
         output_message = response.get('output', {}).get('message', {})
