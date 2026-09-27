@@ -7,7 +7,14 @@
 // - main.ts가 mock 모드일 때만 동적으로 불러오므로 배포용 빌드(npm run build)에는 들어가지 않는다.
 import axios from "axios";
 import { mockIsAdmin } from "../auth/authClient";
-import { demoEntryFor, demoFirstQuestion } from "./demo/answers";
+import {
+  demoChartFor,
+  demoClarify,
+  demoEntryFor,
+  demoFirstQuestion,
+  demoGuardFor,
+  demoTopicOf,
+} from "./demo/answers";
 import {
   FORENSIC_INSTANCE,
   PUBLIC_BUCKET,
@@ -322,7 +329,7 @@ const alreadyEntry = (text: string, tool: MockTool): MockEntry => ({
   thinking: ["바꾸기 전에 지금 상태를 확인한다.", "이미 원하는 상태라 승인 요청을 만들지 않는다."],
 });
 
-// 차트를 그린 답변 (질문에 '차트'·'그려'가 있으면). 브라우저가 ECharts로 그린다 (features/chat/ArtifactView).
+// 차트 예시 (질문에 '차트 예시'가 있으면. 데모의 "그려 줘"는 Frothly 차트: demoChartFor). 브라우저가 ECharts로 그린다 (features/chat/ArtifactView).
 // 주소는 목업이라 열리지 않는다 (PNG로 열기). 실제로는 서버가 만든 presigned URL이다
 const chartArtifact = (name: string, type: string, options: Record<string, unknown>): Artifact => ({
   ref: `artifact://charts/mock/${name}.png`,
@@ -428,7 +435,7 @@ const GALLERY_CHARTS: [string, string, Record<string, unknown>][] = [
 ];
 
 const GALLERY_ENTRY: MockEntry = {
-  answer: ["차트 15종입니다 (나머지 4종은 '차트 그려줘').", "", ...GALLERY_CHARTS.map(([name, type]) =>
+  answer: ["차트 15종입니다 (나머지 4종은 '차트 예시').", "", ...GALLERY_CHARTS.map(([name, type]) =>
     `![${type}](artifact://charts/mock/${name}.png)`)].join("\n\n"),
   tools: GALLERY_CHARTS.map(([, type]) => ({ tool_name: "generateBarChart", input: { title: type }, status: "ok" as const })),
   thinking: ["차트 종류를 모두 그린다."],
@@ -617,21 +624,78 @@ const slowEntry = (): MockEntry => ({
   slow: 6,
 });
 
-// 질문에 맞는 답변: 승인한 작업의 설명 → 변경 요청(보존·알람) → 나머지는 예시를 돌아가며
+// 이 대화의 앞 질문들 (오래된 것부터). 앱은 질문을 먼저 저장한 뒤 /llm1을 부르므로, 마지막의 지금 질문은 뺀다.
+// 실제 Vigie는 이전 대화를 모델에 함께 보내 "그거"가 무엇인지 안다 (isCached). 데모 답은 이것으로 앞 주제를 찾는다
+const historyOf = (sessionId: string | undefined, text: string): string[] => {
+  const asked = (sessions.find((s) => s.sessionId === sessionId)?.messages ?? [])
+    .filter((m) => m.sender === "user")
+    .map((m) => m.text);
+  return asked[asked.length - 1] === text ? asked.slice(0, -1) : asked;
+};
+
+// 로그 보존 기간을 묻기만 할 때 (바꿔 달라는 말이 아니면 승인 요청을 만들지 않는다)
+const retentionInfoEntry = (): MockEntry => ({
+  answer: [
+    `\`${MOCK_LOG_GROUP}\` 로그 그룹의 보존 기간은 지금 **${retentionText(mockResources.retention)}**입니다.`,
+    "",
+    mockResources.retention === null
+      ? "보존 기간이 없으면 로그가 계속 쌓여 CloudWatch Logs 저장 요금이 늘어납니다. 개발 로그라면 14일이면 충분합니다. \"보존 기간 14일로 줄여 줘\"라고 하면 승인 요청을 만듭니다."
+      : mockResources.retention > 14
+        ? "개발 로그라면 14일이면 충분합니다. \"보존 기간 14일로 줄여 줘\"라고 하면 승인 요청을 만듭니다."
+        : "개발 로그로는 충분한 기간입니다.",
+  ].join("\n"),
+  tools: [{ tool_name: "describe_log_groups", input: { log_group_name_prefix: MOCK_LOG_GROUP }, status: "ok" }],
+  thinking: ["로그 그룹의 지금 보존 기간을 확인한다. 바꿔 달라는 요청은 아니므로 승인 요청을 만들지 않는다."],
+});
+
+// Frothly의 보안 알람을 꺼 달라고 할 때: 끄지 않기를 권하고, 끌 수 있는 예시를 알려 준다
+const alarmMuteAdviceEntry = (): MockEntry => ({
+  answer: [
+    "**보안 알람(CIS)의 알림은 끄지 않기를 권합니다.** 지금 울리는 두 알람은 실제로 일어난 일(보안 그룹 변경, MFA 없는 로그인) 때문에 울린 것이고, 알림을 끄면 다음 사고도 조용히 지나갑니다.",
+    "",
+    "- 이미 확인한 일 때문에 ALARM에 머물러 있는 것이라면, 새 데이터가 들어와 평가가 돌면 OK로 돌아갑니다. 바로 돌리려면 `aws cloudwatch set-alarm-state --state-value OK`를 직접 실행하세요 (알림 설정은 그대로입니다).",
+    "- 점검하는 동안 잠시 알림을 끄는 것은 승인 뒤 할 수 있습니다. 데모에서는 Vigie 자신의 알람으로 해 볼 수 있습니다: \"vigie-dev-api-5xx 알람 꺼 줘\".",
+    "- Vigie의 거버넌스 알람(`vigie-<env>-governance-*`)은 대화로 끌 수 없게 막혀 있습니다.",
+  ].join("\n"),
+  tools: [{ tool_name: "get_active_alarms", input: { max_items: 50 }, status: "ok" }],
+  thinking: [
+    "보안 알람의 알림을 꺼 달라는 요청이다. 끌 수는 있지만 권하지 않는다. 대안과 함께 알린다.",
+  ],
+});
+
+// 질문에 맞는 답변: 승인한 작업의 설명 → 개발용 예시 → 거절할 요청 → 차트 → 변경 요청 → 데모 답
 const entryFor = (body: RequestBody): MockEntry => {
   const action = body.actionId ? actions.get(body.actionId) : undefined;
   if (action) return explanationEntry(action);
   const text = body.text || body.question || "";
+  const admin = mockIsAdmin();
+  const history = historyOf(body.sessionId, text);
+  // 화면을 고칠 때 쓰는 예시 (개발용 낱말). "의심스러운 활동"은 보안 질문이라 '의심'만으로는 고르지 않는다
   if (text.includes("천천히")) return slowEntry();
   if (text.includes("로그대로")) return TAINTED_ENTRY;
-  if (text.includes("인젝션") || text.includes("의심")) return INJECTION_ENTRY;
+  if (/인젝션|프롬프트\s*주입|로그.*의심|의심.*로그/.test(text)) return INJECTION_ENTRY;
   if (text.includes("갤러리")) return GALLERY_ENTRY;
-  if (text.includes("차트") || text.includes("그려")) return CHART_ENTRY;
-  if (text.includes("보존")) return APPROVAL_ENTRIES.retention;
-  if (text.includes("알람") && /끄|꺼|멈|중지/.test(text))
+  if (text.includes("차트 예시")) return CHART_ENTRY;
+  // 승인 건너뛰기·삭제·권한 넓히기처럼 거절할 요청은 변경 요청보다 먼저 ("승인 없이 멈춰"는 승인 요청이 아니라 거절)
+  const guard = demoGuardFor(text, admin, mockResources);
+  if (guard) return guard;
+  // 차트: 질문이나 앞 주제에 맞는 Frothly 지표·비용
+  if (/차트|그려|그래프|시각화/.test(text)) return demoChartFor(text, admin, history);
+  const topic = demoTopicOf(history, admin);
+  if (text.includes("보존"))
+    return /줄여|줄이|바꿔|바꾸|설정|정해|로\s*해|해\s*줘/.test(text) ? APPROVAL_ENTRIES.retention : retentionInfoEntry();
+  // 알람 알림 끄기: Vigie 알람이면 승인 요청, 앞에서 본 Frothly 보안 알람이면 끄지 않기를 권한다
+  if (/알람|알림/.test(text) && /끄|꺼|멈|중지/.test(text)) {
+    if (/vigie/i.test(text)) return APPROVAL_ENTRIES.alarm;
+    if (/frothly|cis|보안|security|signin/i.test(text) || topic === "alarms") return alarmMuteAdviceEntry();
     return APPROVAL_ENTRIES.alarm;
-  // 퍼블릭 액세스 차단 켜기 (데모의 공개됐던 버킷)
-  if (/퍼블릭\s*(액세스\s*)?차단|공개\s*(를|을)?\s*(막|차단)|공개되지\s*않게/.test(text))
+  }
+  // 퍼블릭 액세스 차단 켜기 (데모의 공개됐던 버킷). 버킷 이야기 뒤의 "막아 줘"도 같은 뜻이다
+  const bucketTopic = topic !== undefined && ["s3", "s3Objects", "security", "timeline", "who", "remediation"].includes(topic);
+  if (
+    /퍼블릭\s*(액세스\s*)?차단|공개\s*(를|을)?\s*(막|차단)|공개되지\s*않게/.test(text) ||
+    (bucketTopic && /막아|막자|차단해/.test(text) && !/포트|보안\s*그룹|SSH|키/i.test(text))
+  )
     return mockResources.webcodeBlocked
       ? alreadyEntry(`\`${PUBLIC_BUCKET}\`의 퍼블릭 액세스 차단은 이미 켜져 있습니다. 바꿀 것이 없습니다.`,
           { tool_name: "listS3Buckets", input: {}, status: "ok" })
@@ -639,11 +703,17 @@ const entryFor = (body: RequestBody): MockEntry => {
   // 인스턴스 중지·시작 (데모의 조사용 인스턴스). 부탁하는 말일 때만 ("언제 시작됐어?" 같은 질문은 조회로 답한다)
   const STOP = /멈춰|멈추|중지\s*(해|시켜)|정지\s*(해|시켜)|꺼\s*(줘|주|라|도\s*돼)|끄세요|끄자/;
   const START = /켜\s*(줘|주|라)|시작\s*(해|시켜)|다시\s*켜/;
-  if (/EC2|인스턴스|서버|Forensic|포렌식/i.test(text) && (STOP.test(text) || START.test(text))) {
+  const wantsChange = STOP.test(text) || START.test(text);
+  // 대상 없이 "그거 멈춰 줘": 앞에서 조사용 인스턴스를 말했으면 그것, 웹 서버 교체를 말했으면 웹 서버, 모르면 되묻는다
+  const namedEc2 = /EC2|인스턴스|서버|Forensic|포렌식/i.test(text);
+  const ec2Topic = topic !== undefined && ["cpu", "waste", "forecast"].includes(topic);
+  if (wantsChange && !namedEc2 && !ec2Topic && topic !== "asg" && topic !== "health") return demoClarify(admin, mockResources);
+  if (wantsChange) {
     const ec2List: MockTool = { tool_name: "listEc2Instances", input: {}, status: "ok" };
     // 데모에서 바꿀 수 있는 것은 조사용 인스턴스뿐이다. 다른 인스턴스 ID나 웹 서버를 말하면 그렇다고 답한다
     const otherId = (text.match(/i-[0-9a-f]{8,17}/g) ?? []).some((id) => id !== FORENSIC_INSTANCE);
-    if (otherId || /웹\s*서버|WebServers/i.test(text))
+    const webServers = /웹\s*서버|WebServers/i.test(text) || (!namedEc2 && (topic === "asg" || topic === "health"));
+    if (otherId || webServers)
       return alreadyEntry(
         `데모에서는 조사용 인스턴스 \`${FORENSIC_INSTANCE}\`(Bud's Forensic AMI)만 중지·시작할 수 있습니다. 웹 서버는 Auto Scaling 그룹이 관리해서, 멈추면 그룹이 새 인스턴스를 띄웁니다.`,
         ec2List);
@@ -654,9 +724,9 @@ const entryFor = (body: RequestBody): MockEntry => {
       return alreadyEntry(`\`${FORENSIC_INSTANCE}\`(Bud's Forensic AMI)은 이미 중지되어 있습니다. 바꿀 것이 없습니다.`, ec2List);
     return start ? APPROVAL_ENTRIES.ec2Start : APPROVAL_ENTRIES.ec2Stop;
   }
-  // 나머지는 Frothly 계정의 기록으로 질문에 맞춰 답한다 (demo/answers.ts). 관리자 전용 도구가 필요한 질문은
-  // 일반 사용자(?mock-role=member)에게 실제 서버처럼 '관리자만'이라고 답한다. 승인해 바꾼 상태도 답에 반영한다
-  return demoEntryFor(text, mockIsAdmin(), mockResources);
+  // 나머지는 Frothly 계정의 기록으로 질문에 맞춰 답한다 (demo/answers.ts). 앞 질문들로 "자세히", "두 번째 거" 같은
+  // 이어 묻는 말을 알아듣고, 관리자 전용 도구가 필요한 질문은 일반 사용자(?mock-role=member)에게 '관리자만'이라고 답한다
+  return demoEntryFor(text, admin, mockResources, history);
 };
 
 const startRun = (
@@ -1511,6 +1581,7 @@ interface RequestBody {
   requestId?: string; // /llm1: 진행 상황을 찾을 열쇠
   actionId?: string; // /llm1: 승인한 변경 작업의 결과 설명
   question?: string; // /llm1: 질문
+  sessionId?: string; // /llm1: 이 대화 (앞 질문들로 이어 묻는 말을 알아듣는다)
   email?: string; // POST /users: 초대할 이메일
   role?: string; // PUT /users/{username}/role: 새 권한
 }
