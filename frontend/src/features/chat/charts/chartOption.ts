@@ -2,6 +2,8 @@
 // spec은 MCP 차트 도구(mcp/lambda_mcp/chart_utils.py)가 PNG를 그리며 검사를 마친 값이고, 같은 모양이다.
 //   { type: 'line' | 'bar' | … , options: { data, title, axisXTitle, axisYTitle, stack, group, … } }
 // 글자는 모델·로그에서 온 값이라 ECharts가 글자로만 그리게 한다 (HTML로 해석하는 formatter를 쓰지 않는다).
+// 색: Midnight Ink 팔레트에서 차례가 정해진 색만 쓴다 (주 색 → 남색 → 회청색, 넷째·'기타'는 옅은 선 색).
+//     계열이 다섯 이상이면 큰 셋만 남기고 나머지를 '기타'로 묶는다 (색을 돌려 쓰지 않는다)
 import type { EChartsCoreOption } from 'echarts/core';
 
 export interface ChartSpec {
@@ -14,7 +16,13 @@ export interface ChartTheme {
     line: string; // 격자·축
     muted: string; // 보조 글자
     font: string;
+    palette: string[]; // 계열 색 (차례대로. 넷째는 '기타'에도 쓴다)
+    surface: string; // 카드 바탕 (노드·이름표 바탕)
+    soft: string; // 주 색을 옅게 푼 바탕 (강조 노드)
 }
+
+export const MAX_SERIES = 4; // 이보다 많으면 큰 셋 + '기타'
+const OTHER = '기타';
 
 type Item = Record<string, unknown>;
 
@@ -29,6 +37,20 @@ const num = (value: unknown) => {
 };
 const list = (value: unknown): Item[] => (Array.isArray(value) ? (value as Item[]) : []);
 
+// 계열(그룹)이 MAX_SERIES보다 많으면 합계가 큰 셋만 남기고 나머지를 '기타' 하나로 더한다
+function foldGroups(groups: Map<string, Map<string, number>>) {
+    if (groups.size <= MAX_SERIES) return groups;
+    const total = (g: Map<string, number>) => [...g.values()].reduce((a, b) => a + b, 0);
+    const ranked = [...groups.entries()].sort((a, b) => total(b[1]) - total(a[1]));
+    const folded = new Map(ranked.slice(0, MAX_SERIES - 1));
+    const other = new Map<string, number>();
+    for (const [, values] of ranked.slice(MAX_SERIES - 1)) {
+        for (const [x, v] of values) other.set(x, (other.get(x) ?? 0) + v);
+    }
+    folded.set(OTHER, other);
+    return folded;
+}
+
 // [{x키, value, group?}] → x 순서와 그룹별 값 (서버 _series와 같다)
 function series(data: Item[], key: string) {
     const xs: string[] = [];
@@ -41,12 +63,13 @@ function series(data: Item[], key: string) {
         values.set(x, (values.get(x) ?? 0) + num(item.value));
         groups.set(group, values);
     }
-    return { xs, groups };
+    return { xs, groups: foldGroups(groups) };
 }
 
 function base(options: Item, theme: ChartTheme): EChartsCoreOption {
     return {
         animationDuration: 400,
+        color: theme.palette,
         textStyle: { fontFamily: theme.font, color: theme.ink },
         title: options.title
             ? { text: text(options.title), left: 'center', top: 4, textStyle: { fontSize: 14, fontWeight: 600 } }
@@ -129,6 +152,16 @@ function bars(options: Item, theme: ChartTheme, horizontal: boolean): EChartsCor
     };
 }
 
+// 원 조각: 합이 큰 셋만 남기고 나머지는 '기타' 한 조각 (조각이 MAX_SERIES 이하면 그대로)
+function pieSlices(xs: string[], groups: Map<string, Map<string, number>>) {
+    const slices = xs
+        .map((x) => ({ name: x, value: [...groups.values()].reduce((sum, g) => sum + (g.get(x) ?? 0), 0) }))
+        .sort((a, b) => b.value - a.value);
+    if (slices.length <= MAX_SERIES) return slices;
+    const rest = slices.slice(MAX_SERIES - 1).reduce((sum, s) => sum + s.value, 0);
+    return [...slices.slice(0, MAX_SERIES - 1), { name: OTHER, value: rest }];
+}
+
 function pie(options: Item, theme: ChartTheme): EChartsCoreOption {
     const { xs, groups } = series(list(options.data), 'category');
     const inner = Math.min(Math.max(num(options.innerRadius), 0), 0.9);
@@ -140,9 +173,9 @@ function pie(options: Item, theme: ChartTheme): EChartsCoreOption {
             type: 'pie',
             radius: [`${Math.round(inner * 65)}%`, '65%'],
             center: ['50%', options.title ? '54%' : '48%'],
-            data: xs.map((x) => ({ name: x, value: [...groups.values()].reduce((sum, g) => sum + (g.get(x) ?? 0), 0) })),
+            data: pieSlices(xs, groups),
             label: { formatter: '{b}\n{d}%', color: theme.ink },
-            itemStyle: { borderColor: '#fff', borderWidth: 2, borderRadius: inner ? 4 : 0 },
+            itemStyle: { borderColor: theme.surface, borderWidth: 2, borderRadius: inner ? 4 : 0 },
         }],
     };
 }
@@ -271,10 +304,12 @@ function treemap(options: Item, theme: ChartTheme): EChartsCoreOption {
             breadcrumb: { show: false },
             data: list(options.data).map((n) => tree(n)),
             label: { show: true, formatter: '{b}' },
-            upperLabel: { show: true, height: 22, color: '#fff' },
+            // 부모 칸의 이름 띠: 바탕(테두리 색)이 흰색이라 글자는 남색
+            upperLabel: { show: true, height: 22, color: theme.ink },
+            // 주 색 한 가지. 칸마다 이름이 있어 색으로 나누지 않는다 (채도를 바꾸면 팔레트 밖의 파랑이 생겨 쓰지 않는다)
             levels: [
-                { itemStyle: { borderColor: '#fff', borderWidth: 3, gapWidth: 3 } },
-                { colorSaturation: [0.35, 0.6], itemStyle: { borderColorSaturation: 0.7, gapWidth: 2, borderWidth: 2 } },
+                { color: [theme.palette[0]], itemStyle: { borderColor: theme.surface, borderWidth: 3, gapWidth: 3 } },
+                { itemStyle: { borderColor: theme.surface, gapWidth: 2, borderWidth: 2 } },
             ],
         }],
     };
@@ -304,7 +339,7 @@ function mindMap(options: Item, theme: ChartTheme): EChartsCoreOption {
                 align: 'right',
                 verticalAlign: 'middle',
                 fontSize: 12,
-                backgroundColor: '#fff',
+                backgroundColor: theme.surface,
                 borderColor: theme.line,
                 borderWidth: 1,
                 borderRadius: 6,
@@ -334,7 +369,7 @@ const edgeLabelNode = (name: string, text: string, x: number, y: number, theme: 
     x,
     y,
     symbolSize: 0,
-    label: { show: true, formatter: text, position, color: theme.muted, fontSize: 11, backgroundColor: '#fff',
+    label: { show: true, formatter: text, position, color: theme.muted, fontSize: 11, backgroundColor: theme.surface,
              padding: [1, 4], borderRadius: 3 },
 });
 
@@ -346,14 +381,13 @@ function networkGraph(options: Item, theme: ChartTheme): EChartsCoreOption {
         const angle = (2 * Math.PI * i) / names.length - Math.PI / 2;
         return [name, [radius * Math.cos(angle), radius * Math.sin(angle)] as [number, number]];
     }));
-    const nodes: Item[] = names.map((name, i) => ({
+    const nodes: Item[] = names.map((name) => ({
         name,
         x: position.get(name)![0],
         y: position.get(name)![1],
         symbol: 'roundRect',
         symbolSize: [Math.min(24 + name.length * 8, 150), 30],
-        itemStyle: { color: '#fff', borderWidth: 1.5,
-                     borderColor: ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272'][i % 6] },
+        itemStyle: { color: theme.surface, borderWidth: 1.5, borderColor: theme.palette[0] }, // 노드는 모두 같은 테두리 (이름이 구분한다)
         label: { show: true, color: theme.ink, fontSize: 12, width: 140, overflow: 'truncate' },
     }));
     edges.forEach((e, i) => {
@@ -446,9 +480,9 @@ function flowDiagram(options: Item, theme: ChartTheme): EChartsCoreOption {
         symbol: 'roundRect',
         symbolSize: [120, 34],
         itemStyle: {
-            color: '#fff',
+            color: theme.surface,
             borderWidth: 1.5,
-            borderColor: ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272'][(depth.get(name) ?? 0) % 6],
+            borderColor: theme.palette[0], // 단계마다 색을 바꾸지 않는다 (위아래 위치가 단계를 보인다)
         },
         label: { show: true, color: theme.ink, fontSize: 12, width: 108, overflow: 'truncate' },
     }));
@@ -521,7 +555,7 @@ function fishbone(options: Item, theme: ChartTheme): EChartsCoreOption {
     const point = (name: string, x: number, y: number) => nodes.push({ name, x, y, symbolSize: 0, label: { show: false } });
     point('__tail', 0, 0);
     nodes.push({ name: root.name, x: count * gap + 90, y: 0, symbol: 'roundRect', symbolSize: [130, 36],
-                 itemStyle: { color: '#fdecea', borderColor: '#ee6666', borderWidth: 1.5 },
+                 itemStyle: { color: theme.soft, borderColor: theme.ink, borderWidth: 1.5 }, // 머리(문제): 옅은 파랑 바탕, 남색 테두리
                  label: { show: true, fontWeight: 600, color: theme.ink } });
     links.push({ source: '__tail', target: root.name, lineStyle: { width: 3, color: theme.ink } });
     causes.forEach((cause, i) => {
@@ -531,7 +565,7 @@ function fishbone(options: Item, theme: ChartTheme): EChartsCoreOption {
         const joint = `__joint${i}`;
         point(joint, x, 0);
         nodes.push({ name: `${cause.name}​${i}`, x: top[0], y: top[1] + side * 14, symbol: 'roundRect',
-                     symbolSize: [110, 28], itemStyle: { color: '#fff', borderColor: theme.line, borderWidth: 1.5 },
+                     symbolSize: [110, 28], itemStyle: { color: theme.surface, borderColor: theme.line, borderWidth: 1.5 },
                      label: { show: true, formatter: cause.name, color: theme.ink } });
         links.push({ source: `${cause.name}​${i}`, target: joint, lineStyle: { color: theme.muted, width: 1.5 } });
         (cause.children ?? []).slice(0, 6).forEach((sub, j, subs) => {

@@ -44,10 +44,17 @@ MAX_LABEL = 60  # 글자 하나의 길이
 # 함께 저장되므로 크기를 제한하고, 넘으면 PNG만 쓴다
 SPEC_LIMIT = 16000
 
-KOREAN_FONTS = ["Noto Sans CJK KR", "Noto Sans CJK JP", "NanumGothic", "Malgun Gothic", "AppleGothic",
+# 글꼴: 웹과 같은 Pretendard (Dockerfile이 이미지에 넣는다). 없으면 한글 글꼴을 차례로 찾는다
+KOREAN_FONTS = ["Pretendard", "Noto Sans CJK KR", "Noto Sans CJK JP", "NanumGothic", "Malgun Gothic", "AppleGothic",
                 "Apple SD Gothic Neo"]
-PALETTE = ["#5B8FF9", "#5AD8A6", "#F6BD16", "#E8684A", "#6DC8EC", "#9270CA", "#FF9D4D", "#269A99",
-           "#FF99C3", "#5D7092"]
+# 색: 웹과 같은 Midnight Ink 팔레트 (frontend/src/styles.css). 계열은 차례가 정해진 넷만 쓴다:
+# 주 색 → 남색 → 회청색 → 옅은 선 색(넷째·'기타'). 계열이 다섯 이상이면 큰 셋 + '기타'로 묶는다 (색을 돌려 쓰지 않는다)
+INK, INK_2, INK_3 = "#0A1628", "#37485E", "#596D87"  # 글자 · 설명 글 · 작은 글씨
+SLATE, LINE, SOFT = "#7B93B0", "#D6DEE8", "#E9EFF6"  # 아이콘·보조 선 · 테두리·격자 · 주 색을 옅게 푼 바탕
+PRIMARY = "#1E5AA8"
+PALETTE = [PRIMARY, INK, SLATE, LINE]
+MAX_SERIES = len(PALETTE)
+OTHER = "기타"
 
 
 class ChartError(ValueError):
@@ -60,6 +67,11 @@ def _setup_font() -> None:
     if family:
         plt.rcParams["font.family"] = family
     plt.rcParams["axes.unicode_minus"] = False  # 한글 글꼴에는 유니코드 빼기 기호가 없을 수 있다
+    # 글자·축·격자도 웹의 색으로 (기본값은 검정)
+    plt.rcParams.update({
+        "text.color": INK, "axes.labelcolor": INK_3, "axes.titlecolor": INK,
+        "xtick.color": INK_3, "ytick.color": INK_3, "axes.edgecolor": LINE, "grid.color": LINE,
+    })
 
 
 _setup_font()
@@ -111,6 +123,20 @@ def _axis_titles(ax, options: Dict[str, Any]) -> None:
     ax.spines[["top", "right"]].set_visible(False)
 
 
+def _fold(groups: "OrderedDict[str, Dict[str, float]]") -> "OrderedDict[str, Dict[str, float]]":
+    """그룹이 MAX_SERIES보다 많으면 합계가 큰 셋만 남기고 나머지를 '기타' 하나로 더한다 (frontend foldGroups와 같다)."""
+    if len(groups) <= MAX_SERIES:
+        return groups
+    ranked = sorted(groups.items(), key=lambda item: -sum(item[1].values()))
+    folded: "OrderedDict[str, Dict[str, float]]" = OrderedDict(ranked[:MAX_SERIES - 1])
+    other: Dict[str, float] = {}
+    for _, values in ranked[MAX_SERIES - 1:]:
+        for x, value in values.items():
+            other[x] = other.get(x, 0.0) + value
+    folded[OTHER] = other
+    return folded
+
+
 def _series(data: List[Dict[str, Any]], key: str) -> Tuple[List[str], "OrderedDict[str, Dict[str, float]]"]:
     """[{key, value, group?}] → (x 순서, {그룹: {x: 값}}). group이 없으면 그룹 하나."""
     xs: List[str] = []
@@ -123,7 +149,7 @@ def _series(data: List[Dict[str, Any]], key: str) -> Tuple[List[str], "OrderedDi
             xs.append(x)
         group = _text(item.get("group", ""))
         groups.setdefault(group, {})[x] = groups.get(group, {}).get(x, 0.0) + _number(item["value"], "value")
-    return xs, groups
+    return xs, _fold(groups)
 
 
 def _legend(ax, groups) -> None:
@@ -199,10 +225,17 @@ def _pie(options):
     values = [sum(g.get(x, 0.0) for g in groups.values()) for x in xs]
     if any(v < 0 for v in values) or not sum(values):
         raise ChartError("pie values must be non-negative and not all zero")
+    # 큰 조각부터. 조각이 MAX_SERIES보다 많으면 큰 셋 + '기타' (frontend pieSlices와 같다)
+    slices = sorted(zip(xs, values), key=lambda s: -s[1])
+    if len(slices) > MAX_SERIES:
+        slices = slices[:MAX_SERIES - 1] + [(OTHER, sum(v for _, v in slices[MAX_SERIES - 1:]))]
+    xs, values = [x for x, _ in slices], [v for _, v in slices]
     inner = min(max(float(options.get("innerRadius") or 0), 0.0), 0.9)
-    ax.pie(values, labels=xs, colors=[PALETTE[i % len(PALETTE)] for i in range(len(xs))], autopct="%1.1f%%",
-           startangle=90, counterclock=False, textprops={"fontsize": 8},
-           wedgeprops={"width": 1 - inner} if inner else None)
+    _, _, percents = ax.pie(values, labels=xs, colors=[PALETTE[i % len(PALETTE)] for i in range(len(xs))],
+                            autopct="%1.1f%%", startangle=90, counterclock=False, textprops={"fontsize": 8},
+                            wedgeprops={"edgecolor": "white", "linewidth": 1.5, **({"width": 1 - inner} if inner else {})})
+    for index, percent in enumerate(percents):  # 짙은 조각(주 색·남색) 위의 비율은 흰 글자
+        percent.set_color("white" if PALETTE[index % len(PALETTE)] in (PRIMARY, INK) else INK)
     ax.axis("equal")
     return fig
 
@@ -297,8 +330,9 @@ def _word_cloud(options):
     placed: List[Any] = []
     for index, (word, value) in enumerate(words):
         size = 8 + 28 * ((value - low) / (high - low) if high > low else 1)
-        artist = ax.text(0, 0, word, fontsize=size, ha="center", va="center",
-                         color=PALETTE[index % len(PALETTE)])
+        # 크기가 값을 보이므로 색은 세 단계만: 큰 다섯 단어 주 색, 위 30%까지 남색, 나머지 옅은 글자색 (frontend와 같다)
+        color = PRIMARY if index < 5 else INK if index < max(5, len(words) * 0.3) else INK_3
+        artist = ax.text(0, 0, word, fontsize=size, ha="center", va="center", color=color)
         for step in range(1500):  # 나선: 반지름을 조금씩 키우며 빈자리를 찾는다
             angle = step * 0.35
             radius = 0.004 * step
@@ -357,10 +391,10 @@ def _mind_map(options):
         x, y = positions[id(node)]
         for index, child in enumerate(node["children"]):
             cx, cy = positions[id(child)]
-            ax.plot([x, (x + cx) / 2, (x + cx) / 2, cx], [y, y, cy, cy], color="#A0AEC0", lw=1, zorder=1)
+            ax.plot([x, (x + cx) / 2, (x + cx) / 2, cx], [y, y, cy, cy], color=SLATE, lw=1, zorder=1)
             draw(child, depth + 1)
-        color = PALETTE[depth % len(PALETTE)]
-        _box(ax, x, y, node["name"], color, 10 if depth == 0 else 8, color if depth == 0 else "white")
+        # 단계마다 색을 바꾸지 않는다 (위치가 단계를 보인다). 뿌리만 옅은 파랑 바탕으로 (남색 글자가 읽히게)
+        _box(ax, x, y, node["name"], PRIMARY, 10 if depth == 0 else 8, SOFT if depth == 0 else "white")
 
     draw(root, 0)
     ax.axis("off")
@@ -375,18 +409,18 @@ def _fishbone(options):
     causes = root["children"] or [{"name": "(원인 없음)", "children": []}]
     count = math.ceil(len(causes) / 2)
     gap = 1.8  # 가지 사이 (작은 원인 글자가 옆 가지와 겹치지 않게)
-    ax.plot([0, count * gap + 0.6], [0, 0], color="#4A5568", lw=2)
-    _box(ax, count * gap + 1.1, 0, root["name"], PALETTE[3], 10, "#FDECEA")
+    ax.plot([0, count * gap + 0.6], [0, 0], color=INK_2, lw=2)
+    _box(ax, count * gap + 1.1, 0, root["name"], INK, 10, SOFT)  # 머리(문제): 옅은 파랑 바탕, 남색 테두리
     for index, cause in enumerate(causes):
         side = 1 if index % 2 == 0 else -1
         x = (index // 2 + 1) * gap
         top = (x - 0.6, side * 1.0)
-        ax.plot([top[0], x], [top[1], 0], color="#718096", lw=1.2)
-        _box(ax, top[0], top[1] + side * 0.12, cause["name"], PALETTE[index % len(PALETTE)])
+        ax.plot([top[0], x], [top[1], 0], color=INK_3, lw=1.2)
+        _box(ax, top[0], top[1] + side * 0.12, cause["name"], LINE)
         for sub_index, sub in enumerate(cause["children"][:6]):
             t = (sub_index + 1) / (min(len(cause["children"]), 6) + 1)
             bx, by = top[0] + (x - top[0]) * t, top[1] * (1 - t)
-            ax.plot([bx - 0.35, bx], [by, by], color="#A0AEC0", lw=0.8)
+            ax.plot([bx - 0.35, bx], [by, by], color=SLATE, lw=0.8)
             ax.text(bx - 0.37, by, sub["name"], ha="right", va="center", fontsize=7)
     ax.set_xlim(-0.8, count * gap + 2.2)
     ax.set_ylim(-1.5, 1.5)
@@ -418,10 +452,10 @@ def _graph(options) -> Tuple[List[str], List[Tuple[str, str, str]]]:
 
 def _arrow(ax, start, end, label: str, directed: bool) -> None:
     ax.annotate("", xy=end, xytext=start, zorder=1,
-                arrowprops={"arrowstyle": "-|>" if directed else "-", "color": "#718096", "lw": 1,
+                arrowprops={"arrowstyle": "-|>" if directed else "-", "color": INK_3, "lw": 1,
                             "shrinkA": 14, "shrinkB": 14})
     if label:
-        ax.text((start[0] + end[0]) / 2, (start[1] + end[1]) / 2, label, fontsize=7, color="#4A5568",
+        ax.text((start[0] + end[0]) / 2, (start[1] + end[1]) / 2, label, fontsize=7, color=INK_2,
                 ha="center", va="center", bbox={"facecolor": "white", "edgecolor": "none", "pad": 1})
 
 
@@ -433,8 +467,8 @@ def _network_graph(options):
                         math.sin(2 * math.pi * i / len(names) + math.pi / 2)) for i, name in enumerate(names)}
     for source, target, label in edges:
         _arrow(ax, positions[source], positions[target], label, directed=False)
-    for index, name in enumerate(names):
-        _box(ax, *positions[name], name, PALETTE[index % len(PALETTE)])
+    for name in names:
+        _box(ax, *positions[name], name, PRIMARY)
     ax.set_xlim(-1.4, 1.4)
     ax.set_ylim(-1.3, 1.3)
     ax.set_aspect("equal")
@@ -495,19 +529,19 @@ def _flow_diagram(options):
         if (source, target) in back or source == target or depth[target] - depth[source] > 1:
             side = -1 if y1 > y0 or source == target else 1  # 위로 가면 왼쪽, 아래로 가면 오른쪽
             ax.annotate("", xy=(x1, y1), xytext=(x0, y0), zorder=1,
-                        arrowprops={"arrowstyle": "-|>", "color": "#718096", "lw": 1, "shrinkA": 14,
+                        arrowprops={"arrowstyle": "-|>", "color": INK_3, "lw": 1, "shrinkA": 14,
                                     "shrinkB": 14, "linestyle": "--" if side < 0 else "-",
                                     # 같은 값이라도 선의 방향에 따라 휘는 쪽이 바뀐다: 위로 가면 왼쪽, 아래로 가면 오른쪽
                                     "connectionstyle": "arc3,rad=-0.4"})
             bulge = 0.4 * math.hypot(x1 - x0, y1 - y0) / 2
             reach.append(bulge)
             if label:
-                ax.text((x0 + x1) / 2 + side * (bulge + 0.1), (y0 + y1) / 2, label, fontsize=7, color="#4A5568",
+                ax.text((x0 + x1) / 2 + side * (bulge + 0.1), (y0 + y1) / 2, label, fontsize=7, color=INK_2,
                         ha="left" if side > 0 else "right", va="center")
         else:
             _arrow(ax, (x0, y0), (x1, y1), label, directed=True)
     for name in names:
-        _box(ax, *positions[name], name, PALETTE[depth[name] % len(PALETTE)])
+        _box(ax, *positions[name], name, PRIMARY)
     xs = [x for x, _y in positions.values()]
     margin = max(1.6, max(reach) + 1.4)  # 휜 선과 그 이름까지 들어오게
     ax.set_xlim(min(xs) - margin, max(xs) + margin)
@@ -526,29 +560,28 @@ def _treemap(options):
             return max(_number(node["value"], "value"), 0.0)
         return sum(total(child) for child in node["children"])
 
-    def split(items, x, y, w, h, depth, color_index=None):
+    def split(items, x, y, w, h, depth):
         whole = sum(total(item) for item in items) or 1.0
         offset = 0.0
-        for index, item in enumerate(items):
+        for item in items:
             share = total(item) / whole
             if depth % 2 == 0:
                 box = (x + offset * w, y, w * share, h)
             else:
                 box = (x, y + offset * h, w, h * share)
             offset += share
-            color = PALETTE[(index if color_index is None else color_index) % len(PALETTE)]
-            ax.add_patch(Rectangle(box[:2], box[2], box[3], facecolor=color, edgecolor="white",
-                                   lw=2 if depth == 0 else 0.8, alpha=0.9 if depth == 0 else 0.6))
+            # 주 색 한 가지. 칸마다 이름이 있어 색으로 나누지 않는다. 아래 단계는 주 색을 옅게 푼 바탕(28%)에 남색 글자
+            ax.add_patch(Rectangle(box[:2], box[2], box[3], facecolor=PRIMARY if depth == 0 else "#C0D0E6",
+                                   edgecolor="white", lw=2 if depth == 0 else 0.8))
             if item["children"] and box[3] > 0.12:
                 # 이름은 위쪽 띠에, 하위는 그 아래에 (하위가 이름을 가리지 않게)
                 header = min(0.06, box[3] * 0.3)
                 ax.text(box[0] + 0.01, box[1] + box[3] - header / 2, item["name"], ha="left", va="center",
                         fontsize=8, color="white", fontweight="bold")
-                split(item["children"], box[0], box[1], box[2], box[3] - header, depth + 1,
-                      color_index=index if color_index is None else color_index)
+                split(item["children"], box[0], box[1], box[2], box[3] - header, depth + 1)
             elif box[2] > 0.06 and box[3] > 0.05:
                 ax.text(box[0] + box[2] / 2, box[1] + box[3] / 2, item["name"], ha="center", va="center",
-                        fontsize=8 if depth == 0 else 7, color="white" if depth == 0 else "#1A202C")
+                        fontsize=8 if depth == 0 else 7, color="white" if depth == 0 else INK)
 
     split(nodes, 0, 0, 1, 1, 0)
     ax.set_xlim(0, 1)

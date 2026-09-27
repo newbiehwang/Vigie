@@ -16,15 +16,20 @@ echarts.use([
     SVGRenderer,
 ]);
 
-// 앱의 색·글꼴 (styles.css의 변수)을 차트에도 쓴다
+// 앱의 색·글꼴 (styles.css의 변수)을 차트에도 쓴다. 계열 색은 주 색 → 남색 → 회청색 → 옅은 선 색('기타') 차례
 function appTheme(): ChartTheme {
     const css = getComputedStyle(document.documentElement);
     const read = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
+    const ink = read('--ink', '#0a1628');
+    const line = read('--line', '#d6dee8');
     return {
-        ink: read('--color-ink', '#232f3e'),
-        line: read('--color-line', '#e1e7ef'),
-        muted: read('--color-neutral', '#6c757d'),
+        ink,
+        line,
+        muted: read('--ink-3', '#596d87'),
         font: read('--font-body', 'sans-serif'),
+        palette: [read('--primary', '#1e5aa8'), ink, read('--slate', '#7b93b0'), line],
+        surface: read('--surface', '#ffffff'),
+        soft: read('--primary-soft', '#e9eff6'),
     };
 }
 

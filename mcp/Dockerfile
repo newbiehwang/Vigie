@@ -8,7 +8,7 @@ WORKDIR ${LAMBDA_TASK_ROOT}
 # 이미지가 작을수록 콜드 스타트가 빠릅니다: Lambda는 이미지의 파일을 처음 읽을 때 받아 오기 때문입니다.
 # - graphviz: 다이어그램 도구(diagrams 패키지)가 그림을 그릴 때 부르는 dot 프로그램
 #   (파이썬 쪽 graphviz 패키지는 dot을 부르기만 하는 순수 파이썬이라 graphviz-devel·컴파일러가 필요 없다)
-# - google-noto-sans-cjk-ttc-fonts, fontconfig: 다이어그램·차트의 한글 글꼴
+# - google-noto-sans-cjk-ttc-fonts, fontconfig: 다이어그램의 한글 글꼴 (차트는 아래의 Pretendard를 먼저 쓴다)
 #   (diagram_utils.py는 'Noto Sans CJK KR'을 먼저 찾는다. 세리프 글꼴은 그다음 후보라 넣지 않는다)
 # 예전에 함께 설치하던 gcc·gcc-c++·make·pkgconfig·graphviz-devel은 빌드 도구라 뺐습니다.
 # requirements.txt의 패키지는 모두 미리 빌드된 wheel로 설치되어 컴파일할 것이 없습니다.
@@ -21,6 +21,21 @@ RUN dnf install -y \
     && fc-cache -f \
     && dnf clean all \
     && rm -rf /var/cache/dnf
+
+# 차트(lambda_mcp/chart_utils.py)의 한글 글꼴: 웹과 같은 Pretendard (SIL Open Font License 1.1).
+# npm 패키지 pretendard@1.3.9의 TTF 두 개(보통·굵게)를 jsDelivr에서 받고 SHA-256을 확인한다 (값이 다르면 빌드가 멈춘다).
+# 글꼴 파일 안에 저작권·라이선스 정보가 들어 있다. 받지 못하면 빌드가 멈춘다 (차트는 위의 Noto Sans CJK로도 그릴 수 있지만,
+# 웹과 글꼴이 달라지는 것을 모르고 지나가지 않게)
+ARG PRETENDARD_URL=https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/public/static/alternative
+RUN mkdir -p /usr/share/fonts/pretendard \
+    && cd /usr/share/fonts/pretendard \
+    && python -c "import sys, urllib.request; [urllib.request.urlretrieve(sys.argv[1] + '/' + n, n) for n in sys.argv[2:]]" \
+        "$PRETENDARD_URL" Pretendard-Regular.ttf Pretendard-Bold.ttf \
+    && printf '%s  %s\n' \
+        6d0af5258997aec7354a6e340fc2325ba321c410ca48b3af858c8c3d6e92a324 Pretendard-Regular.ttf \
+        c16b88c670d23e83fa1170c954cbc4822d3b8dad3c3cde15d798a94b43d97985 Pretendard-Bold.ttf \
+        | sha256sum -c - \
+    && fc-cache -f
 
 # Docker 캐시를 활용하기 위해 먼저 요구 사항을 복사합니다
 COPY requirements.txt .
