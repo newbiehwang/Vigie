@@ -120,6 +120,21 @@ cfn_update() {
     fi
 }
 
+# 인증 메일 Lambda(services/auth_messages)를 묶어 배포 버킷에 올리고, 올린 코드 버전을 AUTH_MESSAGES_VERSION에 둔다.
+# base 스택이 이 버전의 코드로 Lambda를 만들어 Cognito에 연결한다 (base.yaml의 CodeVersion. 비어 있으면 Lambda를 만들지 않는다). 관리자 초대 메일보다 먼저
+# 연결되어야 하므로 패키징 단계(뒤쪽)가 아니라 base 스택을 업데이트하기 직전에 올린다. 배포 버킷이 없으면(처음 만들 때) 건너뛴다
+upload_auth_messages() {
+    AUTH_MESSAGES_VERSION=""
+    if ! aws s3 ls "s3://$DEPLOYMENT_BUCKET" > /dev/null 2>&1; then
+        echo "배포 버킷이 아직 없어 인증 메일 Lambda는 다음 업데이트에서 올립니다."
+        return 0
+    fi
+    rm -rf build/auth-messages && mkdir -p build/auth-messages
+    (cd services/auth_messages && zip -qr "../../build/auth-messages/auth-messages.zip" . -x '__pycache__/*')
+    aws s3 cp build/auth-messages/auth-messages.zip "s3://$DEPLOYMENT_BUCKET/auth-messages/auth-messages-lambda-$ENV-$CODE_VERSION.zip"
+    AUTH_MESSAGES_VERSION="$CODE_VERSION"
+}
+
 # MCP Lambda를 한 번 불러 공식 MCP 서버를 미리 불러 둔다 (배포 직후 첫 질문이 콜드 스타트를 기다리지 않게).
 # LLM Lambda가 질문마다 하는 것과 같은 순서로 부른다: initialize → tools/list(여기서 공식 서버를 불러온다) → 세션 삭제.
 # - 효과는 배포 직후 잠깐이다. Lambda는 한동안 요청이 없으면 실행 환경을 정리하고, 동시에 온 요청은 새 환경에서 돈다.
@@ -410,6 +425,7 @@ echo "기본 인프라 스택 배포 중: $BASE_STACK_NAME..."
 if aws cloudformation describe-stacks --stack-name "$BASE_STACK_NAME" > /dev/null 2>&1; then
     # 스택이 존재하면 업데이트
     echo "기존 스택 업데이트 중: $BASE_STACK_NAME"
+    upload_auth_messages
     # 도메인·MCP URL은 이후 단계에서 실제 값으로 갱신되므로 여기서는 기존 값을 유지한다
     # (placeholder를 넣으면 배포 도중 Cognito 콜백 URL이 잠시 잘못된 값이 된다)
     cfn_update $BASE_STACK_NAME \
@@ -425,6 +441,7 @@ if aws cloudformation describe-stacks --stack-name "$BASE_STACK_NAME" > /dev/nul
                     ParameterKey=FrontendRedirectDomain,UsePreviousValue=true \
                     ParameterKey=CallbackDomain,UsePreviousValue=true \
                     ParameterKey=McpFunctionUrl,UsePreviousValue=true \
+                    ParameterKey=CodeVersion,ParameterValue=$AUTH_MESSAGES_VERSION \
         --tags Key=Project,Value=Vigie Key=Environment,Value=$ENV \
         --capabilities CAPABILITY_NAMED_IAM
 else
@@ -534,6 +551,7 @@ CALLBACK_DOMAIN="${API_GATEWAY_ID}.execute-api.${REGION}.amazonaws.com/${ENV}/ca
 echo "Callback Domain: ${CALLBACK_DOMAIN}"
 # SSM 파라미터 변경 후 base 스택 업데이트 (SSM 파라미터가 CloudFormation에 의해 생성되기 때문)
 echo "FrontendRedirectDomain 및 Callback URL 업데이트를 위해 base 스택 업데이트 중..."
+upload_auth_messages
 cfn_update $BASE_STACK_NAME \
     --template-url "https://$CLOUDFORMATION_BUCKET.s3.$REGION.amazonaws.com/base.yaml" \
     --parameters ParameterKey=Environment,ParameterValue=$ENV \
@@ -547,6 +565,7 @@ cfn_update $BASE_STACK_NAME \
                 ParameterKey=FrontendRedirectDomain,ParameterValue=$FRONTEND_URL \
                 ParameterKey=CallbackDomain,ParameterValue=$CALLBACK_DOMAIN \
                 ParameterKey=McpFunctionUrl,UsePreviousValue=true \
+                ParameterKey=CodeVersion,ParameterValue=$AUTH_MESSAGES_VERSION \
     --tags Key=Project,Value=Vigie Key=Environment,Value=$ENV \
     --capabilities CAPABILITY_NAMED_IAM
 echo "FrontendRedirectDomain 업데이트 완료"
@@ -950,6 +969,7 @@ cfn_update $BASE_STACK_NAME \
                 ParameterKey=FrontendRedirectDomain,ParameterValue=$FRONTEND_URL \
                 ParameterKey=CallbackDomain,ParameterValue=$CALLBACK_DOMAIN \
                 ParameterKey=McpFunctionUrl,ParameterValue=$McpFunctionUrl \
+                ParameterKey=CodeVersion,ParameterValue=$AUTH_MESSAGES_VERSION \
     --tags Key=Project,Value=Vigie Key=Environment,Value=$ENV \
     --capabilities CAPABILITY_NAMED_IAM
 

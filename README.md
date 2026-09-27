@@ -424,6 +424,8 @@ React 18과 TypeScript로 채팅 화면을 만들었습니다. 화면 디자인�
 
 Cognito 로그인 페이지는 새 managed login 화면을 Vigie에 맞게 꾸몄습니다(`cloudformation/base.yaml`의 `ManagedLoginBranding`): 로그인 상자 위 Vigie 로고, 앱과 같은 파란 버튼·모서리·바탕색, 탭 아이콘. 앱은 `lang=ko`를 붙여 한국어로 엽니다. 화면 문구 자체는 Cognito가 정해 바꿀 수 없습니다. managed login은 Cognito **Essentials** 요금제가 필요합니다. Lite처럼 월 활성 사용자 1만 명까지 무료이고, 넘으면 MAU당 요금이 Lite보다 비쌉니다. 로고 이미지는 `scripts/cognito_branding.py`로 `frontend/src/assets/brand`의 SVG에서 만들어 템플릿에 적습니다.
 
+인증 메일(가입 인증 코드, 코드 재전송, 비밀번호 재설정 코드, 관리자 초대의 임시 비밀번호, 이메일 변경 인증)은 Cognito의 Custom message 트리거 Lambda(`services/auth_messages`)가 메일마다 다른 제목과 HTML 본문으로 만듭니다. 맨 위에 Vigie 로고(프론트엔드의 `vigie-email-logo.png`)를 넣고, 코드·임시 비밀번호 자리는 Cognito가 보내기 직전에 실제 값으로 바꿉니다. `deploy.sh`가 base 스택을 업데이트하기 직전에 코드를 올리고 연결하므로, 배포 중 만드는 관리자 계정의 초대 메일부터 이 모양으로 나갑니다. 보내는 주소는 Cognito 기본(`no-reply@verificationemail.com`, 하루 50통)이며, 바꾸려면 SES 인증이 필요합니다.
+
 ### Lambda 기반 MCP 서버 및 클라이언트 구현
 MCP의 HTTP+SSE(Server-Sent Events) 방식은 연결을 오래 유지해야 해서 Lambda와 맞지 않아, 요청-응답 방식(Streamable HTTP)으로 MCP 서버와 클라이언트를 직접 만들었습니다. MCP 서버는 Lambda Function URL(IAM 인증)로 열고, 세션은 DynamoDB에 둡니다(`mcp/lambda_mcp/`).
 
