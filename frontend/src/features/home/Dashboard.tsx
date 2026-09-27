@@ -2,20 +2,21 @@
 //   운영 현황                                   dev · ap-northeast-2 · 3분 전에 모음  [↻]
 //   [ 무엇이든 물어보세요…                                                    ➤ ]
 //   ┌ 지금 확인할 것 ───────────────────────────────────────────────────────┐   ← 없으면 초록 한 줄
-//   │ ● wga-dev-api-5xx 알람이 12분째 울리는 중  5XXError > 5 (5분)   물어보기 ↗ │
-//   │ ● 승인을 기다리는 변경 1건  9분 뒤 만료                        대화에서 보기 │
+//   │ ● wga-dev-api-5xx 알람 12분 동안 지속  5XXError > 5 (5분)       물어보기 ↗ │
+//   │ ● 승인을 기다리는 변경 1건  9분 후 만료                        대화에서 보기 │
 //   └────────────────────────────────────────────────────────────────────┘
-//   [울리는 알람 1/24] [Lambda 오류 37 ▁▂▅] [이번 달 비용 $362 +8%] [승인 대기 1]   ← 숫자 카드 (누르면 대화로)
+//   [울리는 알람 1/24] [Lambda 오류 37 ▁▂▅] [이번 달 비용 $362] [승인 대기 1]   ← 숫자 카드
 //   [일별 비용 (막대 · 평균 점선 · 남은 날 점선 칸)      ] [서비스별 비용 (가로 막대)]
 //   [리소스 상태 (분포 막대 + 정렬되는 표)              ] [최근 변경 (시간 줄)     ]
 //   [개선 권고 (카드 여러 개)                                                       ]
 // - AI에게 묻는 곳은 '지금 확인할 것'의 줄뿐이다 (누르면 그 내용을 질문으로 새 대화). 숫자 카드·표·개선 권고는 보기만 한다.
-// - 설명 글은 두지 않는다: 확인할 것이 없으면 그 상자를 아예 그리지 않고, 값이 없는 칸은 '데이터가 존재하지 않습니다'만
+// - 설명 글은 두지 않는다: 확인할 것이 없으면 그 상자를 아예 그리지 않고, 값이 없는 칸은 '데이터가 존재하지 않습니다'만.
+//   모으는 주기('하루 1번'·'실시간')와 증감(▲ 60% 그 전 24시간보다)도 두지 않는다. 카드 제목은 숫자 카드 이름과 같은 작은 회색 글자
 //   맨 위 입력칸은 그대로 (직접 물을 때)
 // - 처음 그릴 때: 카드가 차례로 떠오르고(AXPI priority-card-enter), 숫자가 0에서 올라가고, 막대가 바닥에서 자란다.
 //   30초마다 다시 읽을 때는 다시 움직이지 않는다 (요소가 그대로라 CSS 등장 효과가 다시 돌지 않는다)
-// - 값은 수집 Lambda가 구역마다 모아 둔 것이다 (services/dashboard). 카드마다 얼마나 자주 모으는지와, 모으지 못했으면
-//   '모으지 못함 · 마지막 성공 N분 전'을 작게 적는다 (Freshness). 한 번도 모으지 못한 칸은 '아직 모으지 않았습니다'
+// - 값은 수집 Lambda가 구역마다 모아 둔 것이다 (services/dashboard). 모으지 못했을 때만 카드 제목 옆에
+//   '모으지 못함 · 마지막 성공 14:32 KST'를 빨갛게 적는다 (Freshness). 한 번도 모으지 못한 칸은 '데이터가 존재하지 않습니다.'
 // - 화면이 보이는 동안 POLL_MS마다 다시 읽는다 (AWS 이벤트로 바뀐 알람·상태·변경이 곧 보인다). 탭이 가려지면 멈춘다.
 //   다시 읽기는 모아 둔 값(DynamoDB)만 읽을 뿐 AWS를 부르지 않는다. ↻도 같다
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -42,10 +43,11 @@ const ago = (at: number) => {
     return `${Math.floor(s / 86400)}일 전`;
 };
 
-// 12분째 · 3시간째
+// 알람이 이어진 시간: '12분 동안 지속' · '3시간 동안 지속'
 const lasting = (since: number) => {
     const s = Math.max(0, nowSeconds() - since);
-    return s < 3600 ? `${Math.max(1, Math.floor(s / 60))}분째` : `${Math.floor(s / 3600)}시간째`;
+    const span = s < 3600 ? `${Math.max(1, Math.floor(s / 60))}분` : `${Math.floor(s / 3600)}시간`;
+    return `${span} 동안 지속`;
 };
 
 // 마지막 업데이트 시각: '14:32 KST' (오늘이 아니면 '9월 26일 14:32 KST')
@@ -93,21 +95,8 @@ function CountUp({ value, format = (n) => String(Math.round(n)) }: { value: numb
 // 차례로 떠오르는 순서 (CSS의 dash-enter, 50ms씩)
 const enter = (order: number) => ({ '--enter': order }) as CSSProperties;
 
-// 9분 뒤
-const until = (at: number) => `${Math.max(1, Math.ceil((at - nowSeconds()) / 60))}분 뒤`;
-
-const percent = (now: number, before: number) => (before ? Math.round(((now - before) / before) * 1000) / 10 : 0);
-
-// 증감 표시: ▲ 8.1% · ▼ 3% (늘면 나쁜 값이라 늘면 빨강)
-function Delta({ now, before, suffix }: { now: number; before: number; suffix: string }) {
-    const change = percent(now, before);
-    if (!change) return <span className="dash-delta">{suffix}와 같음</span>;
-    return (
-        <span className={`dash-delta ${change > 0 ? 'is-up' : 'is-down'}`}>
-            {change > 0 ? '▲' : '▼'} {Math.abs(change)}% <span className="dash-delta-note">{suffix}보다</span>
-        </span>
-    );
-}
+// 9분 후
+const until = (at: number) => `${Math.max(1, Math.ceil((at - nowSeconds()) / 60))}분 후`;
 
 // ---------------------------------------------------------------- 상태 배지 (색만으로 알리지 않게 글자와 모양을 함께)
 function StatusBadge({ status }: { status: HealthStatus }) {
@@ -128,30 +117,14 @@ const AskArrow = () => (
 
 const POLL_MS = 30_000;
 
-// 구역마다 모으는 때 (services/dashboard/lambda_function.py의 Scheduler·이벤트)
-const CADENCE: Record<SectionName, string> = {
-    alarms: '실시간',
-    resources: '실시간',
-    changes: '실시간',
-    errors: '5분마다',
-    usage: '1시간마다',
-    cost: '하루 1번',
-};
-
-// 얼마나 새 값인가: '5분마다 · 2분 전' / 실패하면 '모으지 못함 · 마지막 성공 3시간 전' (빨강, 마우스를 올리면 까닭)
+// 모으지 못한 구역만 알린다: '모으지 못함 · 마지막 성공 14:32 KST' (빨강, 마우스를 올리면 까닭).
+// 잘 모으고 있으면 아무것도 적지 않는다 (예전의 '실시간'·'하루 1번' 같은 주기 글자는 뺐다)
 function Freshness({ data, section }: { data: DashboardData; section: SectionName }) {
     const state: SectionState | undefined = data.sections?.[section];
-    if (!state) return null;
-    if (!state.ok) {
-        return (
-            <span className="dash-fresh is-stale" title={state.error ?? undefined}>
-                모으지 못함{state.lastSuccessAt ? ` · 마지막 성공 ${kst(state.lastSuccessAt)}` : ''}
-            </span>
-        );
-    }
+    if (!state || state.ok) return null;
     return (
-        <span className="dash-fresh" title={state.collectedAt ? `마지막 업데이트 ${kst(state.collectedAt)}` : undefined}>
-            {CADENCE[section]}
+        <span className="dash-fresh is-stale" title={state.error ?? undefined}>
+            모으지 못함{state.lastSuccessAt ? ` · 마지막 성공 ${kst(state.lastSuccessAt)}` : ''}
         </span>
     );
 }
@@ -175,7 +148,7 @@ function EmptyKpi({ label, data, section, order }: { label: string; data: Dashbo
 }
 
 type SortKey = 'status' | 'name' | 'errors' | 'cost';
-const SORT_LABEL: Record<SortKey, string> = { status: '상태', name: '리소스', errors: '오류 (24시간)', cost: '이번 달 비용' };
+const SORT_LABEL: Record<SortKey, string> = { status: '상태', name: '리소스', errors: '오류', cost: '이번 달 비용' };
 
 export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
     const navigate = useNavigate();
@@ -339,18 +312,17 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                             {data.errors ? (
                                 <div className="dash-kpi dash-enter" style={enter(2)}>
                                     <span className="dash-kpi-label">
-                                        Lambda 오류 · 24시간
+                                        Lambda 오류
                                         <Freshness data={data} section="errors" />
                                     </span>
                                     <span className="dash-kpi-value">
                                         <CountUp value={data.errors.total24h} />
                                         <span className="dash-kpi-unit">건</span>
                                     </span>
-                                    <Delta now={data.errors.total24h} before={data.errors.previous24h} suffix="그 전 24시간" />
                                     <Sparkbars values={data.errors.hourly} label="지난 24시간 시간별 오류 수" />
                                 </div>
                             ) : (
-                                <EmptyKpi label="Lambda 오류 · 24시간" data={data} section="errors" order={2} />
+                                <EmptyKpi label="Lambda 오류" data={data} section="errors" order={2} />
                             )}
 
                             {data.cost ? (
@@ -362,7 +334,6 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                     <span className="dash-kpi-value">
                                         <CountUp value={data.cost.monthToDate} format={(n) => usd(n, 0)} />
                                     </span>
-                                    <Delta now={data.cost.monthToDate} before={data.cost.lastMonthSamePeriod} suffix="지난달 이맘때" />
                                     <span className="dash-kpi-sub">월말 예상 {usd(data.cost.forecast, 0)}</span>
                                 </div>
                             ) : (
@@ -372,7 +343,6 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                             <div className={`dash-kpi dash-enter${data.approvals.pending ? ' is-warn' : ''}`} style={enter(4)}>
                                 <span className="dash-kpi-label">
                                     승인 대기
-                                    <span className="dash-fresh">실시간</span>
                                 </span>
                                 <span className="dash-kpi-value">
                                     <CountUp value={data.approvals.pending} />
@@ -381,7 +351,7 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                 {data.approvals.unavailable ? (
                                     <span className="dash-kpi-sub">승인 요청을 읽지 못했습니다</span>
                                 ) : data.approvals.pending && data.approvals.soonestExpiresAt ? (
-                                    <span className="dash-kpi-sub">가장 빠른 만료 {until(data.approvals.soonestExpiresAt)}</span>
+                                    <span className="dash-kpi-sub">가장 이른 만료 {until(data.approvals.soonestExpiresAt)}</span>
                                 ) : null}
                             </div>
                         </div>
@@ -491,7 +461,7 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                 </div>
                                 {data.resourceTotal && data.resourceTotal > resources.length ? (
                                     <p className="dash-card-note dash-table-more">
-                                        문제·주의를 먼저 {resources.length}개 보입니다. 모두 {data.resourceTotal}개입니다.
+                                        전체 {data.resourceTotal}개 중 문제·주의 우선 {resources.length}개 표시
                                     </p>
                                 ) : null}
                             </section>
@@ -501,7 +471,6 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                     <h3 id="dash-change-title">
                                         최근 변경 <Freshness data={data} section="changes" />
                                     </h3>
-                                    <span className="dash-card-aside">24시간</span>
                                 </header>
                                 {data.changes.length ? (
                                     <ol className="dash-changes">
@@ -521,7 +490,7 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                         ))}
                                     </ol>
                                 ) : (
-                                    <p className="dash-card-note">지난 24시간 동안 바뀐 것이 없습니다.</p>
+                                    <NotYet />
                                 )}
                             </section>
                         </div>
@@ -575,7 +544,7 @@ function Attention({ data, onAsk, onOpenChat }: { data: DashboardData; onAsk: (q
         ...(data.alarms?.firing ?? []).map((alarm) => ({
             key: `alarm-${alarm.name}`,
             status: 'fail' as const,
-            title: `${alarm.name} 알람이 ${lasting(alarm.since)} 울리는 중`,
+            title: `${alarm.name} 알람 ${lasting(alarm.since)}`,
             sub: alarm.metric,
             action: '물어보기',
             run: () => onAsk(`${alarm.name} 알람 왜 울렸어?`),

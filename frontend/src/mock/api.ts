@@ -1678,15 +1678,15 @@ const dashboardData = (): DashboardData => {
   const HOUR = 3600;
   const longRetention = mockResources.retention === null || mockResources.retention > 14; // 14일이면 충분한 개발 로그
   const resources: DashboardResource[] = [
-    { id: "wga-llm-dev", kind: "Lambda", status: "fail", detail: "오류율 4.2% · 시간 초과 늘어남", errors24h: 31, changedAt: nowS - 26 * HOUR },
-    { id: MOCK_ALARM, kind: "Alarm", status: mockResources.alarmActions ? "fail" : "warn", detail: mockResources.alarmActions ? "ALARM · 12분째" : "알림 꺼짐 (점검 중)" },
-    { id: "i-0428ab91c3d5e7f60", label: "wga-batch", kind: "EC2", status: "warn", detail: "CPU 평균 1.8% (14일) · 유휴" },
-    { id: "wga-reports-dev", kind: "S3", status: "warn", detail: "퍼블릭 액세스 차단 일부 꺼짐" },
+    { id: "wga-llm-dev", kind: "Lambda", status: "fail", detail: "오류율 4.2% · 시간 초과 증가", errors24h: 31, changedAt: nowS - 26 * HOUR },
+    { id: MOCK_ALARM, kind: "Alarm", status: mockResources.alarmActions ? "fail" : "warn", detail: mockResources.alarmActions ? "ALARM · 5XXError > 5 (5분)" : "알림 비활성화" },
+    { id: "i-0428ab91c3d5e7f60", label: "wga-batch", kind: "EC2", status: "warn", detail: "최근 14일 CPU 평균 1.8% · 유휴" },
+    { id: "wga-reports-dev", kind: "S3", status: "warn", detail: "퍼블릭 액세스 차단 2개 해제" },
     { id: "wga-mcp-dev", kind: "Lambda", status: "ok", detail: "오류 없음", errors24h: 0 },
-    { id: "wga-chat-history-dev", kind: "Lambda", status: "ok", detail: "오류 2건 (재시도로 성공)", errors24h: 2 },
+    { id: "wga-chat-history-dev", kind: "Lambda", status: "ok", detail: "오류 2건 (재시도 후 성공)", errors24h: 2 },
     { id: "i-0b17c2d9e4a5f6071", label: "wga-web", kind: "EC2", status: "ok", detail: "상태 검사 2/2 통과" },
-    { id: "wga-artifacts-dev", kind: "S3", status: "ok", detail: "차단 4개 모두 켜짐" },
-    { id: "wga-slackbot-dev", kind: "Lambda", status: "none", detail: "지난 24시간 호출 없음", errors24h: 0 },
+    { id: "wga-artifacts-dev", kind: "S3", status: "ok", detail: "퍼블릭 액세스 차단 모두 적용" },
+    { id: "wga-slackbot-dev", kind: "Lambda", status: "none", detail: "호출 없음", errors24h: 0 },
   ];
 
   // 최근 변경: 이 mock에서 승인해 실행한 것 + CloudTrail에만 있는 것
@@ -1707,13 +1707,13 @@ const dashboardData = (): DashboardData => {
   const changes = [...appChanges, ...cloudChanges].sort((a, b) => b.at - a.at);
 
   const findings: DashboardFinding[] = [
-    { kind: "idle-ec2", status: "warn", title: "유휴 EC2 인스턴스 1대", detail: "wga-batch · 14일 동안 CPU 평균 1.8%" },
-    { kind: "public-s3", status: "fail", title: "퍼블릭 액세스 차단 미적용 S3 버킷 1개", detail: "wga-reports-dev · 퍼블릭 액세스 차단 2개 꺼짐" },
+    { kind: "idle-ec2", status: "warn", title: "유휴 EC2 인스턴스 1대", detail: "wga-batch · 최근 14일 CPU 평균 1.8%" },
+    { kind: "public-s3", status: "fail", title: "퍼블릭 액세스 차단 미적용 S3 버킷 1개", detail: "wga-reports-dev" },
     ...(longRetention
-      ? [{ kind: "log-retention" as const, status: "warn" as const, title: "보존 기간 과다 로그 그룹 1개", detail: `${MOCK_LOG_GROUP} · ${retentionText(mockResources.retention)} 보관, 14일이면 충분` }]
+      ? [{ kind: "log-retention" as const, status: "warn" as const, title: "보존 기간 과다 로그 그룹 1개", detail: MOCK_LOG_GROUP }]
       : []),
     ...(!mockResources.alarmActions
-      ? [{ kind: "alarm-muted" as const, status: "warn" as const, title: "알림 비활성 알람 1개", detail: `${MOCK_ALARM} · 울려도 메일이 가지 않음` }]
+      ? [{ kind: "alarm-muted" as const, status: "warn" as const, title: "알림 비활성 알람 1개", detail: MOCK_ALARM }]
       : []),
   ];
 
