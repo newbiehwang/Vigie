@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
-  WGA GitHub Actions 배포용 OIDC Role (부트스트랩 스택).
+  Vigie GitHub Actions 배포용 OIDC Role (부트스트랩 스택).
   deploy.sh가 배포하지 않으며, 환경마다 한 번 수동으로 배포한다.
   GitHub Actions가 장기 Access Key 없이 단기 자격 증명으로 배포하도록 한다.
 
@@ -40,7 +40,7 @@ Resources:
   GitHubDeployRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'wga-github-deploy-${Environment}'
+      RoleName: !Sub 'vigie-github-deploy-${Environment}'
       Description: !Sub 'GitHub Actions에서 ${GitHubRepository}의 ${Environment} 환경 배포'
       MaxSessionDuration: 7200   # deploy.sh 전체 실행(스택 생성, 이미지 빌드 대기) 시간 여유
       AssumeRolePolicyDocument:
@@ -61,15 +61,15 @@ Resources:
                 token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubRepository}:environment:${Environment}'
       # deploy.sh는 CloudFormation으로 Lambda, API Gateway, Cognito, DynamoDB, S3, Amplify, CodeBuild, ECR,
       # CloudWatch, SNS 등을 만들고 일부는 CLI로 직접 호출하므로 IAM 외 서비스 전반의 권한이 필요하다.
-      # PowerUserAccess는 IAM·Organizations·계정 관리를 제외하므로, IAM은 아래 정책에서 wga-* Role로 한정한다.
+      # PowerUserAccess는 IAM·Organizations·계정 관리를 제외하므로, IAM은 아래 정책에서 vigie-* Role로 한정한다.
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/PowerUserAccess
       Policies:
-        - PolicyName: WgaIamRoleManagement
+        - PolicyName: VigieIamRoleManagement
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              - Sid: ManageWgaRoles
+              - Sid: ManageVigieRoles
                 Effect: Allow
                 Action:
                   - iam:CreateRole
@@ -86,14 +86,14 @@ Resources:
                   - iam:ListRolePolicies
                   - iam:ListAttachedRolePolicies
                   - iam:PassRole
-                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/wga-*'
+                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/vigie-*'
               # 관리형 정책 연결은 템플릿에서 실제로 쓰는 정책만 허용 (AdministratorAccess 연결로 권한 상승 방지)
               - Sid: AttachOnlyKnownManagedPolicies
                 Effect: Allow
                 Action:
                   - iam:AttachRolePolicy
                   - iam:DetachRolePolicy
-                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/wga-*'
+                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/vigie-*'
                 Condition:
                   ArnEquals:
                     iam:PolicyARN:
@@ -108,7 +108,7 @@ Resources:
               - Sid: DenySelfModification
                 Effect: Deny
                 Action: iam:*
-                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/wga-github-deploy-*'
+                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/vigie-github-deploy-*'
 
 Outputs:
   DeployRoleArn:

@@ -1,7 +1,7 @@
 """저장소 루트 .env 읽기: deploy.sh의 sync_anthropic_key와 같은 규칙으로 읽는다"""
 import pytest
 
-from wga_installer import dotenv
+from vigie_installer import dotenv
 
 
 @pytest.mark.parametrize("text,expected", [

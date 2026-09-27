@@ -1,6 +1,6 @@
-# WGA 위협 모델
+# Vigie 위협 모델
 
-WGA는 사용자가 자연어로 AWS 계정을 조회하고 일부를 바꾸는 챗봇입니다. 모델(Claude)이 도구를 골라 부르므로, 사람이 쓴 코드만 보던 때와 달리 **"모델이 잘못된 도구를 잘못된 값으로 부르는 경우"**까지 막아야 합니다. 이 문서는 무엇을 지키는지, 누가 무엇을 노리는지, 각각을 어떻게 막고 어떤 테스트로 확인하는지, 그리고 아직 막지 못한 것을 정리합니다.
+Vigie는 사용자가 자연어로 AWS 계정을 조회하고 일부를 바꾸는 챗봇입니다. 모델(Claude)이 도구를 골라 부르므로, 사람이 쓴 코드만 보던 때와 달리 **"모델이 잘못된 도구를 잘못된 값으로 부르는 경우"**까지 막아야 합니다. 이 문서는 무엇을 지키는지, 누가 무엇을 노리는지, 각각을 어떻게 막고 어떤 테스트로 확인하는지, 그리고 아직 막지 못한 것을 정리합니다.
 
 - 대상: 이 저장소의 `main` (PR #44~#59의 거버넌스 기능과 도구 확장 포함)
 - 방법: 자산과 신뢰 경계를 먼저 정하고, 경계를 넘는 흐름마다 위협을 적었습니다 (STRIDE를 느슨하게 따름)
@@ -14,7 +14,7 @@ WGA는 사용자가 자연어로 AWS 계정을 조회하고 일부를 바꾸는 
 | 계정 안의 데이터 | 로그, 지표, IAM 정책, S3 버킷 목록, 비용, CloudTrail 이벤트, VPC 구성 | 조회 도구가 읽어 계정 밖(Claude API)으로 보낸다 |
 | 비밀 값 | 로그·도구 결과에 섞인 액세스 키, 토큰, 비밀번호, 개인 키 | 계정 밖으로 나가면 안 된다 |
 | 식별자 | 계정 ID, 이메일 | 계정 밖으로 나갈 때 가명으로 바꾼다 |
-| 감사 기록 | DynamoDB `wga-audit-<env>`, CloudWatch `/wga/<env>/audit` | 누가 무엇을 했는지의 근거. 지워지거나 고쳐지면 안 된다 |
+| 감사 기록 | DynamoDB `vigie-audit-<env>`, CloudWatch `/vigie/<env>/audit` | 누가 무엇을 했는지의 근거. 지워지거나 고쳐지면 안 된다 |
 | 자격 증명 | Anthropic API 키(SSM SecureString), Lambda 실행 역할, Cognito 토큰, Slack 서명 비밀 | 새면 위 자산을 모두 우회한다 |
 | 비용 | Anthropic 토큰, Logs Insights 스캔, Cost Explorer API | 남용되면 청구서로 돌아온다 |
 
@@ -72,7 +72,7 @@ WGA는 사용자가 자연어로 AWS 계정을 조회하고 일부를 바꾸는 
 | T14 | 승인 권한이 없는 사용자가 승인하거나, 한 사람이 요청하고 스스로 승인한다 (A2) | 어느 환경이든 결정자(`approvers`)와 관리자(`admins`, 결정자의 일도 한다)만 승인한다. prod는 다른 결정자만 (직무 분리) | `tests/test_approvals.py::test_dev_requester_without_the_group_cannot_approve`, `tests/test_approvals.py::test_prod_requires_another_approver`, `tests/test_approvals.py::test_dev_non_approver_cannot_approve_someone_elses_request`, `tests/test_approvals.py::test_admins_can_decide_too` |
 | T15 | 오래된 승인·거절된 요청이 나중에 실행된다 | 10분 만료, 거절은 되돌릴 수 없고, 두 번 승인되지 않는다 | `tests/test_approvals.py::test_expired_and_repeated_approvals_are_rejected`, `tests/test_approvals.py::test_deny_does_not_run_and_cannot_be_approved_later` |
 | T16 | 승인 화면이 없는 경로(Slack)로 변경을 요청한다 (A5) | Slack 경로에는 승인 요청 기능을 주지 않는다 | `tests/test_approvals.py::test_slack_path_cannot_request_changes` |
-| T17 | 변경 도구가 이 환경 밖의 리소스를 바꾼다 | 로그 보존·알람 도구는 코드와 IAM 모두 `wga-*`로 한정. S3는 차단을 켜기만 한다. IAM 변경 도구는 붙이지 않았다 | `tests/test_approvals.py::test_tool_rejects_resources_outside_this_environment`, `tests/test_approvals.py::test_only_the_mcp_role_can_change_resources_and_only_wga_ones`, `tests/test_ec2_s3_write_tools.py::test_iam_allows_stop_start_and_only_turning_the_block_on`, `tests/test_iam_server.py::test_mcp_role_has_no_iam_write_permissions` |
+| T17 | 변경 도구가 이 환경 밖의 리소스를 바꾼다 | 로그 보존·알람 도구는 코드와 IAM 모두 `vigie-*`로 한정. S3는 차단을 켜기만 한다. IAM 변경 도구는 붙이지 않았다 | `tests/test_approvals.py::test_tool_rejects_resources_outside_this_environment`, `tests/test_approvals.py::test_only_the_mcp_role_can_change_resources_and_only_vigie_ones`, `tests/test_ec2_s3_write_tools.py::test_iam_allows_stop_start_and_only_turning_the_block_on`, `tests/test_iam_server.py::test_mcp_role_has_no_iam_write_permissions` |
 | T18 | 기록이 남지 않은 채 변경된다 | 승인·실행 결정은 감사 로그에 먼저 남기고, 남기지 못하면 멈춘다. 실행 결과의 CloudTrail 요청 ID를 기록해 AWS 쪽 기록과 잇는다 | `tests/test_approvals.py::test_no_approval_request_without_audit_record`, `tests/test_approvals.py::test_nothing_runs_when_the_decision_cannot_be_audited`, `tests/test_cloudtrail.py::test_executed_change_carries_its_cloudtrail_request_id` |
 
 ### 간접 프롬프트 인젝션

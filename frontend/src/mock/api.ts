@@ -88,7 +88,7 @@ interface MockEntry {
 const ANSWERS: MockEntry[] = [
   {
     answer: [
-      "지난 7일 동안 **wga-llm-dev** 함수의 오류는 3건입니다.",
+      "지난 7일 동안 **vigie-llm-dev** 함수의 오류는 3건입니다.",
       "",
       "| 날짜 | 오류 | 원인 |",
       "|:--|--:|:--|",
@@ -100,17 +100,17 @@ const ANSWERS: MockEntry[] = [
     tools: [
       {
         tool_name: "describe_log_groups",
-        input: { log_group_name_prefix: "/aws/lambda/wga-" },
+        input: { log_group_name_prefix: "/aws/lambda/vigie-" },
         status: "ok",
       },
       {
         tool_name: "analyze_log_group",
-        input: { log_group_name: "/aws/lambda/wga-llm-dev", days: 7 },
+        input: { log_group_name: "/aws/lambda/vigie-llm-dev", days: 7 },
         status: "ok",
       },
     ],
     thinking: [
-      "지난주 Lambda 오류를 물었다. 로그 그룹 이름을 모르니 /aws/lambda/wga- 로 시작하는 그룹부터 찾고,\n찾은 그룹에서 지난 7일 동안의 오류 패턴을 본다.",
+      "지난주 Lambda 오류를 물었다. 로그 그룹 이름을 모르니 /aws/lambda/vigie- 로 시작하는 그룹부터 찾고,\n찾은 그룹에서 지난 7일 동안의 오류 패턴을 본다.",
       "오류는 3건이고 두 가지 원인으로 나뉜다. 날짜별 표로 정리하고 시간 초과를 줄이는 방법을 덧붙인다.",
     ],
   },
@@ -128,7 +128,7 @@ const ANSWERS: MockEntry[] = [
       "- 버킷의 이전 버전을 수명 주기 규칙으로 지웁니다",
       "",
       "```bash",
-      "aws logs put-retention-policy --log-group-name /aws/lambda/wga-llm-dev --retention-in-days 14",
+      "aws logs put-retention-policy --log-group-name /aws/lambda/vigie-llm-dev --retention-in-days 14",
       "```",
     ].join("\n"),
     tools: [
@@ -172,8 +172,8 @@ const ANSWERS: MockEntry[] = [
 // 질문에 '보존'이나 '알람'이 들어 있으면 AI가 변경 도구를 부른 것처럼 승인 요청을 만든다.
 // 승인하면 가짜 리소스 상태를 바꾸고, 이어서 /llm1 {actionId}로 결과 설명을 돌려준다
 
-const MOCK_LOG_GROUP = "/aws/lambda/wga-llm-dev";
-const MOCK_ALARM = "wga-dev-api-5xx";
+const MOCK_LOG_GROUP = "/aws/lambda/vigie-llm-dev";
+const MOCK_ALARM = "vigie-dev-api-5xx";
 const mockResources = { retention: 30 as number | null, alarmActions: true };
 const actions = new Map<string, PendingAction>();
 const APPROVAL_TTL_S = 600;
@@ -185,7 +185,7 @@ const actionsText = (enabled: boolean) => (enabled ? "알림 켜짐" : "알림 �
 const APPROVAL_ENTRIES: Record<"retention" | "alarm", MockEntry> = {
   retention: {
     answer: [
-      "`/aws/lambda/wga-llm-dev` 로그 그룹의 보존 기간을 **14일**로 줄이려면 승인이 필요합니다.",
+      "`/aws/lambda/vigie-llm-dev` 로그 그룹의 보존 기간을 **14일**로 줄이려면 승인이 필요합니다.",
       "",
       "아래 승인 요청에서 바뀌는 내용을 확인한 뒤 승인해 주세요. 보존 기간을 줄이면 14일보다 오래된 로그는 지워집니다.",
     ].join("\n"),
@@ -213,7 +213,7 @@ const APPROVAL_ENTRIES: Record<"retention" | "alarm", MockEntry> = {
   },
   alarm: {
     answer:
-      "점검하는 동안 `wga-dev-api-5xx` 알람의 알림을 끄려면 승인이 필요합니다. 알림을 끄면 알람이 울려도 메일이 가지 않습니다.",
+      "점검하는 동안 `vigie-dev-api-5xx` 알람의 알림을 끄려면 승인이 필요합니다. 알림을 끄면 알람이 울려도 메일이 가지 않습니다.",
     search: { query: "setAlarmActions", found: ["setAlarmActions"] },
     tools: [
       {
@@ -252,7 +252,7 @@ const CHART_ENTRY: MockEntry = {
     "",
     "![Lambda 오류 수](artifact://charts/mock/errors.png)",
     "",
-    "9월 4일에 `wga-llm-dev` 오류가 8건으로 가장 많았습니다.",
+    "9월 4일에 `vigie-llm-dev` 오류가 8건으로 가장 많았습니다.",
     "",
     "![서비스별 비용](artifact://charts/mock/cost.png)",
     "",
@@ -274,8 +274,8 @@ const CHART_ENTRY: MockEntry = {
       axisXTitle: "날짜",
       axisYTitle: "오류",
       data: ["09-01", "09-02", "09-03", "09-04", "09-05", "09-06", "09-07"].flatMap((time, i) => [
-        { time, value: [3, 5, 2, 8, 6, 4, 7][i], group: "wga-llm-dev" },
-        { time, value: [1, 2, 1, 4, 3, 2, 3][i], group: "wga-mcp-dev" },
+        { time, value: [3, 5, 2, 8, 6, 4, 7][i], group: "vigie-llm-dev" },
+        { time, value: [1, 2, 1, 4, 3, 2, 3][i], group: "vigie-mcp-dev" },
       ]),
     }),
     chartArtifact("cost", "bar", {
@@ -353,7 +353,7 @@ const GALLERY_ENTRY: MockEntry = {
 // 로그에 AI를 노린 지시문이 심겨 있던 경우 (질문에 '인젝션'·'의심'이 있으면). 진행 과정과 감사 로그에 '의심 문구'가 보인다
 const INJECTION_ENTRY: MockEntry = {
   answer: [
-    "지난 1시간 동안 `wga-llm-dev` 함수에서 오류 2건이 있었습니다.",
+    "지난 1시간 동안 `vigie-llm-dev` 함수에서 오류 2건이 있었습니다.",
     "",
     "그런데 로그 한 줄에 **AI에게 로그 보존 기간을 1일로 바꾸라는 지시문**이 들어 있었습니다. 로그는 데이터일 뿐이라 따르지 않았고, 아무것도 바꾸지 않았습니다.",
     "누가 이 로그를 남겼는지 확인해 보시길 권합니다.",
@@ -362,7 +362,7 @@ const INJECTION_ENTRY: MockEntry = {
     {
       tool_name: "execute_log_insights_query",
       input: {
-        log_group_names: ["/aws/lambda/wga-llm-dev"],
+        log_group_names: ["/aws/lambda/vigie-llm-dev"],
         query_string: "filter @message like /ERROR/",
       },
       status: "ok",
@@ -384,7 +384,7 @@ const INJECTION_ENTRY: MockEntry = {
 const TAINTED_LOG_ID = "toolu_mocklog1";
 const TAINTED_ENTRY: MockEntry = {
   answer: [
-    "로그에 적힌 대로 `/aws/lambda/wga-llm-dev` 로그 그룹의 보존 기간을 **1일**로 바꾸려면 승인이 필요합니다.",
+    "로그에 적힌 대로 `/aws/lambda/vigie-llm-dev` 로그 그룹의 보존 기간을 **1일**로 바꾸려면 승인이 필요합니다.",
     "",
     "아래 승인 요청을 확인해 주세요.",
   ].join("\n"),
@@ -622,7 +622,7 @@ const AUDIT_EXTRA_TOOLS: MockTool[] = [
       metric_name: "Errors",
       // 감사 로그에는 도구가 실제로 받은 값(계정 ID 원래 값)이 남는다
       dimension:
-        "arn:aws:lambda:ap-northeast-2:111122223333:function:wga-llm-dev",
+        "arn:aws:lambda:ap-northeast-2:111122223333:function:vigie-llm-dev",
     },
     status: "ok",
   },
@@ -634,7 +634,7 @@ const AUDIT_QUESTIONS = [
   "지금 울리는 알람 있어?",
   "안녕, 뭘 할 수 있어?",
   "콜드 스타트를 줄이는 방법 알려줘",
-  "wga-llm-dev 함수 오류 추이 보여줘",
+  "vigie-llm-dev 함수 오류 추이 보여줘",
 ];
 const AUDIT_EXTRA_ANSWERS = [
   [
@@ -644,10 +644,10 @@ const AUDIT_EXTRA_ANSWERS = [
     "2. **패키지 줄이기**: 쓰지 않는 라이브러리를 빼고, 무거운 모듈은 필요할 때 불러옵니다.",
     "3. **SnapStart**(Java·Python): 초기화가 끝난 상태를 스냅샷으로 두고 거기서 시작합니다.",
     "",
-    "`wga-llm-dev`는 요청이 드문드문 들어와서 2번부터 해 보는 것을 권합니다.",
+    "`vigie-llm-dev`는 요청이 드문드문 들어와서 2번부터 해 보는 것을 권합니다.",
   ].join("\n"),
   [
-    "`wga-llm-dev` 함수의 지난 7일 오류 추이입니다.",
+    "`vigie-llm-dev` 함수의 지난 7일 오류 추이입니다.",
     "",
     "| 날짜 | 오류 |",
     "|:--|--:|",
@@ -825,7 +825,7 @@ const FAILING_TOOLS: MockTool[] = [
   },
   {
     tool_name: "analyze_log_group",
-    input: { log_group_name: "/aws/lambda/wga-llm-dev", days: 1 },
+    input: { log_group_name: "/aws/lambda/vigie-llm-dev", days: 1 },
     status: "error",
     error: "도구가 제한 시간(25초) 안에 끝나지 않았습니다",
   },
@@ -1044,13 +1044,13 @@ function seedScenarios(): AuditRecord[] {
     const action: ScenarioAction = {
       id: "5f1c0a2e-0001-4c3b-9d10-aa0000000001",
       tool: "setLogRetention",
-      args: { log_group_name: "/aws/lambda/wga-mcp-dev", retention_days: 14 },
-      summary: "/aws/lambda/wga-mcp-dev 로그 보존 기간 30일 → 14일",
+      args: { log_group_name: "/aws/lambda/vigie-mcp-dev", retention_days: 14 },
+      summary: "/aws/lambda/vigie-mcp-dev 로그 보존 기간 30일 → 14일",
     };
-    const q = scenarioQuestion(lee, "wga-mcp-dev 로그 보존 기간을 14일로 줄여줘", [
-      { tool_name: "describe_log_groups", input: { log_group_name_prefix: "/aws/lambda/wga-mcp" }, status: "ok" },
+    const q = scenarioQuestion(lee, "vigie-mcp-dev 로그 보존 기간을 14일로 줄여줘", [
+      { tool_name: "describe_log_groups", input: { log_group_name_prefix: "/aws/lambda/vigie-mcp" }, status: "ok" },
       { tool_name: "setLogRetention", input: action.args, status: "ok" },
-    ], t, "`/aws/lambda/wga-mcp-dev`의 보존 기간을 **14일**로 줄이려면 승인이 필요합니다. 아래 승인 요청을 확인해 주세요.");
+    ], t, "`/aws/lambda/vigie-mcp-dev`의 보존 기간을 **14일**로 줄이려면 승인이 필요합니다. 아래 승인 요청을 확인해 주세요.");
     out.push(
       ...q.records,
       scenarioEvent(action, "requested", lee, new Date(t.getTime() + 5000), q.requestId),
@@ -1066,12 +1066,12 @@ function seedScenarios(): AuditRecord[] {
     const action: ScenarioAction = {
       id: "5f1c0a2e-0002-4c3b-9d10-aa0000000002",
       tool: "setAlarmActions",
-      args: { alarm_name: "wga-dev-api-5xx", enabled: false },
-      summary: "wga-dev-api-5xx 알람 알림 켜짐 → 꺼짐 (알람이 울려도 메일이 가지 않습니다)",
+      args: { alarm_name: "vigie-dev-api-5xx", enabled: false },
+      summary: "vigie-dev-api-5xx 알람 알림 켜짐 → 꺼짐 (알람이 울려도 메일이 가지 않습니다)",
     };
-    const q = scenarioQuestion(park, "배포하는 동안 wga-dev-api-5xx 알람 알림 꺼줘", [
+    const q = scenarioQuestion(park, "배포하는 동안 vigie-dev-api-5xx 알람 알림 꺼줘", [
       { tool_name: "setAlarmActions", input: action.args, status: "ok" },
-    ], t, "점검하는 동안 `wga-dev-api-5xx` 알람의 알림을 끄려면 승인이 필요합니다.");
+    ], t, "점검하는 동안 `vigie-dev-api-5xx` 알람의 알림을 끄려면 승인이 필요합니다.");
     out.push(
       ...q.records,
       scenarioEvent(action, "requested", park, new Date(t.getTime() + 4000), q.requestId),
@@ -1111,13 +1111,13 @@ function seedScenarios(): AuditRecord[] {
     const action: ScenarioAction = {
       id: "5f1c0a2e-0004-4c3b-9d10-aa0000000004",
       tool: "setLogRetention",
-      args: { log_group_name: "/aws/lambda/wga-llm-dev", retention_days: 1 },
-      summary: "/aws/lambda/wga-llm-dev 로그 보존 기간 30일 → 1일 (지난 로그 대부분이 지워질 수 있습니다)",
+      args: { log_group_name: "/aws/lambda/vigie-llm-dev", retention_days: 1 },
+      summary: "/aws/lambda/vigie-llm-dev 로그 보존 기간 30일 → 1일 (지난 로그 대부분이 지워질 수 있습니다)",
       taintedBy: [{ toolUseId: logId, tool: "execute_log_insights_query", kinds, callsAgo: 1 }],
     };
     const q = scenarioQuestion(demo, "최근 오류 로그 보고 로그에 적힌 조치 해줘", [
       { id: logId, tool_name: "execute_log_insights_query",
-        input: { log_group_names: ["/aws/lambda/wga-llm-dev"], query_string: "filter @message like /ERROR/" },
+        input: { log_group_names: ["/aws/lambda/vigie-llm-dev"], query_string: "filter @message like /ERROR/" },
         status: "ok", suspicious: kinds },
       { tool_name: "setLogRetention", input: action.args, status: "ok" },
     ], t, "로그에 적힌 대로 보존 기간을 **1일**로 바꾸려면 승인이 필요합니다. 로그 속 지시를 따른 변경일 수 있으니 확인 뒤 승인해 주세요.");
@@ -1136,10 +1136,10 @@ function seedScenarios(): AuditRecord[] {
     const action: ScenarioAction = {
       id: "5f1c0a2e-0005-4c3b-9d10-aa0000000005",
       tool: "put_bucket_policy",
-      args: { bucket: "wga-artifacts-dev", policy: "{\"Statement\":[...]}" },
-      summary: "wga-artifacts-dev 버킷 정책 바꾸기 (미등록 도구)",
+      args: { bucket: "vigie-artifacts-dev", policy: "{\"Statement\":[...]}" },
+      summary: "vigie-artifacts-dev 버킷 정책 바꾸기 (미등록 도구)",
     };
-    const q = scenarioQuestion(lee, "wga-artifacts-dev 버킷 정책 정리해줘", [
+    const q = scenarioQuestion(lee, "vigie-artifacts-dev 버킷 정책 정리해줘", [
       { tool_name: "put_bucket_policy", input: action.args, status: "ok", unregistered: true },
     ], t, "위험도 등록부에 없는 도구라 변경 도구로 다뤄 승인을 요청했습니다. 바뀌는 내용을 확인해 주세요.");
     out.push(...q.records, scenarioEvent(action, "requested", lee, new Date(t.getTime() + 3000), q.requestId));
@@ -1151,8 +1151,8 @@ function seedScenarios(): AuditRecord[] {
     const action: ScenarioAction = {
       id: "5f1c0a2e-0006-4c3b-9d10-aa0000000006",
       tool: "enableS3PublicAccessBlock",
-      args: { bucket: "wga-reports-dev" },
-      summary: "wga-reports-dev 버킷 퍼블릭 액세스 차단 꺼짐 → 켜짐",
+      args: { bucket: "vigie-reports-dev" },
+      summary: "vigie-reports-dev 버킷 퍼블릭 액세스 차단 꺼짐 → 켜짐",
     };
     out.push(scenarioEvent(action, "executed", kim, t, undefined,
       trail("s3.amazonaws.com", "PutPublicAccessBlock", "c4b8e1d2-6f0a-4b3c-9d7e-1f2a3b4c5d06")));
@@ -1678,15 +1678,15 @@ const dashboardData = (): DashboardData => {
   const HOUR = 3600;
   const longRetention = mockResources.retention === null || mockResources.retention > 14; // 14일이면 충분한 개발 로그
   const resources: DashboardResource[] = [
-    { id: "wga-llm-dev", kind: "Lambda", status: "fail", detail: "오류율 4.2% · 시간 초과 증가", errors24h: 31, changedAt: nowS - 26 * HOUR },
+    { id: "vigie-llm-dev", kind: "Lambda", status: "fail", detail: "오류율 4.2% · 시간 초과 증가", errors24h: 31, changedAt: nowS - 26 * HOUR },
     { id: MOCK_ALARM, kind: "Alarm", status: mockResources.alarmActions ? "fail" : "warn", detail: mockResources.alarmActions ? "ALARM · 5XXError > 5 (5분)" : "알림 비활성화" },
-    { id: "i-0428ab91c3d5e7f60", label: "wga-batch", kind: "EC2", status: "warn", detail: "최근 14일 CPU 평균 1.8% · 유휴" },
-    { id: "wga-reports-dev", kind: "S3", status: "warn", detail: "퍼블릭 액세스 차단 2개 해제" },
-    { id: "wga-mcp-dev", kind: "Lambda", status: "ok", detail: "오류 없음", errors24h: 0 },
-    { id: "wga-chat-history-dev", kind: "Lambda", status: "ok", detail: "오류 2건 (재시도 후 성공)", errors24h: 2 },
-    { id: "i-0b17c2d9e4a5f6071", label: "wga-web", kind: "EC2", status: "ok", detail: "상태 검사 2/2 통과" },
-    { id: "wga-artifacts-dev", kind: "S3", status: "ok", detail: "퍼블릭 액세스 차단 모두 적용" },
-    { id: "wga-slackbot-dev", kind: "Lambda", status: "none", detail: "호출 없음", errors24h: 0 },
+    { id: "i-0428ab91c3d5e7f60", label: "vigie-batch", kind: "EC2", status: "warn", detail: "최근 14일 CPU 평균 1.8% · 유휴" },
+    { id: "vigie-reports-dev", kind: "S3", status: "warn", detail: "퍼블릭 액세스 차단 2개 해제" },
+    { id: "vigie-mcp-dev", kind: "Lambda", status: "ok", detail: "오류 없음", errors24h: 0 },
+    { id: "vigie-chat-history-dev", kind: "Lambda", status: "ok", detail: "오류 2건 (재시도 후 성공)", errors24h: 2 },
+    { id: "i-0b17c2d9e4a5f6071", label: "vigie-web", kind: "EC2", status: "ok", detail: "상태 검사 2/2 통과" },
+    { id: "vigie-artifacts-dev", kind: "S3", status: "ok", detail: "퍼블릭 액세스 차단 모두 적용" },
+    { id: "vigie-slackbot-dev", kind: "Lambda", status: "none", detail: "호출 없음", errors24h: 0 },
   ];
 
   // 최근 변경: 이 mock에서 승인해 실행한 것 + CloudTrail에만 있는 것
@@ -1699,16 +1699,16 @@ const dashboardData = (): DashboardData => {
       summary: `${action.before} → ${action.after} · ${action.target ?? action.tool}`,
     }));
   const cloudChanges: DashboardChange[] = [
-    { at: nowS - 47 * 60, source: "cloudtrail", actor: "deploy-bot", summary: "Lambda wga-llm-dev 코드 배포 (UpdateFunctionCode)" },
-    { at: nowS - 3 * HOUR, source: "app", actor: "kim@example.com", summary: "로그 보존 기간 30일 → 14일 · /aws/lambda/wga-mcp-dev" },
+    { at: nowS - 47 * 60, source: "cloudtrail", actor: "deploy-bot", summary: "Lambda vigie-llm-dev 코드 배포 (UpdateFunctionCode)" },
+    { at: nowS - 3 * HOUR, source: "app", actor: "kim@example.com", summary: "로그 보존 기간 30일 → 14일 · /aws/lambda/vigie-mcp-dev" },
     { at: nowS - 9 * HOUR, source: "cloudtrail", actor: "park@example.com", summary: "보안 그룹 sg-0a1b 인바운드 443 추가 (AuthorizeSecurityGroupIngress)" },
-    { at: nowS - 20 * HOUR, source: "cloudtrail", actor: "deploy-bot", summary: "S3 wga-reports-dev 버킷 정책 변경 (PutBucketPolicy)" },
+    { at: nowS - 20 * HOUR, source: "cloudtrail", actor: "deploy-bot", summary: "S3 vigie-reports-dev 버킷 정책 변경 (PutBucketPolicy)" },
   ];
   const changes = [...appChanges, ...cloudChanges].sort((a, b) => b.at - a.at);
 
   const findings: DashboardFinding[] = [
-    { kind: "idle-ec2", status: "warn", title: "유휴 EC2 인스턴스 1대", detail: "wga-batch · 최근 14일 CPU 평균 1.8%" },
-    { kind: "public-s3", status: "fail", title: "퍼블릭 액세스 차단 미적용 S3 버킷 1개", detail: "wga-reports-dev" },
+    { kind: "idle-ec2", status: "warn", title: "유휴 EC2 인스턴스 1대", detail: "vigie-batch · 최근 14일 CPU 평균 1.8%" },
+    { kind: "public-s3", status: "fail", title: "퍼블릭 액세스 차단 미적용 S3 버킷 1개", detail: "vigie-reports-dev" },
     ...(longRetention
       ? [{ kind: "log-retention" as const, status: "warn" as const, title: "보존 기간 과다 로그 그룹 1개", detail: MOCK_LOG_GROUP }]
       : []),

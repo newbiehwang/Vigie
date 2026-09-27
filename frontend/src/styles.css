@@ -1,4 +1,4 @@
-/* 디자인: AXPI(LG Entrue) 화면의 CSS를 그대로 가져오고 색만 WGA 색(파랑·AWS 남색·차가운 회색)으로 바꿨다.
+/* 디자인: AXPI(LG Entrue) 화면의 CSS를 그대로 가져오고 색만 Vigie 색(파랑·AWS 남색·차가운 회색)으로 바꿨다.
    색 바꾸기 규칙은 PR 설명 참고. 레이아웃 공통(위쪽 내비게이션·로그인·프로필 메뉴)은 components/layout/layout.css,
    패널·목록·확인창은 components/panel.css에 있다. */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Public+Sans:wght@500;600;700&display=swap");

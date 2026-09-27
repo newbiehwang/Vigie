@@ -11,7 +11,7 @@ import pytest
 
 from conftest import load_service_module
 
-TABLE = "wga-dashboard-test"
+TABLE = "vigie-dashboard-test"
 
 
 @pytest.fixture
@@ -32,16 +32,16 @@ def dash(aws, monkeypatch):
 
 def test_alarms_counts_all_and_lists_firing_with_metric_text(dash):
     cw = boto3.client("cloudwatch")
-    for name in ("wga-test-api-5xx", "wga-test-llm-errors"):
+    for name in ("vigie-test-api-5xx", "vigie-test-llm-errors"):
         cw.put_metric_alarm(AlarmName=name, MetricName="5XXError", Namespace="AWS/ApiGateway", Statistic="Sum",
                             Period=300, EvaluationPeriods=1, Threshold=5,
                             ComparisonOperator="GreaterThanThreshold")
-    cw.set_alarm_state(AlarmName="wga-test-api-5xx", StateValue="ALARM", StateReason="test")
+    cw.set_alarm_state(AlarmName="vigie-test-api-5xx", StateValue="ALARM", StateReason="test")
 
     data = dash["collector"].collect_alarms(cw)
 
     assert data["total"] == 2
-    assert [a["name"] for a in data["firing"]] == ["wga-test-api-5xx"]
+    assert [a["name"] for a in data["firing"]] == ["vigie-test-api-5xx"]
     assert data["firing"][0]["metric"] == "5XXError > 5 (5분)" and data["firing"][0]["since"]
 
 
@@ -56,7 +56,7 @@ def _zip():
 
 def test_resources_reads_state_without_metrics(dash):
     role = boto3.client("iam").create_role(RoleName="r", AssumeRolePolicyDocument="{}")["Role"]["Arn"]
-    boto3.client("lambda").create_function(FunctionName="wga-llm-test", Runtime="python3.12", Role=role,
+    boto3.client("lambda").create_function(FunctionName="vigie-llm-test", Runtime="python3.12", Role=role,
                                            Handler="index.handler", Code={"ZipFile": _zip()})
     ec2 = boto3.client("ec2")
     image = ec2.describe_images(Owners=["amazon"])["Images"][0]["ImageId"]
@@ -68,18 +68,18 @@ def test_resources_reads_state_without_metrics(dash):
         "BlockPublicAcls": True, "IgnorePublicAcls": True, "BlockPublicPolicy": True, "RestrictPublicBuckets": True})
     s3.create_bucket(Bucket="open")  # 차단 설정이 없다 → 네 항목 모두 꺼짐
     logs = boto3.client("logs")
-    logs.create_log_group(logGroupName="/aws/lambda/wga-llm-test")  # 영구 보관
-    logs.create_log_group(logGroupName="/aws/lambda/wga-mcp-test")
-    logs.put_retention_policy(logGroupName="/aws/lambda/wga-mcp-test", retentionInDays=14)
+    logs.create_log_group(logGroupName="/aws/lambda/vigie-llm-test")  # 영구 보관
+    logs.create_log_group(logGroupName="/aws/lambda/vigie-mcp-test")
+    logs.put_retention_policy(logGroupName="/aws/lambda/vigie-mcp-test", retentionInDays=14)
 
     data = dash["collector"].collect_resources(boto3.client("lambda"), ec2, s3, logs)
 
-    assert data["lambdas"] == [{"name": "wga-llm-test", "runtime": "python3.12"}]
+    assert data["lambdas"] == [{"name": "vigie-llm-test", "runtime": "python3.12"}]
     assert data["ec2"][0]["id"] == web and data["ec2"][0]["name"] == "demo-web"
     assert data["ec2"][0]["state"] in ("pending", "running")
     assert {b["name"]: len(b["blockOff"]) for b in data["s3"]} == {"locked": 0, "open": 4}
     assert data["logs"]["neverExpire"] == 1
-    assert [g["name"] for g in data["logs"]["groups"]] == ["/aws/lambda/wga-llm-test"]
+    assert [g["name"] for g in data["logs"]["groups"]] == ["/aws/lambda/vigie-llm-test"]
 
 
 # ---------------------------------------------------------------- 오류 · 사용량 (메트릭)
@@ -102,7 +102,7 @@ def test_errors_are_hourly_for_48_hours_from_one_account_metric(dash):
 def test_usage_reads_function_errors_and_instance_cpu(dash):
     cw = boto3.client("cloudwatch")
     now = datetime.now(timezone.utc)
-    dims = [{"Name": "FunctionName", "Value": "wga-llm-test"}]
+    dims = [{"Name": "FunctionName", "Value": "vigie-llm-test"}]
     cw.put_metric_data(Namespace="AWS/Lambda", MetricData=[
         {"MetricName": "Errors", "Dimensions": dims, "Timestamp": now - timedelta(hours=2), "Value": 4},
         {"MetricName": "Invocations", "Dimensions": dims, "Timestamp": now - timedelta(hours=2), "Value": 100},
@@ -111,10 +111,10 @@ def test_usage_reads_function_errors_and_instance_cpu(dash):
         {"MetricName": "CPUUtilization", "Dimensions": [{"Name": "InstanceId", "Value": "i-1"}],
          "Timestamp": now - timedelta(days=1), "Value": 1.5}])
 
-    data = dash["collector"].collect_usage(cw, ["wga-llm-test", "wga-idle-test"], ["i-1", "i-2"], now=now)
+    data = dash["collector"].collect_usage(cw, ["vigie-llm-test", "vigie-idle-test"], ["i-1", "i-2"], now=now)
 
-    assert data["functions"]["wga-llm-test"] == {"errors": 4, "invocations": 100}
-    assert data["functions"]["wga-idle-test"] == {"errors": 0, "invocations": 0}  # 호출이 없으면 0
+    assert data["functions"]["vigie-llm-test"] == {"errors": 4, "invocations": 100}
+    assert data["functions"]["vigie-idle-test"] == {"errors": 0, "invocations": 0}  # 호출이 없으면 0
     assert data["ec2Cpu"] == {"i-1": 1.5}  # 지표가 없는 인스턴스는 빠진다
 
 
@@ -140,7 +140,7 @@ def test_changes_keep_write_events_and_drop_noise(dash):
     now = datetime.now(timezone.utc)
     trail = FakeCloudTrail([
         {"EventName": "PutRetentionPolicy", "EventTime": now - timedelta(minutes=5), "Username": "kim",
-         "EventSource": "logs.amazonaws.com", "Resources": [{"ResourceName": "/aws/lambda/wga-llm-test"}],
+         "EventSource": "logs.amazonaws.com", "Resources": [{"ResourceName": "/aws/lambda/vigie-llm-test"}],
          "CloudTrailEvent": json.dumps({"requestID": "req-1"})},
         {"EventName": "AssumeRole", "EventTime": now - timedelta(minutes=4), "Username": "x",
          "EventSource": "sts.amazonaws.com"},
@@ -153,7 +153,7 @@ def test_changes_keep_write_events_and_drop_noise(dash):
     assert [e["eventName"] for e in data["events"]] == ["StopInstances", "PutRetentionPolicy"]  # 최근 것부터
     assert data["events"][1] == {"at": int((now - timedelta(minutes=5)).timestamp()), "actor": "kim",
                                  "eventName": "PutRetentionPolicy", "eventSource": "logs",
-                                 "resource": "/aws/lambda/wga-llm-test", "requestId": "req-1"}
+                                 "resource": "/aws/lambda/vigie-llm-test", "requestId": "req-1"}
     assert trail.calls[0]["LookupAttributes"] == [{"AttributeKey": "ReadOnly", "AttributeValue": "false"}]
 
 
@@ -276,7 +276,7 @@ def test_bursts_of_events_are_collected_once(dash, monkeypatch):
 
 def test_usage_uses_saved_resource_names(dash, monkeypatch):
     handler = dash["handler"]
-    dash["store"].put_section("resources", {"lambdas": [{"name": "wga-llm-test"}], "ec2": [
+    dash["store"].put_section("resources", {"lambdas": [{"name": "vigie-llm-test"}], "ec2": [
         {"id": "i-run", "state": "running"}, {"id": "i-stop", "state": "stopped"}], "s3": [], "logs": {}})
     seen = {}
 
@@ -287,5 +287,5 @@ def test_usage_uses_saved_resource_names(dash, monkeypatch):
     monkeypatch.setattr(handler.collector, "collect_usage", fake_usage)
 
     assert handler.lambda_handler({"sections": ["usage"]}, None) == {"sections": {"usage": "ok"}}
-    assert seen == {"functions": ["wga-llm-test"], "instances": ["i-run"]}  # 멈춘 인스턴스의 CPU는 묻지 않는다
+    assert seen == {"functions": ["vigie-llm-test"], "instances": ["i-run"]}  # 멈춘 인스턴스의 CPU는 묻지 않는다
     assert json.loads(json.dumps(dash["store"].get_all()["usage"]["data"])) == {"functions": {}, "ec2Cpu": {}}

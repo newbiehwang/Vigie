@@ -29,7 +29,7 @@ def tools_of(env):  # noqa: F811
 def test_only_event_lookup_is_attached(ct_env):
     tools = tools_of(ct_env)
     assert "lookup_events" in tools and not (LAKE_TOOLS & set(tools))
-    assert tools["lookup_events"]["_meta"]["wga/risk"] == "read"
+    assert tools["lookup_events"]["_meta"]["vigie/risk"] == "read"
     region = tools["lookup_events"]["inputSchema"]["properties"]["region"]
     assert region["default"] == "ap-southeast-2" and "us-east-1" not in region["description"]
 

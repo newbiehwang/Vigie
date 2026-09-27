@@ -8,7 +8,7 @@ def lambda_handler(event, context):
     try:
         sts = boto3.client('sts')
         account_id = sts.get_caller_identity()["Account"]
-        s3_bucket_name = os.environ.get("GUARDDUTY_S3_BUCKET", f"wga-guardduty-logs-{account_id}-{region}")
+        s3_bucket_name = os.environ.get("GUARDDUTY_S3_BUCKET", f"vigie-guardduty-logs-{account_id}-{region}")
         s3 = boto3.client('s3')
         try:
             s3.head_bucket(Bucket=s3_bucket_name)

@@ -9,7 +9,7 @@
 | 프론트엔드       | frontend 스택 출력의 주소로 GET                          | 200 (아니면 주의: 배포 반영 중일 수 있음) |
 | 대시보드         | cloudwatch get-dashboard                               | 존재                           |
 
-API 주소는 deploy.sh와 같은 방법으로 만든다: SSM /wga/<env>/ApiGatewayId → https://<id>.execute-api.<리전>.amazonaws.com/<env>
+API 주소는 deploy.sh와 같은 방법으로 만든다: SSM /vigie/<env>/ApiGatewayId → https://<id>.execute-api.<리전>.amazonaws.com/<env>
 HTTP 요청은 표준 라이브러리 urllib으로 보낸다. 테스트에서 가짜로 바꿀 수 있도록 run()의 http 인자로 받는다.
 """
 import time
@@ -37,7 +37,7 @@ HttpFunc = Callable[[str, str], HttpResult]
 def http_request(method: str, url: str) -> HttpResult:
     """HTTP 요청을 보내고 상태 코드를 돌려준다. 4xx·5xx도 예외가 아니라 상태 코드로 돌려준다."""
     data = b"{}" if method == "POST" else None
-    headers = {"User-Agent": "wga-installer"}
+    headers = {"User-Agent": "vigie-installer"}
     if data is not None:
         headers["Content-Type"] = "application/json"
     request = urllib.request.Request(url, data=data, method=method, headers=headers)
@@ -188,7 +188,7 @@ def _check_access_denied(ctx: Context, runner: Runner, report) -> None:
 
 def _check_frontend(ctx: Context, stacks: dict[str, dict], http: HttpFunc, report) -> None:
     title = "프론트엔드"
-    stack = stacks.get(f"wga-frontend-{ctx.env}")
+    stack = stacks.get(f"vigie-frontend-{ctx.env}")
     outputs = {o["OutputKey"]: o["OutputValue"] for o in (stack or {}).get("Outputs", [])}
     domain = outputs.get("AmplifyAppDefaultDomainWithEnv")
     if not domain:

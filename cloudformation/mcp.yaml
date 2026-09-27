@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "WGA - MCP CloudFormation Template"
+Description: "Vigie - MCP CloudFormation Template"
 
 Parameters:
   Environment:
@@ -19,7 +19,7 @@ Resources:
   MCPRepo:
     Type: AWS::ECR::Repository
     Properties:
-      RepositoryName: !Sub "wga-mcp-${Environment}"
+      RepositoryName: !Sub "vigie-mcp-${Environment}"
       ImageScanningConfiguration:
         ScanOnPush: true
 
@@ -63,7 +63,7 @@ Resources:
   DockerBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: !Sub "wga-docker-build-${Environment}"
+      Name: !Sub "vigie-docker-build-${Environment}"
       ServiceRole: !GetAtt CodeBuildRole.Arn
       Environment:
         Type: LINUX_CONTAINER
@@ -91,8 +91,8 @@ Resources:
                 - echo Logging in to Amazon ECR...
                 - aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
                 - echo Check if repository exists...
-                - aws ecr describe-repositories --repository-names "wga-mcp-$ENV" || aws ecr create-repository --repository-name "wga-mcp-$ENV"
-                - REPOSITORY_URI=$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/wga-mcp-$ENV
+                - aws ecr describe-repositories --repository-names "vigie-mcp-$ENV" || aws ecr create-repository --repository-name "vigie-mcp-$ENV"
+                - REPOSITORY_URI=$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/vigie-mcp-$ENV
                 
             build:
               commands:

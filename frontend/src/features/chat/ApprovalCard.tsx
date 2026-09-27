@@ -2,10 +2,10 @@
 //
 // 승인을 기다리는 동안
 //   [승인 필요] 로그 보존 기간 변경                               남은 시간 9:41
-//   대상   /aws/lambda/wga-llm-dev
+//   대상   /aws/lambda/vigie-llm-dev
 //   변경   30일(회색 취소선) → 14일(검정 굵게)
 //   영향   지난 로그 일부가 지워질 수 있습니다
-//   setLogRetention(log_group_name="/aws/lambda/wga-llm-dev", retention_days=14)   ← 승인하면 실제로 실행될 호출
+//   setLogRetention(log_group_name="/aws/lambda/vigie-llm-dev", retention_days=14)   ← 승인하면 실제로 실행될 호출
 //                                                         [거절] [승인하고 실행]
 // 앞서 읽은 도구 결과에 의심 문구가 있었으면 (체류 신호)
 //   ┌ ⚠ 앞서 읽은 도구 결과에 지시문처럼 보이는 문구가 있었습니다 ┐   ← 카드 맨 위의 빨간 띠

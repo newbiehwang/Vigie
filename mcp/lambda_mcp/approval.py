@@ -3,7 +3,7 @@
 LLM Lambda가 이미 승인을 확인하지만, MCP Lambda는 그 판단을 믿지 않고 승인 테이블을 직접 다시 본다
 (다층 방어: LLM Lambda에 버그가 있거나 누군가 MCP를 직접 불러도, 승인되지 않은 변경은 실행되지 않는다).
 
-    tools/call(변경 도구, _meta["wga/actionId"]) ──▶ claim: 조건부 쓰기 한 번으로 확인과 표시를 함께 한다
+    tools/call(변경 도구, _meta["vigie/actionId"]) ──▶ claim: 조건부 쓰기 한 번으로 확인과 표시를 함께 한다
         조건: 상태가 approved · 도구 이름이 같음 · 인자 해시가 같음 · 만료 전
         성공하면 상태를 executing으로 바꾼다 → 같은 작업 ID로는 다시 실행되지 않는다 (한 번만)
     실행이 끝나면 finish: executed 또는 failed와 결과 요약을 남긴다
@@ -16,8 +16,8 @@ import json
 import time
 from typing import Any, Dict, Optional, Tuple
 
-ACTION_ID_META = "wga/actionId"  # tools/call params._meta: 승인된 작업 ID
-PREVIEW_META = "wga/preview"  # tools/call params._meta: 실행하지 않고 바뀔 내용만 본다 (승인 요청 카드용)
+ACTION_ID_META = "vigie/actionId"  # tools/call params._meta: 승인된 작업 ID
+PREVIEW_META = "vigie/preview"  # tools/call params._meta: 실행하지 않고 바뀔 내용만 본다 (승인 요청 카드용)
 RESULT_LIMIT = 2000
 
 
@@ -29,7 +29,7 @@ def args_hash(tool: str, args: Dict[str, Any]) -> str:
 
 
 class ApprovalGate:
-    """승인 테이블(wga-pending-actions-<env>)을 보고 변경 도구 실행을 허락한다."""
+    """승인 테이블(vigie-pending-actions-<env>)을 보고 변경 도구 실행을 허락한다."""
 
     def __init__(self, table):
         self._table = table

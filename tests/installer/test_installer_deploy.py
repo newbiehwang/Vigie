@@ -11,8 +11,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from wga_installer.events import JsonEmitter, Redactor
-from wga_installer.steps.deploy import TOTAL_PHASES, ProgressParser
+from vigie_installer.events import JsonEmitter, Redactor
+from vigie_installer.steps.deploy import TOTAL_PHASES, ProgressParser
 
 from .helpers import ROOT, events
 
@@ -91,7 +91,7 @@ echo "====== 배포 완료! ======"
 
 
 def ready_account(fake, *, quota=120000, anthropic=True):
-    params = [{"Name": "/wga/dev/ANTHROPIC_API_KEY", "Type": "SecureString"}] if anthropic else []
+    params = [{"Name": "/vigie/dev/ANTHROPIC_API_KEY", "Type": "SecureString"}] if anthropic else []
     fake.add("aws", "describe-parameters", json.dumps({"Parameters": params}))
     fake.add("aws", "list-service-quotas", json.dumps({"Quotas": [
         {"QuotaName": "Maximum integration timeout in milliseconds", "QuotaCode": "L-X", "Value": float(quota)}]}))
@@ -102,7 +102,7 @@ def approve_deploy():
 
 
 def deploy_cli(fake, repo, *extra, input=""):
-    return subprocess.run([sys.executable, "-m", "wga_installer", "deploy", "--json", "--repo", str(repo),
+    return subprocess.run([sys.executable, "-m", "vigie_installer", "deploy", "--json", "--repo", str(repo),
                            "--region", "ap-northeast-2", *extra],
                           input=input, capture_output=True, text=True, env=fake.env(), timeout=60)
 
@@ -190,29 +190,29 @@ def event(stack, logical, status, reason="", *, rtype="AWS::ApiGateway::Method",
             "ResourceStatusReason": reason, "Timestamp": iso(when or NOW + timedelta(seconds=30))}
 
 
-NESTED_ARN = "arn:aws:cloudformation:ap-northeast-2:123:stack/wga-dev-LlmStack-ABC/xyz"
+NESTED_ARN = "arn:aws:cloudformation:ap-northeast-2:123:stack/vigie-dev-LlmStack-ABC/xyz"
 
 
 def test_failure_summary_finds_root_cause_in_nested_stack(fake, repo):
     write_deploy(repo, 'echo "====== 2. 기본 스택 배포 시작 ======"\necho "An error occurred" >&2\nexit 255\n')
     ready_account(fake)
     fake.add("aws", f"describe-stack-events --stack-name {NESTED_ARN}", stack_events(
-        event("wga-dev-LlmStack-ABC", "LlmMethod", "CREATE_FAILED",
+        event("vigie-dev-LlmStack-ABC", "LlmMethod", "CREATE_FAILED",
               "Timeout should be between 50 ms and 29000 ms"),
-        event("wga-dev-LlmStack-ABC", "LlmOptionsMethod", "CREATE_FAILED", "Resource creation cancelled")))
-    fake.add("aws", "describe-stack-events --stack-name wga-dev --max-items", stack_events(
-        event("wga-dev", "wga-dev", "UPDATE_ROLLBACK_IN_PROGRESS", physical="self"),
-        event("wga-dev", "LlmStack", "UPDATE_FAILED", "Embedded stack was not successfully updated",
+        event("vigie-dev-LlmStack-ABC", "LlmOptionsMethod", "CREATE_FAILED", "Resource creation cancelled")))
+    fake.add("aws", "describe-stack-events --stack-name vigie-dev --max-items", stack_events(
+        event("vigie-dev", "vigie-dev", "UPDATE_ROLLBACK_IN_PROGRESS", physical="self"),
+        event("vigie-dev", "LlmStack", "UPDATE_FAILED", "Embedded stack was not successfully updated",
               rtype="AWS::CloudFormation::Stack", physical=NESTED_ARN),
         # 이번 배포 이전의 오래된 실패는 보여 주지 않는다
-        event("wga-dev", "OldThing", "CREATE_FAILED", "지난달 실패", when=NOW - timedelta(days=30))))
+        event("vigie-dev", "OldThing", "CREATE_FAILED", "지난달 실패", when=NOW - timedelta(days=30))))
     fake.add("aws", "describe-stack-events", stderr="Stack with id x does not exist\n", exit=254)
 
     result = deploy_cli(fake, repo, input=approve_deploy())
     errors = [(e["message"], e.get("raw")) for e in events(result.stdout) if e["type"] == "error"]
     assert result.returncode == 1
     # 어느 리소스가 실패했는지와, CloudFormation이 남긴 원인 원문을 나눠 보낸다
-    assert errors == [("wga-dev-LlmStack-ABC: LlmMethod (AWS::ApiGateway::Method)",
+    assert errors == [("vigie-dev-LlmStack-ABC: LlmMethod (AWS::ApiGateway::Method)",
                        "Timeout should be between 50 ms and 29000 ms")]
     assert events(result.stdout)[-1]["summary"] == "배포에 실패했습니다 (deploy.sh 종료 코드 255)"
 
@@ -248,7 +248,7 @@ def alive(pid):
 def test_cancel_stops_deploy_and_its_children(fake, repo, sig):
     write_deploy(repo, CANCEL_SCRIPT)
     ready_account(fake)
-    proc = subprocess.Popen([sys.executable, "-m", "wga_installer", "deploy", "--json", "--repo", str(repo),
+    proc = subprocess.Popen([sys.executable, "-m", "vigie_installer", "deploy", "--json", "--repo", str(repo),
                              "--region", "ap-northeast-2", "--yes"],
                             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             text=True, env=fake.env())

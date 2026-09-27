@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'WGA LLM Service CloudFormation Template'
+Description: 'Vigie LLM Service CloudFormation Template'
 
 Parameters:
   Environment:
@@ -42,7 +42,7 @@ Resources:
   McpLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub 'wga-mcp-${Environment}'
+      FunctionName: !Sub 'vigie-mcp-${Environment}'
       PackageType: Image
       Code:
         ImageUri: !Ref McpImageUri
@@ -59,8 +59,8 @@ Resources:
       Environment:
         Variables:
           ENV: !Ref Environment
-          MCP_SESSION_TABLE: !Sub 'wga-mcp-sessions-${Environment}'
-          DIAGRAM_BUCKET: !Sub 'wga-diagrambucket-${AWS::AccountId}-${Environment}'
+          MCP_SESSION_TABLE: !Sub 'vigie-mcp-sessions-${Environment}'
+          DIAGRAM_BUCKET: !Sub 'vigie-diagrambucket-${AWS::AccountId}-${Environment}'
           # 변경 도구 실행 직전의 승인 재확인 (lambda_mcp/approval.py)
           PENDING_ACTIONS_TABLE: !Ref PendingActionsTable
           # AWS 공식 MCP 서버(awslabs)의 로그(loguru)는 오류만 남긴다
@@ -80,7 +80,7 @@ Resources:
   McpLambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'wga-mcp-execution-role-${Environment}'
+      RoleName: !Sub 'vigie-mcp-execution-role-${Environment}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -210,26 +210,26 @@ Resources:
                   - dynamodb:PutItem
                   - dynamodb:UpdateItem
                   - dynamodb:DeleteItem
-                Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/wga-mcp-sessions-${Environment}'
+                Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/vigie-mcp-sessions-${Environment}'
               # 변경 도구 (app.py의 set_log_retention · set_alarm_actions). 승인된 작업만 실행되고,
-              # 이 환경의 WGA 리소스로만 한정한다 (도구 안의 이름 확인과 같은 범위)
+              # 이 환경의 Vigie 리소스로만 한정한다 (도구 안의 이름 확인과 같은 범위)
               - Effect: Allow
                 Action:
                   - logs:PutRetentionPolicy
                 Resource:
-                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/wga-*-${Environment}'
-                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/wga-*-${Environment}:*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/vigie-*-${Environment}'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/vigie-*-${Environment}:*'
               - Effect: Allow
                 Action:
                   - cloudwatch:EnableAlarmActions
                   - cloudwatch:DisableAlarmActions
-                Resource: !Sub 'arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:wga-${Environment}-*'
+                Resource: !Sub 'arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:vigie-${Environment}-*'
               # 거버넌스 알람(인젝션 의심, 승인 거절 반복)은 AI가 요청한 변경으로 끌 수 없다 (명시적 Deny가 Allow보다 우선)
               - Effect: Deny
                 Action:
                   - cloudwatch:EnableAlarmActions
                   - cloudwatch:DisableAlarmActions
-                Resource: !Sub 'arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:wga-${Environment}-governance-*'
+                Resource: !Sub 'arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:vigie-${Environment}-governance-*'
               # 변경 도구: EC2 인스턴스 중지·시작 (app.py의 set_ec2_instance_state). 이 리전·계정의 모든 인스턴스.
               # 통제는 LLM 계층의 사람 승인과 MCP Lambda의 승인 재확인이 한다 (approvals.py, lambda_mcp/approval.py)
               - Effect: Allow
@@ -270,19 +270,19 @@ Resources:
                 Action:
                   - s3:GetObject
                   - s3:GetObjectVersion
-                NotResource: !Sub 'arn:aws:s3:::wga-diagrambucket-${AWS::AccountId}-${Environment}/*'
+                NotResource: !Sub 'arn:aws:s3:::vigie-diagrambucket-${AWS::AccountId}-${Environment}/*'
               # 다이어그램 이미지 업로드 및 presigned URL 발급 (lambda_mcp/diagram_utils.py)
               - Effect: Allow
                 Action:
                   - s3:PutObject
                   - s3:GetObject
-                Resource: !Sub 'arn:aws:s3:::wga-diagrambucket-${AWS::AccountId}-${Environment}/*'
+                Resource: !Sub 'arn:aws:s3:::vigie-diagrambucket-${AWS::AccountId}-${Environment}/*'
 
   # LLM 서비스 Role: Bedrock 호출, 설정(SSM) 조회, 대화 기록 조회, MCP Function URL 호출만 허용
   LlmLambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'wga-llm-execution-role-${Environment}'
+      RoleName: !Sub 'vigie-llm-execution-role-${Environment}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -327,8 +327,8 @@ Resources:
                   - ssm:GetParameters
                   - ssm:GetParametersByPath
                 Resource:
-                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/wga/${Environment}'
-                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/wga/${Environment}/*'
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/vigie/${Environment}'
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/vigie/${Environment}/*'
               # SecureString 복호화는 SSM을 통한 요청으로만 한정
               - Effect: Allow
                 Action:
@@ -343,7 +343,7 @@ Resources:
                   - dynamodb:GetItem
                   - dynamodb:Scan
                 Resource:
-                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/wga-chat-history-${Environment}'
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/vigie-chat-history-${Environment}'
                   - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/AthenaTableRegistry-${Environment}'
               # 답변을 만드는 동안의 진행 상황 기록·조회 (llm_progress.py)
               - Effect: Allow
@@ -391,7 +391,7 @@ Resources:
           - id: CKV_AWS_119
             comment: 임시 진행 상황이라 AWS 소유 키 암호화(기본값)로 충분하다
     Properties:
-      TableName: !Sub 'wga-llm-progress-${Environment}'
+      TableName: !Sub 'vigie-llm-progress-${Environment}'
       AttributeDefinitions:
         - AttributeName: 'requestId'
           AttributeType: S
@@ -417,7 +417,7 @@ Resources:
           - id: CKV_AWS_119
             comment: AWS 소유 키 암호화(기본값)를 쓴다. 고객 관리 KMS 키는 월 비용이 들어 토이 프로젝트에서는 두지 않는다
     Properties:
-      TableName: !Sub 'wga-audit-${Environment}'
+      TableName: !Sub 'vigie-audit-${Environment}'
       AttributeDefinitions:
         - AttributeName: 'userId'
           AttributeType: S
@@ -459,7 +459,7 @@ Resources:
           - id: CKV_AWS_158
             comment: CloudWatch Logs 기본 암호화를 쓴다. 고객 관리 KMS 키는 월 비용이 들어 두지 않는다
     Properties:
-      LogGroupName: !Sub '/wga/${Environment}/audit'
+      LogGroupName: !Sub '/vigie/${Environment}/audit'
       RetentionInDays: 365
       Tags:
         - Key: Environment
@@ -477,7 +477,7 @@ Resources:
           - id: CKV_AWS_119
             comment: AWS 소유 키 암호화(기본값)를 쓴다. 고객 관리 KMS 키는 월 비용이 들어 두지 않는다
     Properties:
-      TableName: !Sub 'wga-pending-actions-${Environment}'
+      TableName: !Sub 'vigie-pending-actions-${Environment}'
       AttributeDefinitions:
         - AttributeName: 'actionId'
           AttributeType: S
@@ -498,7 +498,7 @@ Resources:
       LayerName: !Sub 'llm-layer-${Environment}'
       Description: Common Python dependencies
       Content:
-        S3Bucket: !Sub 'wga-deployment-${AWS::AccountId}-${Environment}'
+        S3Bucket: !Sub 'vigie-deployment-${AWS::AccountId}-${Environment}'
         S3Key: !Sub 'layers/common-layer-${Environment}-${CodeVersion}.zip'
       CompatibleRuntimes:
         - python3.12
@@ -506,11 +506,11 @@ Resources:
   LlmLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub 'wga-llm-${Environment}'
+      FunctionName: !Sub 'vigie-llm-${Environment}'
       Runtime: python3.12
       Handler: lambda_function.lambda_handler
       Code:
-        S3Bucket: !Sub 'wga-deployment-${AWS::AccountId}-${Environment}'
+        S3Bucket: !Sub 'vigie-deployment-${AWS::AccountId}-${Environment}'
         S3Key: !Sub 'llm/llm-lambda-${Environment}-${CodeVersion}.zip'
       Timeout: 180
       MemorySize: 256
@@ -858,7 +858,7 @@ Resources:
   UserAdminExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'wga-user-admin-role-${Environment}'
+      RoleName: !Sub 'vigie-user-admin-role-${Environment}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -906,8 +906,8 @@ Resources:
                   - ssm:GetParameters
                   - ssm:GetParametersByPath
                 Resource:
-                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/wga/${Environment}'
-                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/wga/${Environment}/*'
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/vigie/${Environment}'
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/vigie/${Environment}/*'
               - Effect: Allow
                 Action:
                   - kms:Decrypt
@@ -930,11 +930,11 @@ Resources:
           - id: CKV_AWS_173
             comment: 환경 변수에 비밀 값이 없다 (User Pool ID, 테이블·로그 그룹 이름)
     Properties:
-      FunctionName: !Sub 'wga-user-admin-${Environment}'
+      FunctionName: !Sub 'vigie-user-admin-${Environment}'
       Runtime: python3.12
       Handler: user_admin.lambda_handler
       Code:
-        S3Bucket: !Sub 'wga-deployment-${AWS::AccountId}-${Environment}'
+        S3Bucket: !Sub 'vigie-deployment-${AWS::AccountId}-${Environment}'
         S3Key: !Sub 'llm/llm-lambda-${Environment}-${CodeVersion}.zip'
       Timeout: 30
       MemorySize: 256
@@ -1061,7 +1061,7 @@ Resources:
           - id: CKV_AWS_119
             comment: 다시 모으면 되는 운영 현황이라 AWS 소유 키 암호화(기본값)로 충분하다
     Properties:
-      TableName: !Sub 'wga-dashboard-${Environment}'
+      TableName: !Sub 'vigie-dashboard-${Environment}'
       AttributeDefinitions:
         - AttributeName: 'section'
           AttributeType: S
@@ -1077,7 +1077,7 @@ Resources:
   DashboardCollectorRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'wga-dashboard-collector-role-${Environment}'
+      RoleName: !Sub 'vigie-dashboard-collector-role-${Environment}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -1129,7 +1129,7 @@ Resources:
           - id: CKV_AWS_158
             comment: CloudWatch Logs 기본 암호화를 쓴다. 고객 관리 KMS 키는 월 비용이 들어 두지 않는다
     Properties:
-      LogGroupName: !Sub '/aws/lambda/wga-dashboard-${Environment}'
+      LogGroupName: !Sub '/aws/lambda/vigie-dashboard-${Environment}'
       RetentionInDays: 14
       Tags:
         - Key: Environment
@@ -1147,11 +1147,11 @@ Resources:
           - id: CKV_AWS_173
             comment: 환경 변수는 테이블 이름뿐이라 비밀이 없다
     Properties:
-      FunctionName: !Sub 'wga-dashboard-${Environment}'
+      FunctionName: !Sub 'vigie-dashboard-${Environment}'
       Runtime: python3.12
       Handler: lambda_function.lambda_handler
       Code:
-        S3Bucket: !Sub 'wga-deployment-${AWS::AccountId}-${Environment}'
+        S3Bucket: !Sub 'vigie-deployment-${AWS::AccountId}-${Environment}'
         S3Key: !Sub 'dashboard/dashboard-lambda-${Environment}-${CodeVersion}.zip'
       Timeout: 120
       MemorySize: 256
@@ -1179,7 +1179,7 @@ Resources:
   DashboardSchedulerRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'wga-dashboard-scheduler-role-${Environment}'
+      RoleName: !Sub 'vigie-dashboard-scheduler-role-${Environment}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -1202,7 +1202,7 @@ Resources:
   DashboardEvery5Minutes:
     Type: AWS::Scheduler::Schedule
     Properties:
-      Name: !Sub 'wga-dashboard-5min-${Environment}'
+      Name: !Sub 'vigie-dashboard-5min-${Environment}'
       Description: 알람·리소스·오류·변경 (이벤트를 놓쳐도 5분 안에는 맞춰진다)
       ScheduleExpression: 'rate(5 minutes)'
       FlexibleTimeWindow:
@@ -1217,7 +1217,7 @@ Resources:
   DashboardHourly:
     Type: AWS::Scheduler::Schedule
     Properties:
-      Name: !Sub 'wga-dashboard-hourly-${Environment}'
+      Name: !Sub 'vigie-dashboard-hourly-${Environment}'
       Description: 함수별 오류·호출, EC2 CPU (메트릭 수만큼 요금이라 1시간마다)
       ScheduleExpression: 'rate(1 hour)'
       FlexibleTimeWindow:
@@ -1232,7 +1232,7 @@ Resources:
   DashboardDaily:
     Type: AWS::Scheduler::Schedule
     Properties:
-      Name: !Sub 'wga-dashboard-daily-${Environment}'
+      Name: !Sub 'vigie-dashboard-daily-${Environment}'
       Description: 비용 (Cost Explorer는 호출마다 $0.01이고 AWS가 하루 몇 번만 갱신한다)
       ScheduleExpression: 'cron(30 0 * * ? *)'  # 매일 00:30 UTC (한국 09:30)
       FlexibleTimeWindow:
@@ -1248,7 +1248,7 @@ Resources:
   DashboardAlarmStateRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: !Sub 'wga-dashboard-alarm-state-${Environment}'
+      Name: !Sub 'vigie-dashboard-alarm-state-${Environment}'
       Description: 알람 상태가 바뀌면 alarms 구역을 바로 다시 모은다
       EventPattern:
         source: ['aws.cloudwatch']
@@ -1260,7 +1260,7 @@ Resources:
   DashboardEc2StateRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: !Sub 'wga-dashboard-ec2-state-${Environment}'
+      Name: !Sub 'vigie-dashboard-ec2-state-${Environment}'
       Description: EC2 상태가 바뀌면 resources 구역을 바로 다시 모은다
       EventPattern:
         source: ['aws.ec2']
@@ -1274,7 +1274,7 @@ Resources:
   DashboardCloudTrailChangeRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: !Sub 'wga-dashboard-changes-${Environment}'
+      Name: !Sub 'vigie-dashboard-changes-${Environment}'
       Description: 리소스·알람 설정이 바뀌면 changes·resources(알람이면 alarms도) 구역을 바로 다시 모은다
       EventPattern:
         detail-type: ['AWS API Call via CloudTrail']

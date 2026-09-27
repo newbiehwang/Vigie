@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "WGA Slackbot Service CloudFormation Template"
+Description: "Vigie Slackbot Service CloudFormation Template"
 
 Parameters:
     Environment:
@@ -34,7 +34,7 @@ Resources:
     SlackbotLambdaExecutionRole:
         Type: AWS::IAM::Role
         Properties:
-            RoleName: !Sub "wga-slackbot-execution-role-${Environment}"
+            RoleName: !Sub "vigie-slackbot-execution-role-${Environment}"
             AssumeRolePolicyDocument:
                 Version: "2012-10-17"
                 Statement:
@@ -61,7 +61,7 @@ Resources:
                                 - ssm:GetParameters
                                 - ssm:GetParametersByPath
                                 - kms:Decrypt
-                            Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/wga/${Environment}/*"
+                            Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/vigie/${Environment}/*"
 
                 - PolicyName: SlackbotDynamoDBSessionAccess
                   PolicyDocument:
@@ -85,7 +85,7 @@ Resources:
                           - Effect: Allow
                             Action:
                                 - lambda:InvokeFunction
-                            Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:wga-llm-${Environment}"
+                            Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:vigie-llm-${Environment}"
 
     SlackbotLambdaLayer:
         Type: AWS::Lambda::LayerVersion
@@ -93,7 +93,7 @@ Resources:
             LayerName: !Sub "slackbot-layer-${Environment}"
             Description: Common Python dependencies
             Content:
-                S3Bucket: !Sub "wga-deployment-${AWS::AccountId}-${Environment}"
+                S3Bucket: !Sub "vigie-deployment-${AWS::AccountId}-${Environment}"
                 S3Key: !Sub "layers/common-layer-${Environment}-${CodeVersion}.zip"
             CompatibleRuntimes:
                 - python3.12
@@ -101,11 +101,11 @@ Resources:
     SlackbotLambdaFunction:
         Type: AWS::Lambda::Function
         Properties:
-            FunctionName: !Sub "wga-slackbot-${Environment}"
+            FunctionName: !Sub "vigie-slackbot-${Environment}"
             Runtime: python3.12
             Handler: lambda_function.lambda_handler
             Code:
-                S3Bucket: !Sub "wga-deployment-${AWS::AccountId}-${Environment}"
+                S3Bucket: !Sub "vigie-deployment-${AWS::AccountId}-${Environment}"
                 S3Key: !Sub "slackbot/slackbot-lambda-${Environment}-${CodeVersion}.zip"
             Layers:
                 - !Ref SlackbotLambdaLayer
@@ -122,7 +122,7 @@ Resources:
             Environment:
                 Variables:
                     ENV: !Ref Environment
-                    LLM_FUNCTION_NAME: !Sub "wga-llm-${Environment}"
+                    LLM_FUNCTION_NAME: !Sub "vigie-llm-${Environment}"
             Tags:
                 - Key: Environment
                   Value: !Ref Environment

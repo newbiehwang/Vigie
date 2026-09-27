@@ -10,7 +10,7 @@ import pytest
 from conftest import load_service_module
 from test_approvals import AUDIT_TABLE, PENDING_TABLE, create_tables
 
-DASHBOARD_TABLE = "wga-dashboard-test"
+DASHBOARD_TABLE = "vigie-dashboard-test"
 ORIGIN = "https://test.abc.amplifyapp.com"
 NOW = 1_790_000_000
 
@@ -26,8 +26,8 @@ def section(data, collected=NOW - 60, ok=True, error=None, last=None):
 
 
 RESOURCES = {
-    "lambdas": [{"name": "wga-llm-test"}, {"name": "wga-mcp-test"}, {"name": "wga-idle-test"},
-                {"name": "wga-new-test"}],
+    "lambdas": [{"name": "vigie-llm-test"}, {"name": "vigie-mcp-test"}, {"name": "vigie-idle-test"},
+                {"name": "vigie-new-test"}],
     "ec2": [{"id": "i-web", "name": "web", "state": "running", "checks": "ok"},
             {"id": "i-batch", "name": "batch", "state": "running", "checks": "ok"},
             {"id": "i-bad", "state": "running", "checks": "impaired"},
@@ -37,23 +37,23 @@ RESOURCES = {
     "logs": {"neverExpire": 3, "groups": [{"name": "/a", "storedBytes": 9}, {"name": "/b", "storedBytes": 5}]},
 }
 USAGE = {
-    "functions": {"wga-llm-test": {"errors": 10, "invocations": 100},   # 10% → 문제
-                  "wga-mcp-test": {"errors": 1, "invocations": 1000},   # 오류 있음 → 주의
-                  "wga-idle-test": {"errors": 0, "invocations": 0}},    # 호출 없음 → 데이터 없음
+    "functions": {"vigie-llm-test": {"errors": 10, "invocations": 100},   # 10% → 문제
+                  "vigie-mcp-test": {"errors": 1, "invocations": 1000},   # 오류 있음 → 주의
+                  "vigie-idle-test": {"errors": 0, "invocations": 0}},    # 호출 없음 → 데이터 없음
     "ec2Cpu": {"i-web": 40.0, "i-batch": 1.2},
 }
 
 
 def test_resources_get_status_from_state_and_usage(view):
-    result = view.build_resources({"firing": [{"name": "wga-test-api-5xx", "metric": "5XXError > 5 (5분)"}]},
+    result = view.build_resources({"firing": [{"name": "vigie-test-api-5xx", "metric": "5XXError > 5 (5분)"}]},
                                   RESOURCES, USAGE)
     rows = {row["id"]: row for row in result["rows"]}
 
-    assert rows["wga-test-api-5xx"]["status"] == "fail" and rows["wga-test-api-5xx"]["kind"] == "Alarm"
-    assert rows["wga-llm-test"]["status"] == "fail" and rows["wga-llm-test"]["detail"].startswith("오류율 10.0%")
-    assert rows["wga-mcp-test"]["status"] == "warn" and rows["wga-mcp-test"]["errors24h"] == 1
-    assert rows["wga-idle-test"]["status"] == "none"
-    assert rows["wga-new-test"]["detail"] == "사용량 데이터 없음"  # usage를 모으기 전에 생긴 함수
+    assert rows["vigie-test-api-5xx"]["status"] == "fail" and rows["vigie-test-api-5xx"]["kind"] == "Alarm"
+    assert rows["vigie-llm-test"]["status"] == "fail" and rows["vigie-llm-test"]["detail"].startswith("오류율 10.0%")
+    assert rows["vigie-mcp-test"]["status"] == "warn" and rows["vigie-mcp-test"]["errors24h"] == 1
+    assert rows["vigie-idle-test"]["status"] == "none"
+    assert rows["vigie-new-test"]["detail"] == "사용량 데이터 없음"  # usage를 모으기 전에 생긴 함수
     assert rows["i-batch"]["status"] == "warn" and "유휴" in rows["i-batch"]["detail"]
     assert rows["i-bad"]["status"] == "fail" and rows["i-off"]["status"] == "none"
     assert rows["i-web"]["label"] == "web" and rows["i-web"]["status"] == "ok"
@@ -92,7 +92,7 @@ def test_errors_split_last_and_previous_24_hours(view):
 
 def test_changes_merge_app_and_cloudtrail_without_duplicates(view):
     trail = {"events": [
-        {"at": NOW - 100, "actor": "wga-mcp-role", "eventName": "PutRetentionPolicy", "resource": "/aws/lambda/x",
+        {"at": NOW - 100, "actor": "vigie-mcp-role", "eventName": "PutRetentionPolicy", "resource": "/aws/lambda/x",
          "requestId": "req-app"},  # 이 앱에서 실행한 것과 같은 요청 → 뺀다
         {"at": NOW - 50, "actor": "park", "eventName": "StopInstances", "eventSource": "ec2", "resource": None,
          "requestId": "req-2"},

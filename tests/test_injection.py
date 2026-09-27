@@ -127,11 +127,11 @@ def test_injected_log_cannot_change_anything_without_approval(env, monkeypatch, 
 
 def test_governance_alarms_cannot_be_silenced(env):  # noqa: F811
     boto3.client("cloudwatch").put_metric_alarm(
-        AlarmName="wga-test-governance-injection-suspected", MetricName="InjectionSuspected",
-        Namespace="WGA/Governance", Statistic="Sum", Period=300, EvaluationPeriods=1, Threshold=3,
+        AlarmName="vigie-test-governance-injection-suspected", MetricName="InjectionSuspected",
+        Namespace="Vigie/Governance", Statistic="Sum", Period=300, EvaluationPeriods=1, Threshold=3,
         ComparisonOperator="GreaterThanOrEqualToThreshold")
-    result = env["mcp"].call_tool("setAlarmActions", {"alarm_name": "wga-test-governance-injection-suspected",
-                                                      "enabled": False}, meta={"wga/preview": True})
+    result = env["mcp"].call_tool("setAlarmActions", {"alarm_name": "vigie-test-governance-injection-suspected",
+                                                      "enabled": False}, meta={"vigie/preview": True})
     assert result["isError"] is True and "거버넌스 알람" in result["content"][0]["text"]
 
 
@@ -141,7 +141,7 @@ def test_emf_record_shape(injection):
     import metrics
     record = metrics.emf_record({"ToolCalls": 3, "ToolErrors": 0, "InjectionSuspected": 1, "Unknown": 5}, "dev")
     definition = record["_aws"]["CloudWatchMetrics"][0]
-    assert definition["Namespace"] == "WGA/Governance" and definition["Dimensions"] == [["Environment"]]
+    assert definition["Namespace"] == "Vigie/Governance" and definition["Dimensions"] == [["Environment"]]
     # 값이 0이거나 모르는 이름은 보내지 않는다
     assert [m["Name"] for m in definition["Metrics"]] == ["ToolCalls", "InjectionSuspected"]
     assert record["Environment"] == "dev" and record["ToolCalls"] == 3 and "Unknown" not in record
@@ -182,7 +182,7 @@ def test_governance_alarms_and_dashboard():
     for key, metric in (("InjectionSuspectedAlarm", "InjectionSuspected"), ("ApprovalDeniedAlarm", "ApprovalDenied")):
         alarm = resources[key]["Properties"]
         assert alarm["Namespace"] == metrics.NAMESPACE and alarm["MetricName"] == metric
-        assert alarm["AlarmName"].startswith("wga-${Environment}-governance-")
+        assert alarm["AlarmName"].startswith("vigie-${Environment}-governance-")
     dashboard = resources["ServiceDashboard"]["Properties"]["DashboardBody"][0]
     for name in metrics.METRIC_NAMES:
         assert f'"{name}"' in dashboard, name
@@ -194,4 +194,4 @@ def test_iam_denies_changing_governance_alarms():
     # Deny 문장이 여럿이라(S3 객체 읽기, EC2 사용자 데이터 등) 순서가 아니라 동작으로 찾는다
     deny = [s for s in statements if s["Effect"] == "Deny" and "cloudwatch:DisableAlarmActions" in s["Action"]]
     assert deny and set(deny[0]["Action"]) == {"cloudwatch:EnableAlarmActions", "cloudwatch:DisableAlarmActions"}
-    assert deny[0]["Resource"].endswith(":alarm:wga-${Environment}-governance-*")
+    assert deny[0]["Resource"].endswith(":alarm:vigie-${Environment}-governance-*")

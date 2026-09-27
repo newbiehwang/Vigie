@@ -16,9 +16,9 @@ export interface PendingAction {
     actionId: string;
     tool: string; // 변경 도구 이름 (setLogRetention 등)
     args: Record<string, unknown>; // 승인하면 실제로 실행될 인자 (가리지 않는다)
-    summary: string; // 예: "/aws/lambda/wga-llm-dev 로그 보존 기간 30일 → 14일 (지난 로그 일부가 지워질 수 있습니다)"
+    summary: string; // 예: "/aws/lambda/vigie-llm-dev 로그 보존 기간 30일 → 14일 (지난 로그 일부가 지워질 수 있습니다)"
     // 카드에 따로 보일 대상 리소스와 이 변경의 영향 (mcp/app.py의 _preview). 예전 승인 요청에는 없다 → summary를 보인다
-    target?: string; // 예: "/aws/lambda/wga-llm-dev"
+    target?: string; // 예: "/aws/lambda/vigie-llm-dev"
     warning?: string; // 예: "지난 로그 일부가 지워질 수 있습니다"
     before?: string;
     after?: string;

@@ -12,7 +12,7 @@ ORIGIN = "https://test.abc.amplifyapp.com"
 @pytest.fixture
 def chs(aws):
     boto3.client("dynamodb").create_table(
-        TableName="wga-chat-history-test",
+        TableName="vigie-chat-history-test",
         AttributeDefinitions=[{"AttributeName": "sessionId", "AttributeType": "S"},
                               {"AttributeName": "userId", "AttributeType": "S"}],
         KeySchema=[{"AttributeName": "sessionId", "KeyType": "HASH"}],

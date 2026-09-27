@@ -23,7 +23,7 @@ WRITE_TOOLS = {"add_user_to_group", "attach_group_policy", "attach_user_policy",
                "create_role", "create_user", "delete_access_key", "delete_group", "delete_role_policy", "delete_user",
                "delete_user_policy", "detach_group_policy", "detach_user_policy", "put_role_policy", "put_user_policy",
                "remove_user_from_group"}
-ROLE = "wga-llm-execution-role-test"
+ROLE = "vigie-llm-execution-role-test"
 TRUST = {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"},
                                                  "Action": "sts:AssumeRole"}]}
 INLINE = {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": "logs:DescribeLogGroups",
@@ -49,7 +49,7 @@ def text_of(result):
 def test_only_read_tools_are_attached(iam_env):
     _, tools = iam_env
     assert READ_TOOLS <= set(tools) and not (WRITE_TOOLS & set(tools))
-    assert all(tools[name]["_meta"]["wga/risk"] == "read" for name in READ_TOOLS)
+    assert all(tools[name]["_meta"]["vigie/risk"] == "read" for name in READ_TOOLS)
 
 
 def test_write_tools_cannot_be_called_even_by_name(iam_env):

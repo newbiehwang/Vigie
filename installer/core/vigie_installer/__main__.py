@@ -1,19 +1,19 @@
-"""명령줄 진입점: `python -m wga_installer <명령> [옵션]`
+"""명령줄 진입점: `python -m vigie_installer <명령> [옵션]`
 
-    python -m wga_installer check              # 사전 점검 (터미널용 텍스트 출력)
-    python -m wga_installer check --json       # JSON Lines 출력 (다른 프로그램이 읽을 때)
-    python -m wga_installer check --profile wga-dev --region ap-northeast-2
-    python -m wga_installer setup              # 할당량 요청, SSM 파라미터 등록
-    python -m wga_installer deploy --alarm-email me@example.com
-    python -m wga_installer verify             # 배포 검증 (읽기 전용)
-    python -m wga_installer oidc --env dev --block-test   # GitHub Actions 자동 배포 설정
-    python -m wga_installer teardown --env dev # 정리 (되돌릴 수 없음, prod는 --allow-prod 필요)
+    python -m vigie_installer check              # 사전 점검 (터미널용 텍스트 출력)
+    python -m vigie_installer check --json       # JSON Lines 출력 (다른 프로그램이 읽을 때)
+    python -m vigie_installer check --profile vigie-dev --region ap-northeast-2
+    python -m vigie_installer setup              # 할당량 요청, SSM 파라미터 등록
+    python -m vigie_installer deploy --alarm-email me@example.com
+    python -m vigie_installer verify             # 배포 검증 (읽기 전용)
+    python -m vigie_installer oidc --env dev --block-test   # GitHub Actions 자동 배포 설정
+    python -m vigie_installer teardown --env dev # 정리 (되돌릴 수 없음, prod는 --allow-prod 필요)
 
 종료 코드
     0  성공
     1  단계 실패 (점검 실패, 명령 오류 등 — 자세한 내용은 error·check 이벤트)
     2  명령줄 사용법 오류 (argparse가 stderr에 설명을 쓴다)
-    3  Python 버전이 낮음 (wga_installer/__init__.py)
+    3  Python 버전이 낮음 (vigie_installer/__init__.py)
     130 사용자가 Ctrl+C로 중단
 """
 import argparse
@@ -68,10 +68,10 @@ def _teardown_options(parser: argparse.ArgumentParser) -> None:
 COMMANDS = {
     "check": (check.run, "사전 점검 (아무것도 바꾸지 않음)", None),
     "setup": (setup.run, "API Gateway 할당량 요청과 SSM 파라미터 등록", None),
-    "deploy": (deploy.run, "deploy.sh로 WGA 배포 (20~40분)", _deploy_options),
+    "deploy": (deploy.run, "deploy.sh로 Vigie 배포 (20~40분)", _deploy_options),
     "verify": (verify.run, "배포 검증 (아무것도 바꾸지 않음)", None),
     "oidc": (oidc.run, "GitHub Actions 자동 배포 설정 (OIDC Role, Environment, 저장소 변수)", _oidc_options),
-    "teardown": (teardown.run, "한 환경의 WGA 리소스를 모두 삭제 (되돌릴 수 없음)", _teardown_options),
+    "teardown": (teardown.run, "한 환경의 Vigie 리소스를 모두 삭제 (되돌릴 수 없음)", _teardown_options),
 }
 
 EXIT_INTERRUPTED = 130
@@ -90,9 +90,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help=f"배포 환경 (기본 {DEFAULT_ENV})")
     common.add_argument("--region", help="AWS 리전 (기본: AWS_REGION → 프로필 설정 → ap-northeast-2)")
     common.add_argument("--profile", help="사용할 AWS CLI 프로필 (기본: AWS CLI 기본 규칙)")
-    common.add_argument("--repo", help="WGA 저장소 경로 (기본: 현재 폴더에서 상위로 찾음)")
+    common.add_argument("--repo", help="Vigie 저장소 경로 (기본: 현재 폴더에서 상위로 찾음)")
 
-    parser = argparse.ArgumentParser(prog="wga_installer", description="WGA 설치 마법사 단계 엔진")
+    parser = argparse.ArgumentParser(prog="vigie_installer", description="Vigie 설치 마법사 단계 엔진")
     commands = parser.add_subparsers(dest="command", required=True, metavar="<명령>")
     for name, (_, help_text, add_options) in COMMANDS.items():
         command = commands.add_parser(name, parents=[common], help=help_text, description=help_text)

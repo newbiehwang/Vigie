@@ -109,7 +109,7 @@ def test_stack_parameters_do_not_reference_secure_strings():
     # CloudFormation 템플릿 파라미터(AWS::SSM::Parameter::Value<String>)는 SecureString을 지원하지 않으므로,
     # README가 SecureString으로 만들라고 안내하는 비밀 값을 스택 파라미터로 넘기면 스택 생성이 실패한다.
     readme = (ROOT / "README.md").read_text()
-    secure_names = set(re.findall(r'put-parameter --name "/wga/\$\{Environment\}/([^"]+)"[^\n]*--type "SecureString"', readme))
+    secure_names = set(re.findall(r'put-parameter --name "/vigie/\$\{Environment\}/([^"]+)"[^\n]*--type "SecureString"', readme))
     assert {"SlackbotToken", "SlackSigningSecret", "ANTHROPIC_API_KEY"} <= secure_names
 
     passed_ssm_paths = set(re.findall(r'ParameterValue="\$SSM_PATH_PREFIX/([^"]+)"', DEPLOY_SH))
@@ -180,7 +180,7 @@ def run_warm_up(tmp_path, mode):
     (bin_dir / "aws").write_text(FAKE_LAMBDA)
     (bin_dir / "aws").chmod(0o755)
     log = tmp_path / "calls.log"
-    script = "set -e\n" + extract_function("warm_up_mcp") + 'warm_up_mcp wga-mcp-test\necho "계속 진행"\n'
+    script = "set -e\n" + extract_function("warm_up_mcp") + 'warm_up_mcp vigie-mcp-test\necho "계속 진행"\n'
     result = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
                             env={"PATH": f"{bin_dir}:/usr/bin:/bin", "CALLS_LOG": str(log), "MODE": mode})
     calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
@@ -198,7 +198,7 @@ def test_warm_up_mcp_loads_tools_like_llm_lambda(tmp_path):
     assert result.returncode == 0 and "계속 진행" in result.stdout
     assert "MCP Lambda 준비 완료: 도구 2개" in result.stdout
     # 이미지가 바뀐 뒤 새 버전을 부르도록 먼저 기다린다
-    assert calls[0][:3] == ["lambda", "wait", "function-updated-v2"] and "wga-mcp-test" in calls[0]
+    assert calls[0][:3] == ["lambda", "wait", "function-updated-v2"] and "vigie-mcp-test" in calls[0]
     # LLM Lambda와 같은 순서로 부르고(tools/list에서 공식 서버를 불러온다), 만든 세션은 지운다
     assert invoked(calls) == [("POST", "initialize"), ("POST", "tools/list"), ("DELETE", None)]
 
@@ -214,7 +214,7 @@ def test_warm_up_mcp_failure_does_not_stop_deploy(tmp_path, mode):
 
 def test_deploy_warms_up_mcp_after_last_stack_update():
     # MCP 이미지를 바꾸는 메인 스택과 마지막 base 스택 업데이트가 끝난 뒤에 깨워야 새 이미지가 깨어난다
-    call = DEPLOY_SH.index('warm_up_mcp "wga-mcp-$ENV"')
+    call = DEPLOY_SH.index('warm_up_mcp "vigie-mcp-$ENV"')
     assert DEPLOY_SH.rindex("cfn_update $BASE_STACK_NAME") < call < DEPLOY_SH.index("# 7. 배포 완료 요약")
 
 
@@ -273,7 +273,7 @@ def run_sync(tmp_path, env_text=None, current=None):
     env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "WORK": str(tmp_path)}
     if current:
         env["CURRENT"] = current
-    body = f'ROOT_ENV_FILE="{env_file}"\nSSM_PATH_PREFIX=/wga/dev\nsync_anthropic_key'
+    body = f'ROOT_ENV_FILE="{env_file}"\nSSM_PATH_PREFIX=/vigie/dev\nsync_anthropic_key'
     result = run_function("sync_anthropic_key", body, env)
     log = tmp_path / "calls.log"
     calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
@@ -284,7 +284,7 @@ def run_sync(tmp_path, env_text=None, current=None):
 def test_anthropic_key_from_dotenv_is_put_to_ssm_without_command_args(tmp_path):
     result, calls, put = run_sync(tmp_path, f'# 주석\nANTHROPIC_API_KEY="{KEY}"\nVITE_API_DEST=https://x\n')
     assert result.returncode == 0 and "계속 진행" in result.stdout, result.stderr
-    assert put == {"Name": "/wga/dev/ANTHROPIC_API_KEY", "Value": KEY, "Type": "SecureString", "Overwrite": True}
+    assert put == {"Name": "/vigie/dev/ANTHROPIC_API_KEY", "Value": KEY, "Type": "SecureString", "Overwrite": True}
     # 키 값은 명령 인자(ps로 보인다)에도, 화면 출력에도 나오지 않는다
     assert all(KEY not in arg for call in calls for arg in call)
     assert KEY not in result.stdout + result.stderr
@@ -341,9 +341,9 @@ def test_frontend_bundle_takes_only_chosen_env_values():
     "# ANTHROPIC_API_KEY=commented\n", "ANTHROPIC_API_KEY=\n",
 ])
 def test_installer_reads_dotenv_like_deploy_sh(tmp_path, text):
-    # 설치 마법사(wga_installer/dotenv.py)가 "키가 있다"고 보면 deploy.sh도 같은 값을 SSM에 올려야 한다.
+    # 설치 마법사(vigie_installer/dotenv.py)가 "키가 있다"고 보면 deploy.sh도 같은 값을 SSM에 올려야 한다.
     # 두 쪽이 다르게 읽으면 설치 마법사는 배포를 진행시켰는데 deploy.sh는 키를 건너뛰는 일이 생긴다
-    from wga_installer import dotenv
+    from vigie_installer import dotenv
 
     (tmp_path / "repo").mkdir()
     (tmp_path / "repo" / ".env").write_text(text)

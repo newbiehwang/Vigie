@@ -44,7 +44,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN_DEV }}
-          role-session-name: wga-deploy-dev-${{ github.run_id }}
+          role-session-name: vigie-deploy-dev-${{ github.run_id }}
           aws-region: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
           role-duration-seconds: 7200
       - name: deploy.sh dev
@@ -80,7 +80,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN_PROD }}
-          role-session-name: wga-deploy-prod-${{ github.run_id }}
+          role-session-name: vigie-deploy-prod-${{ github.run_id }}
           aws-region: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
           role-duration-seconds: 7200
       - name: deploy.sh prod

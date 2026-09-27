@@ -1,5 +1,5 @@
 #!/bin/bash
-# WGA - 통합 배포 스크립트 (백엔드 + 프론트엔드)
+# Vigie - 통합 배포 스크립트 (백엔드 + 프론트엔드)
 
 # 오류 발생 시 스크립트 중단
 set -e
@@ -11,7 +11,7 @@ ENV=${1:-dev}  # 기본값: dev
 ROOT_ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.env"
 
 # .env에서 값 하나를 읽는다 ($1: 키). 셸로 source하지 않고 글자로만 읽는다.
-# 규칙은 설치 도구(installer/core/wga_installer/dotenv.py)·sync_anthropic_key와 같다: 앞뒤 공백과 감싼 따옴표를 벗기고,
+# 규칙은 설치 도구(installer/core/vigie_installer/dotenv.py)·sync_anthropic_key와 같다: 앞뒤 공백과 감싼 따옴표를 벗기고,
 # 같은 키가 여러 번 나오면 마지막 줄을 쓴다. 파일·키가 없거나 읽지 못하면 빈 글자.
 # 값이 셸 변수로 들어오므로 비밀이 아닌 값에만 쓴다 (ANTHROPIC_API_KEY는 sync_anthropic_key가 따로 다룬다)
 dotenv_get() {
@@ -43,7 +43,7 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
 REGION=${AWS_REGION:-$(aws configure get region || true)}
 REGION=${REGION:-ap-northeast-2}
 export AWS_REGION=$REGION AWS_DEFAULT_REGION=$REGION
-MCP_IMAGE_URI="$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/wga-mcp-$ENV:latest"
+MCP_IMAGE_URI="$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/vigie-mcp-$ENV:latest"
 
 # ENV 값 검증
 if [[ "$ENV" != "dev" && "$ENV" != "test" && "$ENV" != "prod" ]]; then
@@ -64,20 +64,20 @@ echo "AWS 리전: $REGION"
 echo "========================================"
 
 # 배포 버킷 이름
-CLOUDFORMATION_BUCKET="wga-cloudformation-$ACCOUNT_ID"
-DEPLOYMENT_BUCKET="wga-deployment-$ACCOUNT_ID-$ENV"
-FRONTEND_BUCKET="wga-frontend-$ACCOUNT_ID-$ENV"
-OUTPUT_BUCKET_NAME="wga-outputbucket-$ACCOUNT_ID-$ENV"
-ATHENA_OUTPUT_BUCKET_NAME="wga-athenaoutputbucket-$ACCOUNT_ID-$ENV"
-GUARDDUTY_EXPORT_BUCKET_NAME="wga-guarddutyexportbucket-$ACCOUNT_ID-$ENV"
-DOCKER_BUILD_BUCKET_NAME="wga-dockerbuildbucket-$ACCOUNT_ID-$ENV"
-DIAGRAM_BUCKET_NAME="wga-diagrambucket-$ACCOUNT_ID-$ENV"
+CLOUDFORMATION_BUCKET="vigie-cloudformation-$ACCOUNT_ID"
+DEPLOYMENT_BUCKET="vigie-deployment-$ACCOUNT_ID-$ENV"
+FRONTEND_BUCKET="vigie-frontend-$ACCOUNT_ID-$ENV"
+OUTPUT_BUCKET_NAME="vigie-outputbucket-$ACCOUNT_ID-$ENV"
+ATHENA_OUTPUT_BUCKET_NAME="vigie-athenaoutputbucket-$ACCOUNT_ID-$ENV"
+GUARDDUTY_EXPORT_BUCKET_NAME="vigie-guarddutyexportbucket-$ACCOUNT_ID-$ENV"
+DOCKER_BUILD_BUCKET_NAME="vigie-dockerbuildbucket-$ACCOUNT_ID-$ENV"
+DIAGRAM_BUCKET_NAME="vigie-diagrambucket-$ACCOUNT_ID-$ENV"
 
 # 스택 이름 설정
-BASE_STACK_NAME="wga-base-$ENV"
-MAIN_STACK_NAME="wga-$ENV"
-FRONTEND_STACK_NAME="wga-frontend-$ENV"
-MCP_STACK_NAME="wga-mcp-$ENV"
+BASE_STACK_NAME="vigie-base-$ENV"
+MAIN_STACK_NAME="vigie-$ENV"
+FRONTEND_STACK_NAME="vigie-frontend-$ENV"
+MCP_STACK_NAME="vigie-mcp-$ENV"
 
 # 도메인 설정 (필요한 경우 수정)
 DOMAIN_NAME=""  # 사용자 정의 도메인
@@ -89,7 +89,7 @@ else
 fi
 
 # SSM 파라미터 경로 기본 prefix 설정
-SSM_PATH_PREFIX="/wga/$ENV"
+SSM_PATH_PREFIX="/vigie/$ENV"
 
 # 코드 버전: Lambda zip의 S3 키와 MCP 이미지 태그에 붙인다.
 # 키가 매번 같으면 CloudFormation이 변경을 감지하지 못해 새 코드가 반영되지 않으므로 배포마다 달라져야 한다.
@@ -425,7 +425,7 @@ if aws cloudformation describe-stacks --stack-name "$BASE_STACK_NAME" > /dev/nul
                     ParameterKey=FrontendRedirectDomain,UsePreviousValue=true \
                     ParameterKey=CallbackDomain,UsePreviousValue=true \
                     ParameterKey=McpFunctionUrl,UsePreviousValue=true \
-        --tags Key=Project,Value=WGA Key=Environment,Value=$ENV \
+        --tags Key=Project,Value=Vigie Key=Environment,Value=$ENV \
         --capabilities CAPABILITY_NAMED_IAM
 else
     # 스택이 존재하지 않으면 생성
@@ -443,7 +443,7 @@ else
                     ParameterKey=DiagramBucketExists,ParameterValue=$DIAGRAM_BUCKET_EXISTS \
                     ParameterKey=FrontendRedirectDomain,ParameterValue=placeholder.example.com \
                     ParameterKey=CallbackDomain,ParameterValue=placeholder.example.com \
-        --tags Key=Project,Value=WGA Key=Environment,Value=$ENV \
+        --tags Key=Project,Value=Vigie Key=Environment,Value=$ENV \
         --capabilities CAPABILITY_NAMED_IAM
 
     # 스택 생성 완료 대기
@@ -488,7 +488,7 @@ if aws cloudformation describe-stacks --stack-name $FRONTEND_STACK_NAME > /dev/n
             ParameterKey=CertificateARN,ParameterValue=$CERTIFICATE_ARN \
             ParameterKey=ApiEndpoint,ParameterValue=$API_ENDPOINT \
             ParameterKey=FrontendBucketName,ParameterValue=$FRONTEND_BUCKET \
-        --tags Key=Project,Value=WGA Key=Environment,Value=$ENV \
+        --tags Key=Project,Value=Vigie Key=Environment,Value=$ENV \
         --capabilities CAPABILITY_NAMED_IAM
 else
     # 스택이 존재하지 않으면 생성
@@ -502,7 +502,7 @@ else
             ParameterKey=CertificateARN,ParameterValue=$CERTIFICATE_ARN \
             ParameterKey=ApiEndpoint,ParameterValue=$API_ENDPOINT \
             ParameterKey=FrontendBucketName,ParameterValue=$FRONTEND_BUCKET \
-        --tags Key=Project,Value=WGA Key=Environment,Value=$ENV \
+        --tags Key=Project,Value=Vigie Key=Environment,Value=$ENV \
         --capabilities CAPABILITY_NAMED_IAM
 
     # 스택 생성 완료 대기
@@ -547,7 +547,7 @@ cfn_update $BASE_STACK_NAME \
                 ParameterKey=FrontendRedirectDomain,ParameterValue=$FRONTEND_URL \
                 ParameterKey=CallbackDomain,ParameterValue=$CALLBACK_DOMAIN \
                 ParameterKey=McpFunctionUrl,UsePreviousValue=true \
-    --tags Key=Project,Value=WGA Key=Environment,Value=$ENV \
+    --tags Key=Project,Value=Vigie Key=Environment,Value=$ENV \
     --capabilities CAPABILITY_NAMED_IAM
 echo "FrontendRedirectDomain 업데이트 완료"
 
@@ -698,7 +698,7 @@ if aws cloudformation describe-stacks --stack-name $MCP_STACK_NAME > /dev/null 2
         --parameters \
             ParameterKey=Environment,ParameterValue=$ENV \
             ParameterKey=DockerBuildBucketName,ParameterValue="$DOCKER_BUILD_BUCKET" \
-        --tags Key=Project,Value=WGA Key=Environment,Value=$ENV \
+        --tags Key=Project,Value=Vigie Key=Environment,Value=$ENV \
         --capabilities CAPABILITY_NAMED_IAM
 else
     # 스택이 존재하지 않으면 생성
@@ -709,7 +709,7 @@ else
         --parameters \
             ParameterKey=Environment,ParameterValue=$ENV \
             ParameterKey=DockerBuildBucketName,ParameterValue="$DOCKER_BUILD_BUCKET" \
-        --tags Key=Project,Value=WGA Key=Environment,Value=$ENV \
+        --tags Key=Project,Value=Vigie Key=Environment,Value=$ENV \
         --capabilities CAPABILITY_NAMED_IAM
     # 스택 생성 완료 대기
     echo "MCP 스택 생성 완료 대기 중: $MCP_STACK_NAME"
@@ -719,7 +719,7 @@ fi
 # MCP docker build 시작
 echo "MCP 배포 시작"
 BUILD_ID=$(aws codebuild start-build \
-  --project-name wga-docker-build-$ENV \
+  --project-name vigie-docker-build-$ENV \
   --environment-variables-override name=MCP_ECR_IMAGE_TAG,value=$CODE_VERSION,type=PLAINTEXT \
   --query 'build.id' \
   --output text)
@@ -745,7 +745,7 @@ while true; do
 done
 
 # 빌드 완료 후 ECR 이미지 URI 가져오기
-ECR_REPOSITORY="wga-mcp-$ENV"
+ECR_REPOSITORY="vigie-mcp-$ENV"
 ECR_IMAGE_TAG="$CODE_VERSION"
 MCP_IMAGE_URI="$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$ECR_REPOSITORY:$ECR_IMAGE_TAG"
 echo "MCP 이미지 URI: $MCP_IMAGE_URI"
@@ -785,7 +785,7 @@ if aws cloudformation describe-stacks --stack-name $MAIN_STACK_NAME > /dev/null 
             ParameterKey=McpImageUri,ParameterValue=$MCP_IMAGE_URI \
             ParameterKey=CodeVersion,ParameterValue=$CODE_VERSION \
             ParameterKey=AlarmEmail,ParameterValue="$ALARM_EMAIL" \
-        --tags Key=Project,Value=WGA Key=Environment,Value=$ENV \
+        --tags Key=Project,Value=Vigie Key=Environment,Value=$ENV \
         --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND
 else
     # 스택이 존재하지 않으면 생성
@@ -810,7 +810,7 @@ else
             ParameterKey=McpImageUri,ParameterValue=$MCP_IMAGE_URI \
             ParameterKey=CodeVersion,ParameterValue=$CODE_VERSION \
             ParameterKey=AlarmEmail,ParameterValue="$ALARM_EMAIL" \
-        --tags Key=Project,Value=WGA Key=Environment,Value=$ENV \
+        --tags Key=Project,Value=Vigie Key=Environment,Value=$ENV \
         --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND
 fi
 
@@ -932,7 +932,7 @@ echo "Amplify 배포 완료"
 cd ..
 
 McpFunctionUrl=$(aws lambda get-function-url-config \
-  --function-name wga-mcp-$ENV \
+  --function-name vigie-mcp-$ENV \
   --query "FunctionUrl" \
   --output text)
 echo "McpFunctionUrl: $McpFunctionUrl"
@@ -950,11 +950,11 @@ cfn_update $BASE_STACK_NAME \
                 ParameterKey=FrontendRedirectDomain,ParameterValue=$FRONTEND_URL \
                 ParameterKey=CallbackDomain,ParameterValue=$CALLBACK_DOMAIN \
                 ParameterKey=McpFunctionUrl,ParameterValue=$McpFunctionUrl \
-    --tags Key=Project,Value=WGA Key=Environment,Value=$ENV \
+    --tags Key=Project,Value=Vigie Key=Environment,Value=$ENV \
     --capabilities CAPABILITY_NAMED_IAM
 
 # 배포 직후 첫 질문이 MCP Lambda의 콜드 스타트를 기다리지 않도록 한 번 깨워 둔다 (위 warm_up_mcp)
-warm_up_mcp "wga-mcp-$ENV"
+warm_up_mcp "vigie-mcp-$ENV"
 
 #################################################
 # 7. 배포 완료 요약
@@ -976,8 +976,8 @@ else
     echo "프론트엔드 배포 상태: 스킵됨"
 fi
 # Athena 테이블 레지스트리 초기값 (CloudTrail·GuardDuty 로그를 저장하는 버킷은 계정마다 다르므로 환경 변수로 지정)
-CLOUDTRAIL_LOG_BUCKET=${CLOUDTRAIL_LOG_BUCKET:-wga-cloudtrail-$ACCOUNT_ID}
-GUARDDUTY_LOG_BUCKET=${GUARDDUTY_LOG_BUCKET:-wga-guardduty-logs-$ACCOUNT_ID}
+CLOUDTRAIL_LOG_BUCKET=${CLOUDTRAIL_LOG_BUCKET:-vigie-cloudtrail-$ACCOUNT_ID}
+GUARDDUTY_LOG_BUCKET=${GUARDDUTY_LOG_BUCKET:-vigie-guardduty-logs-$ACCOUNT_ID}
 REGISTRY_UPDATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 aws dynamodb put-item --table-name "AthenaTableRegistry-$ENV" --item '{

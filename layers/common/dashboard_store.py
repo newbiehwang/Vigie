@@ -1,4 +1,4 @@
-"""홈 대시보드의 구역별 저장 (DynamoDB wga-dashboard-<env>, 키는 section 하나).
+"""홈 대시보드의 구역별 저장 (DynamoDB vigie-dashboard-<env>, 키는 section 하나).
     {"section": "alarms", "data": "<JSON>", "ok": true, "collectedAt": 1790000000, "lastSuccessAt": 1790000000}
     {"section": "cost", "data": "<지난번 성공 값>", "ok": false, "error": "…", "collectedAt": …, "lastSuccessAt": …}
 - 구역마다 따로 저장한다: 한 구역이 실패해도 다른 구역은 새 값으로 보인다.

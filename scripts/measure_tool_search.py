@@ -25,10 +25,10 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # 질문과 '처음 부르면 맞는' 도구. 로그·지표 질문은 처음부터 싣는 도구로, 나머지는 검색해야 찾는 도구로 답한다
 EVAL_SET = [
-    ("최근 1시간 동안 wga-llm-dev Lambda 오류 로그 보여줘", {"describe_log_groups", "execute_log_insights_query"}),
+    ("최근 1시간 동안 vigie-llm-dev Lambda 오류 로그 보여줘", {"describe_log_groups", "execute_log_insights_query"}),
     ("지금 울리고 있는 알람 있어?", {"get_active_alarms"}),
     ("API Gateway 5XX 알람이 언제 울렸었는지 이력 보여줘", {"get_alarm_history", "get_active_alarms"}),
-    ("wga-llm-dev 함수의 지난 24시간 실행 시간(Duration) 추이 알려줘", {"get_metric_data", "get_metric_metadata"}),
+    ("vigie-llm-dev 함수의 지난 24시간 실행 시간(Duration) 추이 알려줘", {"get_metric_data", "get_metric_metadata"}),
     ("CloudWatch 대시보드 목록 보여줘", {"listCloudwatchDashboards"}),
     ("Lambda 동시성 제한에 대한 AWS 문서 찾아줘", {"search_documentation"}),
     ("이번 달 서비스별 비용 알려줘", {"cost-explorer"}),
@@ -36,7 +36,7 @@ EVAL_SET = [
     ("서울 리전 t3.medium 온디맨드 한 달 요금 얼마야?",
      {"get_pricing", "get_pricing_service_codes", "get_pricing_service_attributes", "get_pricing_attribute_values"}),
     ("IAM 사용자 목록 보여줘", {"list_users"}),
-    ("wga-llm 역할이 dynamodb:PutItem을 할 수 있어?", {"simulate_principal_policy", "list_roles"}),
+    ("vigie-llm 역할이 dynamodb:PutItem을 할 수 있어?", {"simulate_principal_policy", "list_roles"}),
     ("10.0.1.25 IP가 어떤 네트워크 인터페이스에 붙어 있어?", {"find_ip_address", "get_path_trace_methodology"}),
     ("이 계정에 VPC가 몇 개야?", {"list_vpcs"}),
     ("퍼블릭으로 열린 S3 버킷 있어?", {"checkS3BucketSecurity", "listS3Buckets"}),
@@ -45,8 +45,8 @@ EVAL_SET = [
     ("안 쓰는 EBS 볼륨이나 연결 안 된 탄력적 IP 있어?", {"findEc2Waste"}),
     ("EC2 인스턴스 상태 검사에 실패한 것 있어?", {"getEc2StatusChecks", "listEc2Instances"}),
     ("i-0abc1234567890def 인스턴스 중지해줘", {"setEc2InstanceState", "listEc2Instances"}),
-    ("wga-llm-dev 로그 그룹 보존 기간을 14일로 바꿔줘", {"setLogRetention", "describe_log_groups"}),
-    ("WGA 서버리스 아키텍처 다이어그램 그려줘",
+    ("vigie-llm-dev 로그 그룹 보존 기간을 14일로 바꿔줘", {"setLogRetention", "describe_log_groups"}),
+    ("Vigie 서버리스 아키텍처 다이어그램 그려줘",
      {"getDiagramCodeExamples", "listAvailableDiagramIcons", "generateArchitectureDiagram"}),
 ]
 
@@ -59,7 +59,7 @@ def load_tools():
     """실제 MCP 서버의 tools/list (위험도 표시 포함). moto 위에서 돌려 AWS에 요청하지 않는다."""
     os.environ.update({"AWS_ACCESS_KEY_ID": "testing", "AWS_SECRET_ACCESS_KEY": "testing",
                        "AWS_SESSION_TOKEN": "testing", "ENV": "measure",
-                       "MCP_SESSION_TABLE": "wga-mcp-sessions-measure"})
+                       "MCP_SESSION_TABLE": "vigie-mcp-sessions-measure"})
     os.environ.setdefault("AWS_DEFAULT_REGION", "ap-northeast-2")
     os.environ.setdefault("AWS_REGION", os.environ["AWS_DEFAULT_REGION"])
     for path in (ROOT / "layers", ROOT / "mcp", ROOT / "services" / "llm"):

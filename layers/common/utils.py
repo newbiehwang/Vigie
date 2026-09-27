@@ -8,7 +8,7 @@ from common.config import AWS_REGION
 from common.config import get_config
 
 # 로깅 설정
-logger = logging.getLogger("wga-utils")
+logger = logging.getLogger("vigie-utils")
 logger.setLevel(logging.INFO)
 
 def format_api_response(status_code, body, headers=None):

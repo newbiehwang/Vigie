@@ -3,22 +3,22 @@ import json
 
 import pytest
 
-from wga_installer.steps import teardown
+from vigie_installer.steps import teardown
 
 from .helpers import responses, run_cli, run_step
 
 ACCOUNT = "123456789012"
 REPO = "octo/WGA_production"
-ENV_BUCKETS = [f"wga-{kind}-{ACCOUNT}-dev" for kind in (
+ENV_BUCKETS = [f"vigie-{kind}-{ACCOUNT}-dev" for kind in (
     "deployment", "frontend", "outputbucket", "athenaoutputbucket", "guarddutyexportbucket", "dockerbuildbucket",
     "diagrambucket")]
-SHARED_BUCKET = f"wga-cloudformation-{ACCOUNT}"
-DEV_STACKS = ["wga-dev", "wga-mcp-dev", "wga-frontend-dev", "wga-base-dev"]
+SHARED_BUCKET = f"vigie-cloudformation-{ACCOUNT}"
+DEV_STACKS = ["vigie-dev", "vigie-mcp-dev", "vigie-frontend-dev", "vigie-base-dev"]
 
 
 def account(fake, *, stacks=None, buckets=None, ecr=True, log_groups=None, params=("ANTHROPIC_API_KEY",),
             owns_provider=False):
-    stacks = DEV_STACKS + ["wga-github-oidc-dev"] if stacks is None else stacks
+    stacks = DEV_STACKS + ["vigie-github-oidc-dev"] if stacks is None else stacks
     buckets = ENV_BUCKETS + [SHARED_BUCKET] if buckets is None else buckets
     fake.add("aws", "sts get-caller-identity", json.dumps({"Account": ACCOUNT, "Arn": "arn:aws:iam::1:user/x"}))
     fake.add("aws", "cloudformation describe-stacks",
@@ -28,7 +28,7 @@ def account(fake, *, stacks=None, buckets=None, ecr=True, log_groups=None, param
     else:
         fake.add("aws", "describe-stack-resource", stderr="Resource GitHubOidcProvider does not exist\n", exit=254)
     if ecr:
-        fake.add("aws", "ecr describe-repositories", json.dumps({"repositories": [{"repositoryName": "wga-mcp-dev"}]}))
+        fake.add("aws", "ecr describe-repositories", json.dumps({"repositories": [{"repositoryName": "vigie-mcp-dev"}]}))
     else:
         fake.add("aws", "ecr describe-repositories", stderr="RepositoryNotFoundException\n", exit=254)
     fake.add("aws", "ecr delete-repository", "{}")
@@ -44,12 +44,12 @@ def account(fake, *, stacks=None, buckets=None, ecr=True, log_groups=None, param
     fake.add("aws", "list-object-versions", json.dumps({}))
     fake.add("aws", "delete-objects", json.dumps({"Deleted": []}))
     fake.add("aws", "delete-bucket")
-    groups = log_groups if log_groups is not None else ["/aws/lambda/wga-llm-dev", "/aws/lambda/wga-mcp-dev",
-                                                        "/aws/lambda/wga-llm-prod"]
+    groups = log_groups if log_groups is not None else ["/aws/lambda/vigie-llm-dev", "/aws/lambda/vigie-mcp-dev",
+                                                        "/aws/lambda/vigie-llm-prod"]
     fake.add("aws", "describe-log-groups", json.dumps({"logGroups": [{"logGroupName": g} for g in groups]}))
     fake.add("aws", "delete-log-group")
     fake.add("aws", "describe-parameters", json.dumps({"Parameters": [
-        {"Name": f"/wga/dev/{key}", "Type": "SecureString"} for key in params]}))
+        {"Name": f"/vigie/dev/{key}", "Type": "SecureString"} for key in params]}))
     fake.add("aws", "delete-parameters", json.dumps({"DeletedParameters": []}))
     fake.add("aws", "delete-stack")
     fake.add("aws", "wait stack-delete-complete")
@@ -93,9 +93,9 @@ def test_full_teardown_in_order(fake):
 
     done = deletions(fake)
     order = [next(i for i, call in enumerate(done) if marker in call) for marker in (
-        "variable delete AWS_DEPLOY_ROLE_ARN_DEV", "delete-stack --stack-name wga-dev", "delete-stack --stack-name "
-        "wga-mcp-dev", "delete-stack --stack-name wga-frontend-dev", "delete-stack --stack-name wga-base-dev",
-        "delete-stack --stack-name wga-github-oidc-dev", "delete-repository", "delete-bucket --bucket",
+        "variable delete AWS_DEPLOY_ROLE_ARN_DEV", "delete-stack --stack-name vigie-dev", "delete-stack --stack-name "
+        "vigie-mcp-dev", "delete-stack --stack-name vigie-frontend-dev", "delete-stack --stack-name vigie-base-dev",
+        "delete-stack --stack-name vigie-github-oidc-dev", "delete-repository", "delete-bucket --bucket",
         "delete-log-group", "delete-parameters", "api -X DELETE")]
     assert order == sorted(order)   # 저장소 변수 → 스택(역순, OIDC 마지막) → ECR → 버킷 → 로그 → SSM → Environment
 
@@ -106,9 +106,9 @@ def test_full_teardown_in_order(fake):
                                    {"Key": "b.txt", "VersionId": "m1"}], "Quiet": True}
     # 다른 환경(prod)의 로그 그룹은 건드리지 않는다
     assert [c for c in done if "delete-log-group" in c] == [
-        "logs delete-log-group --log-group-name /aws/lambda/wga-llm-dev",
-        "logs delete-log-group --log-group-name /aws/lambda/wga-mcp-dev"]
-    assert "ssm delete-parameters --names /wga/dev/ANTHROPIC_API_KEY --output json" in done
+        "logs delete-log-group --log-group-name /aws/lambda/vigie-llm-dev",
+        "logs delete-log-group --log-group-name /aws/lambda/vigie-mcp-dev"]
+    assert "ssm delete-parameters --names /vigie/dev/ANTHROPIC_API_KEY --output json" in done
 
 
 def test_prod_requires_allow_prod(fake):
@@ -150,41 +150,41 @@ def test_asks_only_once_and_logs_each_step(fake):
 
 def test_shared_resources_are_kept_while_other_env_exists(fake):
     # prod가 남아 있으면 공유 버킷을 남기고, 이 환경의 OIDC 스택이 공급자를 가지고 있으면 OIDC 스택도 남긴다
-    account(fake, stacks=DEV_STACKS + ["wga-github-oidc-dev", "wga-base-prod", "wga-github-oidc-prod"],
+    account(fake, stacks=DEV_STACKS + ["vigie-github-oidc-dev", "vigie-base-prod", "vigie-github-oidc-prod"],
             owns_provider=True)
     github(fake)
     code, evts = run_step(fake, teardown.run, stdin=approve_all())
     done = deletions(fake)
     assert code == 0
     assert not any(SHARED_BUCKET in c for c in done)
-    assert not any("wga-github-oidc-dev" in c for c in done)
+    assert not any("vigie-github-oidc-dev" in c for c in done)
     assert not any("-prod" in c for c in done)   # 저장소 이름(WGA_production)의 prod와 구분
     kept = next(e for e in evts if e.get("id") == "target_oidc")
-    assert kept["status"] == "warn" and "wga-github-oidc-prod" in kept["hint"]
+    assert kept["status"] == "warn" and "vigie-github-oidc-prod" in kept["hint"]
 
 
 def test_mcp_stack_blocked_by_ecr_images_is_retried(fake):
-    fake.add("aws", "wait stack-delete-complete --stack-name wga-mcp-dev", exit=255, times=1)
-    fake.add("aws", "describe-stack-events --stack-name wga-mcp-dev", json.dumps({"StackEvents": [{
-        "StackName": "wga-mcp-dev", "StackId": "arn:stack/wga-mcp-dev", "LogicalResourceId": "MCPRepo",
-        "ResourceType": "AWS::ECR::Repository", "PhysicalResourceId": "wga-mcp-dev", "ResourceStatus": "DELETE_FAILED",
-        "ResourceStatusReason": "The repository with name 'wga-mcp-dev' cannot be deleted because it still contains "
+    fake.add("aws", "wait stack-delete-complete --stack-name vigie-mcp-dev", exit=255, times=1)
+    fake.add("aws", "describe-stack-events --stack-name vigie-mcp-dev", json.dumps({"StackEvents": [{
+        "StackName": "vigie-mcp-dev", "StackId": "arn:stack/vigie-mcp-dev", "LogicalResourceId": "MCPRepo",
+        "ResourceType": "AWS::ECR::Repository", "PhysicalResourceId": "vigie-mcp-dev", "ResourceStatus": "DELETE_FAILED",
+        "ResourceStatusReason": "The repository with name 'vigie-mcp-dev' cannot be deleted because it still contains "
                                 "images"}]}))
     account(fake)
     github(fake)
     code, evts = run_step(fake, teardown.run, stdin=approve_all())
     done = deletions(fake)
     assert code == 0, [e for e in evts if e["type"] == "error"]
-    mcp = [i for i, c in enumerate(done) if "wga-mcp-dev" in c and not c.startswith("logs")]
-    assert [done[i] for i in mcp] == ["cloudformation delete-stack --stack-name wga-mcp-dev",
-                                      "ecr delete-repository --repository-name wga-mcp-dev --force",
-                                      "cloudformation delete-stack --stack-name wga-mcp-dev"]
+    mcp = [i for i, c in enumerate(done) if "vigie-mcp-dev" in c and not c.startswith("logs")]
+    assert [done[i] for i in mcp] == ["cloudformation delete-stack --stack-name vigie-mcp-dev",
+                                      "ecr delete-repository --repository-name vigie-mcp-dev --force",
+                                      "cloudformation delete-stack --stack-name vigie-mcp-dev"]
 
 
 def test_stack_failure_stops_before_buckets(fake):
-    fake.add("aws", "wait stack-delete-complete --stack-name wga-dev", exit=255)
+    fake.add("aws", "wait stack-delete-complete --stack-name vigie-dev", exit=255)
     fake.add("aws", "describe-stack-events", json.dumps({"StackEvents": [{
-        "StackName": "wga-dev", "StackId": "arn:stack/wga-dev", "LogicalResourceId": "ChatTable",
+        "StackName": "vigie-dev", "StackId": "arn:stack/vigie-dev", "LogicalResourceId": "ChatTable",
         "ResourceType": "AWS::DynamoDB::Table", "PhysicalResourceId": "t", "ResourceStatus": "DELETE_FAILED",
         "ResourceStatusReason": "Table is being used"}]}))
     account(fake)

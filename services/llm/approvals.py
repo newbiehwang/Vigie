@@ -36,9 +36,9 @@ APPROVER_GROUP = "approvers"
 DECIDER_GROUPS = {APPROVER_GROUP, "admins"}  # 결정자 권한이 있는 그룹 (관리자는 결정자의 일도 한다)
 RESULT_LIMIT = 2000
 
-ACTION_ID_META = "wga/actionId"  # MCP tools/call params._meta (mcp/lambda_mcp/approval.py와 같은 이름)
-PREVIEW_META = "wga/preview"
-RISK_META = "wga/risk"  # MCP tools/list의 도구 정의 _meta (mcp/lambda_mcp/risk.py)
+ACTION_ID_META = "vigie/actionId"  # MCP tools/call params._meta (mcp/lambda_mcp/approval.py와 같은 이름)
+PREVIEW_META = "vigie/preview"
+RISK_META = "vigie/risk"  # MCP tools/list의 도구 정의 _meta (mcp/lambda_mcp/risk.py)
 
 PENDING, APPROVED, DENIED = "pending", "approved", "denied"
 EXECUTING, EXECUTED, FAILED, EXPIRED = "executing", "executed", "failed", "expired"
@@ -127,7 +127,7 @@ def public_view(item: Dict[str, Any]) -> Dict[str, Any]:
 
 
 class ApprovalStore:
-    """승인 테이블 wga-pending-actions-<env> (키: actionId)."""
+    """승인 테이블 vigie-pending-actions-<env> (키: actionId)."""
 
     def __init__(self, table):
         self.table = table

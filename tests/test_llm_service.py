@@ -42,12 +42,12 @@ def test_direct_invoke_from_slackbot_keeps_slack_fields(llm_lambda):
 @pytest.fixture
 def llm_service(aws):
     boto3.client("dynamodb").create_table(
-        TableName="wga-chat-history-test",
+        TableName="vigie-chat-history-test",
         AttributeDefinitions=[{"AttributeName": "sessionId", "AttributeType": "S"}],
         KeySchema=[{"AttributeName": "sessionId", "KeyType": "HASH"}],
         BillingMode="PAY_PER_REQUEST",
     )
-    boto3.resource("dynamodb").Table("wga-chat-history-test").put_item(Item={
+    boto3.resource("dynamodb").Table("vigie-chat-history-test").put_item(Item={
         "sessionId": "s1", "userId": "alice",
         "messages": [{"sender": "user", "text": "비밀 질문", "timestamp": "1"},
                      {"sender": "assistant", "text": "비밀 답변", "timestamp": "2"}],

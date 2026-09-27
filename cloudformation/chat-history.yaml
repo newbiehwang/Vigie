@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'WGA Chat History Service CloudFormation Template'
+Description: 'Vigie Chat History Service CloudFormation Template'
 
 Parameters:
   Environment:
@@ -30,7 +30,7 @@ Resources:
   ChatHistoryLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'wga-chat-history-role-${Environment}'
+      RoleName: !Sub 'vigie-chat-history-role-${Environment}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -42,7 +42,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: !Sub 'wga-chat-history-policy-${Environment}'
+        - PolicyName: !Sub 'vigie-chat-history-policy-${Environment}'
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -55,15 +55,15 @@ Resources:
                   - dynamodb:Query
                   - dynamodb:Scan
                 Resource:
-                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/wga-chat-history-${Environment}'
-                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/wga-chat-history-${Environment}/index/*'
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/vigie-chat-history-${Environment}'
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/vigie-chat-history-${Environment}/index/*'
               - Effect: Allow
                 Action:
                   - ssm:GetParameter
                   - ssm:GetParameters
                   - ssm:GetParametersByPath
                   - kms:Decrypt
-                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/wga/${Environment}/*'
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/vigie/${Environment}/*'
 
   ChatHistoryLambdaLayer:
     Type: AWS::Lambda::LayerVersion
@@ -71,7 +71,7 @@ Resources:
       LayerName: !Sub 'chat-history-layer-${Environment}'
       Description: Common Python dependencies
       Content:
-        S3Bucket: !Sub 'wga-deployment-${AWS::AccountId}-${Environment}'
+        S3Bucket: !Sub 'vigie-deployment-${AWS::AccountId}-${Environment}'
         S3Key: !Sub 'layers/common-layer-${Environment}-${CodeVersion}.zip'
       CompatibleRuntimes:
         - python3.12
@@ -79,7 +79,7 @@ Resources:
   ChatHistoryLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub 'wga-chat-history-${Environment}'
+      FunctionName: !Sub 'vigie-chat-history-${Environment}'
       Runtime: python3.12
       Handler: lambda_function.lambda_handler
       Role: !GetAtt ChatHistoryLambdaRole.Arn
@@ -98,7 +98,7 @@ Resources:
         Variables:
           ENV: !Ref Environment
       Code:
-        S3Bucket: !Sub 'wga-deployment-${AWS::AccountId}-${Environment}'
+        S3Bucket: !Sub 'vigie-deployment-${AWS::AccountId}-${Environment}'
         S3Key: !Sub 'chat-history/chat-history-lambda-${Environment}-${CodeVersion}.zip'
 
   # API Gateway Resources & Methods

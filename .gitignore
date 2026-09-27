@@ -117,12 +117,12 @@ mongodump/
 
 # macOS 설치 마법사 앱 (installer/macos): XcodeGen과 SwiftPM이 만드는 파일
 installer/macos/*.xcodeproj/
-installer/macos/WGAInstallerKit/.build/
-installer/macos/WGAInstallerKit/.swiftpm/
+installer/macos/VigieInstallerKit/.build/
+installer/macos/VigieInstallerKit/.swiftpm/
 installer/macos/DerivedData/
 # project.yml의 info·entitlements 설정으로 XcodeGen이 만드는 파일
-installer/macos/WGAInstaller/Resources/Info.plist
-installer/macos/WGAInstaller/Resources/WGAInstaller.entitlements
+installer/macos/VigieInstaller/Resources/Info.plist
+installer/macos/VigieInstaller/Resources/VigieInstaller.entitlements
 
 # 공식 MCP 도구 목록 스냅샷: 이미지를 만들 때 생긴다 (mcp/Dockerfile, mcp/lambda_mcp/official.py)
 mcp/lambda_mcp/official_tools.json

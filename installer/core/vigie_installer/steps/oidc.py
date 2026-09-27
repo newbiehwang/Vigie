@@ -2,7 +2,7 @@
 
 main에 push하면 GitHub Actions(.github/workflows/deploy.yml)가 장기 Access Key 없이 배포하도록 만든다.
 
-1. oidc_role           cloudformation/github-oidc.yaml로 배포 Role 스택(wga-github-oidc-<env>)을 배포한다.
+1. oidc_role           cloudformation/github-oidc.yaml로 배포 Role 스택(vigie-github-oidc-<env>)을 배포한다.
 2. github_environment  GitHub Environment(<env>)를 만들고 배포 브랜치를 main으로 제한한다. prod는 본인을 필수 검토자로.
 3. github_variables    저장소 변수 AWS_REGION, (ALARM_EMAIL), (ADMIN_EMAIL), AWS_DEPLOY_ROLE_ARN_<ENV>를 등록한다.
                        Role 변수가 등록되는 순간부터 main push가 실제 배포를 일으킨다 (그래서 마지막에 한다).
@@ -73,7 +73,7 @@ def _preconditions(ctx: Context, runner: Runner, emitter: Emitter) -> str | None
                       hint=f"--env {' 또는 --env '.join(SUPPORTED_ENVS)}로 실행하세요")
         return None
     if ctx.repo_root is None:
-        emitter.error(STEP, "WGA 저장소를 찾지 못했습니다", hint="--repo <저장소 경로>로 지정하세요")
+        emitter.error(STEP, "Vigie 저장소를 찾지 못했습니다", hint="--repo <저장소 경로>로 지정하세요")
         return None
     error = github.check_login(runner)
     if error:
@@ -139,11 +139,11 @@ def _deploy_role(ctx: Context, runner: Runner, emitter: Emitter, repo: str) -> t
     cmd = ["aws", "cloudformation", "deploy", "--stack-name", stack_name, "--template-file", str(TEMPLATE),
            "--parameter-overrides", *(f"{key}={value}" for key, value in params.items()),
            "--capabilities", "CAPABILITY_NAMED_IAM", "--no-fail-on-empty-changeset",
-           "--tags", "Project=WGA", f"Environment={ctx.env}"]
+           "--tags", "Project=Vigie", f"Environment={ctx.env}"]
     started = datetime.now(timezone.utc)
     result = runner.change(cmd, id_="deploy_oidc_role", cwd=str(ctx.repo_root), stream=True,
                            reason=f"{repo}의 {ctx.env} Environment만 쓸 수 있는 배포 Role을 만듭니다 "
-                                  "(IAM Role 생성, PowerUserAccess + wga-* Role 관리 권한)")
+                                  "(IAM Role 생성, PowerUserAccess + vigie-* Role 관리 권한)")
     if result.outcome == DRY_RUN:
         emitter.step_finished(step, STEP_OK, "")
         return True, (_role_arn(stack) if stack else None) or UNKNOWN_ROLE
@@ -459,7 +459,7 @@ def _block_test(ctx: Context, runner: Runner, emitter: Emitter, repo: str) -> bo
         emitter.step_finished(step, STEP_FAILED, "")
         return False
 
-    branch = f"wga-installer-block-test-{int(time.time())}"
+    branch = f"vigie-installer-block-test-{int(time.time())}"
     create = ["gh", "api", "-X", "POST", f"repos/{repo}/git/refs", "-f", f"ref=refs/heads/{branch}", "-f", f"sha={sha}"]
     dispatch = ["gh", "workflow", "run", github.WORKFLOW, "--ref", branch, "--repo", repo]
     delete = ["gh", "api", "-X", "DELETE", f"repos/{repo}/git/refs/heads/{branch}"]

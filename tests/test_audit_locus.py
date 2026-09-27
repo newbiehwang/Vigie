@@ -151,7 +151,7 @@ def test_signal_counts_calls_in_between_and_resets_per_question(env, monkeypatch
 def test_unregistered_tool_is_recorded_at_the_interface(env):
     import audit
     from redaction import Redactor
-    assert env["approvals"].is_registered({"name": "x", "_meta": {"wga/risk": "read"}})
+    assert env["approvals"].is_registered({"name": "x", "_meta": {"vigie/risk": "read"}})
     assert not env["approvals"].is_registered({"name": "x"}) and not env["approvals"].is_registered(None)
 
     log = audit.AuditLog(env["audit"], None, Redactor(), user_id="alice", email=None, source="web",

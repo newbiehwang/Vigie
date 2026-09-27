@@ -179,7 +179,7 @@ class TextEmitter(Emitter):
         사전 설정 (dev, ap-southeast-2)
           [완료] API Gateway 통합 타임아웃 할당량
           [오류] SSM 파라미터
-                 /wga/dev/ANTHROPIC_API_KEY를 저장하지 못했습니다
+                 /vigie/dev/ANTHROPIC_API_KEY를 저장하지 못했습니다
                  An error occurred (AccessDeniedException) when calling the PutParameter operation: ...
         ✗ 사전 설정을 끝내지 못했습니다
 

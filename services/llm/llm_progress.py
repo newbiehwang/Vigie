@@ -1,6 +1,6 @@
 """답변을 만드는 동안의 진행 상황 (Claude Code처럼 '생각 중 → 도구 실행 → 답변'을 화면에 보여 주기 위한 기록)
 
-    화면 ──POST /llm1 {requestId}──▶ LLM Lambda ── 단계마다 기록 ──▶ DynamoDB (wga-llm-progress-<env>)
+    화면 ──POST /llm1 {requestId}──▶ LLM Lambda ── 단계마다 기록 ──▶ DynamoDB (vigie-llm-progress-<env>)
     화면 ──GET /llm1/progress/{requestId} (1초마다)──▶ LLM Lambda ── 읽기 ──┘
 
 /llm1은 답이 다 만들어진 뒤에 한 번만 응답한다(API Gateway REST, 동기). 그래서 화면은 답을 기다리는 동안

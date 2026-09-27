@@ -3,12 +3,12 @@ import json
 
 import pytest
 
-from wga_installer.steps.setup import mask_secret
+from vigie_installer.steps.setup import mask_secret
 
 from .helpers import events, run_cli
 
 QUOTA_CODE = "L-E5AE38E3"
-PREFIX = "/wga/dev"
+PREFIX = "/vigie/dev"
 SECRETS = {"ANTHROPIC_API_KEY": "sk-ant-api03-SECRETVALUE", "SlackbotToken": "xoxb-SECRET-TOKEN",
            "SlackSigningSecret": "abcdef0123456789SIGNING"}
 

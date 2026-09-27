@@ -31,7 +31,7 @@ def net_env(env):  # noqa: F811
     ec2 = boto3.client("ec2")
     vpc = ec2.create_vpc(CidrBlock="10.0.0.0/16")["Vpc"]["VpcId"]
     subnet = ec2.create_subnet(VpcId=vpc, CidrBlock="10.0.1.0/24")["Subnet"]["SubnetId"]
-    sg = ec2.create_security_group(GroupName="wga-web", Description="web", VpcId=vpc)["GroupId"]
+    sg = ec2.create_security_group(GroupName="vigie-web", Description="web", VpcId=vpc)["GroupId"]
     ec2.authorize_security_group_ingress(GroupId=sg, IpPermissions=[{
         "IpProtocol": "tcp", "FromPort": 443, "ToPort": 443, "IpRanges": [{"CidrIp": "0.0.0.0/0"}]}])
     eni = ec2.create_network_interface(SubnetId=subnet, Groups=[sg], PrivateIpAddress="10.0.1.10")
@@ -46,7 +46,7 @@ def text_of(result):
 def test_only_vpc_and_path_tools_are_attached(net_env):
     _, tools, _ = net_env
     assert INCLUDED <= set(tools) and not (EXCLUDED_SAMPLE & set(tools))
-    assert all(tools[name]["_meta"]["wga/risk"] == "read" for name in INCLUDED)
+    assert all(tools[name]["_meta"]["vigie/risk"] == "read" for name in INCLUDED)
     # 다른 계정의 프로필 이름은 모델에게 보이지 않는다
     assert not any("profile_name" in tools[name]["inputSchema"].get("properties", {}) for name in INCLUDED)
     # region은 필수가 아니다: 생략하면 이 배포의 리전을 채워 넣는다 (list_vpcs는 원래 기본값 없는 필수 인자)

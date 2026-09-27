@@ -356,7 +356,7 @@ def secret_file(data: dict, *, directory: str | None = None) -> Generator[str, N
             runner.change(["aws", "ssm", "put-parameter", "--cli-input-json", f"file://{path}"], ...)
     """
     # mkstemp는 파일을 O_EXCL로 새로 만들고(이미 있는 파일·심볼릭 링크를 따라가지 않음) 권한을 0600으로 준다.
-    fd, path = tempfile.mkstemp(prefix="wga-installer-", suffix=".json", dir=directory)
+    fd, path = tempfile.mkstemp(prefix="vigie-installer-", suffix=".json", dir=directory)
     try:
         os.fchmod(fd, 0o600)   # umask 설정과 관계없이 소유자만 읽고 쓸 수 있게 한 번 더 못 박는다
         with os.fdopen(fd, "w", encoding="utf-8") as handle:

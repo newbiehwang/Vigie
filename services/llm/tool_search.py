@@ -26,7 +26,7 @@ from typing import Any, Dict, List
 
 SEARCH_TOOL = {"type": "tool_search_tool_regex_20251119", "name": "tool_search_tool_regex"}
 
-# 처음부터 모델에 보이는 도구 (Anthropic 권장: 가장 자주 쓰는 3~5개). WGA 질문에서 가장 흔한 로그 조회와 알람.
+# 처음부터 모델에 보이는 도구 (Anthropic 권장: 가장 자주 쓰는 3~5개). Vigie 질문에서 가장 흔한 로그 조회와 알람.
 # get_metric_data도 자주 쓰지만 정의가 약 1만 5천 자로 혼자서 나머지를 합친 것보다 커서 검색으로 싣는다
 # (scripts/measure_tool_search.py size). 이름이 바뀌면(공식 서버 업데이트) 조용히 전부 지연되지 않도록
 # 테스트가 tools/list에 있는지 확인한다

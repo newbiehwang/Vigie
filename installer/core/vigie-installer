@@ -1,8 +1,8 @@
 #!/bin/bash
-# WGA 설치 마법사 실행기: 알맞은 Python(3.10 이상)을 골라 `python -m wga_installer`를 실행한다.
+# Vigie 설치 마법사 실행기: 알맞은 Python(3.10 이상)을 골라 `python -m vigie_installer`를 실행한다.
 #
-#   installer/core/wga-installer check
-#   installer/core/wga-installer check --json      # 다른 프로그램이 읽을 JSON Lines 출력
+#   installer/core/vigie-installer check
+#   installer/core/vigie-installer check --json      # 다른 프로그램이 읽을 JSON Lines 출력
 #
 # 왜 필요한가
 #   macOS 기본 /usr/bin/python3는 Command Line Tools의 3.9라서 설치 마법사를 실행할 수 없고,
@@ -11,13 +11,13 @@
 #   어디서 실행하든 같은 규칙으로 Python을 고르게 한다.
 #
 # 찾는 순서 (3.10 이상인 첫 번째를 쓴다)
-#   1. WGA_PYTHON 환경 변수 — 사용자가 직접 고른 인터프리터. 3.10 미만이면 다른 후보로 넘어가지 않고 오류로 알린다
+#   1. VIGIE_PYTHON 환경 변수 — 사용자가 직접 고른 인터프리터. 3.10 미만이면 다른 후보로 넘어가지 않고 오류로 알린다
 #   2. /opt/homebrew/bin/python3 — Apple Silicon의 Homebrew
 #   3. /usr/local/bin/python3 — Intel Mac의 Homebrew, python.org 설치본
 #   4. PATH의 python3
 #   5. /usr/bin/python3 — macOS에서는 Command Line Tools가 설치된 경우에만 시도 (설치 창이 뜨지 않게)
 #
-# 종료 코드 3: 쓸 수 있는 Python을 찾지 못함 (wga_installer/__init__.py의 버전 오류와 같은 코드)
+# 종료 코드 3: 쓸 수 있는 Python을 찾지 못함 (vigie_installer/__init__.py의 버전 오류와 같은 코드)
 
 set -u
 
@@ -50,11 +50,11 @@ is_usable() {
 }
 
 python=""
-if [[ -n "${WGA_PYTHON:-}" ]]; then
+if [[ -n "${VIGIE_PYTHON:-}" ]]; then
   # 직접 지정한 값이 맞지 않는데 조용히 다른 Python을 쓰면 사용자가 원인을 찾기 어렵다
-  is_usable "$WGA_PYTHON" || fail "WGA_PYTHON에 지정한 Python을 실행할 수 없거나 3.10 미만입니다" \
-                                  "3.10 이상 Python 경로를 지정하거나 WGA_PYTHON을 비우세요"
-  python=$WGA_PYTHON
+  is_usable "$VIGIE_PYTHON" || fail "VIGIE_PYTHON에 지정한 Python을 실행할 수 없거나 3.10 미만입니다" \
+                                  "3.10 이상 Python 경로를 지정하거나 VIGIE_PYTHON을 비우세요"
+  python=$VIGIE_PYTHON
 else
   candidates=(/opt/homebrew/bin/python3 /usr/local/bin/python3)
   path_python=$(command -v python3 2>/dev/null || true)
@@ -73,6 +73,6 @@ fi
 
 [[ -n "$python" ]] || fail "Python 3.10 이상을 찾지 못했습니다" "brew install python 으로 설치하세요"
 
-# wga_installer 패키지가 이 스크립트 옆에 있으므로 PYTHONPATH 앞에 이 폴더를 둔다
+# vigie_installer 패키지가 이 스크립트 옆에 있으므로 PYTHONPATH 앞에 이 폴더를 둔다
 export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
-exec "$python" -m wga_installer "$@"
+exec "$python" -m vigie_installer "$@"

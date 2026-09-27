@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::LanguageExtensions
-Description: 'WGA Monitoring - CloudWatch 알람, SNS 알림, 운영 대시보드'
+Description: 'Vigie Monitoring - CloudWatch 알람, SNS 알림, 운영 대시보드'
 
 Parameters:
   Environment:
@@ -24,19 +24,19 @@ Conditions:
 Mappings:
   Functions:
     llm:
-      Name: wga-llm
+      Name: vigie-llm
       DurationThresholdMs: 144000
     mcp:
-      Name: wga-mcp
+      Name: vigie-mcp
       DurationThresholdMs: 144000
     chathistory:
-      Name: wga-chat-history
+      Name: vigie-chat-history
       DurationThresholdMs: 24000
     slackbot:
-      Name: wga-slackbot
+      Name: vigie-slackbot
       DurationThresholdMs: 12000
     athenautility:
-      Name: wga-athena-utility
+      Name: vigie-athena-utility
       DurationThresholdMs: 720000
   Tables:
     slackbotsessions:
@@ -44,16 +44,16 @@ Mappings:
     athenatableregistry:
       Name: AthenaTableRegistry
     chathistory:
-      Name: wga-chat-history
+      Name: vigie-chat-history
     mcpsessions:
-      Name: wga-mcp-sessions
+      Name: vigie-mcp-sessions
 
 Resources:
   AlarmTopic:
     Type: AWS::SNS::Topic
     Properties:
-      TopicName: !Sub 'wga-alarms-${Environment}'
-      DisplayName: !Sub 'WGA ${Environment} Alarms'
+      TopicName: !Sub 'vigie-alarms-${Environment}'
+      DisplayName: !Sub 'Vigie ${Environment} Alarms'
 
   AlarmEmailSubscription:
     Type: AWS::SNS::Subscription
@@ -71,7 +71,7 @@ Resources:
         Type: AWS::CloudWatch::Alarm
         Properties:
           AlarmName: !Sub
-            - 'wga-${Environment}-${Name}-errors'
+            - 'vigie-${Environment}-${Name}-errors'
             - Name: !FindInMap [Functions, !Ref Fn, Name]
           AlarmDescription: Lambda 함수 오류 발생 (5분 합계 1건 이상)
           Namespace: AWS/Lambda
@@ -94,7 +94,7 @@ Resources:
         Type: AWS::CloudWatch::Alarm
         Properties:
           AlarmName: !Sub
-            - 'wga-${Environment}-${Name}-throttles'
+            - 'vigie-${Environment}-${Name}-throttles'
             - Name: !FindInMap [Functions, !Ref Fn, Name]
           AlarmDescription: Lambda 동시성 한도로 인한 스로틀 발생
           Namespace: AWS/Lambda
@@ -117,7 +117,7 @@ Resources:
         Type: AWS::CloudWatch::Alarm
         Properties:
           AlarmName: !Sub
-            - 'wga-${Environment}-${Name}-duration-p95'
+            - 'vigie-${Environment}-${Name}-duration-p95'
             - Name: !FindInMap [Functions, !Ref Fn, Name]
           AlarmDescription: 실행 시간 p95가 함수 Timeout의 80%를 넘음 (타임아웃 임박)
           Namespace: AWS/Lambda
@@ -145,7 +145,7 @@ Resources:
         Type: AWS::CloudWatch::Alarm
         Properties:
           AlarmName: !Sub
-            - 'wga-${Environment}-ddb-${Name}-throttles'
+            - 'vigie-${Environment}-ddb-${Name}-throttles'
             - Name: !FindInMap [Tables, !Ref Table, Name]
           AlarmDescription: DynamoDB 읽기/쓰기 스로틀 발생 (프로비저닝 용량 부족)
           Metrics:
@@ -190,13 +190,13 @@ Resources:
   Api5xxAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub 'wga-${Environment}-api-5xx'
+      AlarmName: !Sub 'vigie-${Environment}-api-5xx'
       AlarmDescription: API Gateway 5XX 오류 (5분 합계 5건 이상)
       Namespace: AWS/ApiGateway
       MetricName: 5XXError
       Dimensions:
         - Name: ApiName
-          Value: !Sub 'wga-api-${Environment}'
+          Value: !Sub 'vigie-api-${Environment}'
         - Name: Stage
           Value: !Ref Environment
       Statistic: Sum
@@ -211,13 +211,13 @@ Resources:
   ApiLatencyAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub 'wga-${Environment}-api-latency-p95'
+      AlarmName: !Sub 'vigie-${Environment}-api-latency-p95'
       AlarmDescription: API Gateway 응답 시간 p95가 통합 타임아웃(120초)에 근접
       Namespace: AWS/ApiGateway
       MetricName: Latency
       Dimensions:
         - Name: ApiName
-          Value: !Sub 'wga-api-${Environment}'
+          Value: !Sub 'vigie-api-${Environment}'
         - Name: Stage
           Value: !Ref Environment
       ExtendedStatistic: p95
@@ -230,15 +230,15 @@ Resources:
       AlarmActions: [!Ref AlarmTopic]
       OKActions: [!Ref AlarmTopic]
 
-  # 거버넌스 알람 (services/llm/metrics.py가 EMF로 발행하는 WGA/Governance 지표)
-  # 이름은 wga-<env>-governance-*: AI가 요청하는 알람 알림 변경 도구(setAlarmActions)가 끌 수 없게
+  # 거버넌스 알람 (services/llm/metrics.py가 EMF로 발행하는 Vigie/Governance 지표)
+  # 이름은 vigie-<env>-governance-*: AI가 요청하는 알람 알림 변경 도구(setAlarmActions)가 끌 수 없게
   # 도구 코드(mcp/app.py)와 IAM(llm.yaml의 명시적 Deny) 두 곳에서 막는다
   InjectionSuspectedAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub 'wga-${Environment}-governance-injection-suspected'
+      AlarmName: !Sub 'vigie-${Environment}-governance-injection-suspected'
       AlarmDescription: 도구 결과에 지시문처럼 보이는 문구가 5분 동안 3건 이상 (프롬프트 인젝션 시도 의심, 감사 로그 확인)
-      Namespace: WGA/Governance
+      Namespace: Vigie/Governance
       MetricName: InjectionSuspected
       Dimensions:
         - Name: Environment
@@ -255,9 +255,9 @@ Resources:
   ApprovalDeniedAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub 'wga-${Environment}-governance-approval-denied'
+      AlarmName: !Sub 'vigie-${Environment}-governance-approval-denied'
       AlarmDescription: 변경 작업 승인 요청이 15분 동안 3번 이상 거절됨 (AI가 원치 않는 변경을 반복 요청, 감사 로그 확인)
-      Namespace: WGA/Governance
+      Namespace: Vigie/Governance
       MetricName: ApprovalDenied
       Dimensions:
         - Name: Environment
@@ -275,13 +275,13 @@ Resources:
   ServiceDashboard:
     Type: AWS::CloudWatch::Dashboard
     Properties:
-      DashboardName: !Sub 'wga-${Environment}-service'
+      DashboardName: !Sub 'vigie-${Environment}-service'
       DashboardBody: !Sub
         - |
           {
             "widgets": [
               {"type": "text", "x": 0, "y": 0, "width": 24, "height": 1,
-               "properties": {"markdown": "## WGA ${Environment} 서비스 상태 (API Gateway → Lambda → DynamoDB)"}},
+               "properties": {"markdown": "## Vigie ${Environment} 서비스 상태 (API Gateway → Lambda → DynamoDB)"}},
               {"type": "metric", "x": 0, "y": 1, "width": 8, "height": 6,
                "properties": {"title": "API 요청 수 / 4XX / 5XX", "region": "${AWS::Region}", "stat": "Sum", "period": 300, "view": "timeSeries",
                  "metrics": [
@@ -296,75 +296,75 @@ Resources:
               {"type": "metric", "x": 16, "y": 1, "width": 8, "height": 6,
                "properties": {"title": "Lambda 오류 / 스로틀", "region": "${AWS::Region}", "stat": "Sum", "period": 300, "view": "timeSeries",
                  "metrics": [
-                   ["AWS/Lambda", "Errors", "FunctionName", "wga-llm-${Environment}"],
-                   ["...", "wga-mcp-${Environment}"],
-                   ["...", "wga-chat-history-${Environment}"],
-                   ["...", "wga-slackbot-${Environment}"],
-                   ["...", "wga-athena-utility-${Environment}"],
-                   ["AWS/Lambda", "Throttles", "FunctionName", "wga-llm-${Environment}"],
-                   ["...", "wga-mcp-${Environment}"]]}},
+                   ["AWS/Lambda", "Errors", "FunctionName", "vigie-llm-${Environment}"],
+                   ["...", "vigie-mcp-${Environment}"],
+                   ["...", "vigie-chat-history-${Environment}"],
+                   ["...", "vigie-slackbot-${Environment}"],
+                   ["...", "vigie-athena-utility-${Environment}"],
+                   ["AWS/Lambda", "Throttles", "FunctionName", "vigie-llm-${Environment}"],
+                   ["...", "vigie-mcp-${Environment}"]]}},
               {"type": "metric", "x": 0, "y": 7, "width": 12, "height": 6,
                "properties": {"title": "Lambda 호출 수", "region": "${AWS::Region}", "stat": "Sum", "period": 300, "view": "timeSeries",
                  "metrics": [
-                   ["AWS/Lambda", "Invocations", "FunctionName", "wga-llm-${Environment}"],
-                   ["...", "wga-mcp-${Environment}"],
-                   ["...", "wga-chat-history-${Environment}"],
-                   ["...", "wga-slackbot-${Environment}"],
-                   ["...", "wga-athena-utility-${Environment}"]]}},
+                   ["AWS/Lambda", "Invocations", "FunctionName", "vigie-llm-${Environment}"],
+                   ["...", "vigie-mcp-${Environment}"],
+                   ["...", "vigie-chat-history-${Environment}"],
+                   ["...", "vigie-slackbot-${Environment}"],
+                   ["...", "vigie-athena-utility-${Environment}"]]}},
               {"type": "metric", "x": 12, "y": 7, "width": 12, "height": 6,
                "properties": {"title": "Lambda 실행 시간 p95 (ms)", "region": "${AWS::Region}", "stat": "p95", "period": 300, "view": "timeSeries",
                  "metrics": [
-                   ["AWS/Lambda", "Duration", "FunctionName", "wga-llm-${Environment}"],
-                   ["...", "wga-mcp-${Environment}"],
-                   ["...", "wga-chat-history-${Environment}"],
-                   ["...", "wga-slackbot-${Environment}"]]}},
+                   ["AWS/Lambda", "Duration", "FunctionName", "vigie-llm-${Environment}"],
+                   ["...", "vigie-mcp-${Environment}"],
+                   ["...", "vigie-chat-history-${Environment}"],
+                   ["...", "vigie-slackbot-${Environment}"]]}},
               {"type": "metric", "x": 0, "y": 13, "width": 12, "height": 6,
                "properties": {"title": "DynamoDB 스로틀 (읽기 + 쓰기)", "region": "${AWS::Region}", "stat": "Sum", "period": 300, "view": "timeSeries",
                  "metrics": [
-                   ["AWS/DynamoDB", "ReadThrottleEvents", "TableName", "wga-chat-history-${Environment}"],
+                   ["AWS/DynamoDB", "ReadThrottleEvents", "TableName", "vigie-chat-history-${Environment}"],
                    [".", "WriteThrottleEvents", ".", "."],
                    [".", "ReadThrottleEvents", ".", "SlackbotSessions-${Environment}"],
                    [".", "WriteThrottleEvents", ".", "."]]}},
               {"type": "metric", "x": 12, "y": 13, "width": 12, "height": 6,
                "properties": {"title": "DynamoDB 소비 용량 (대화 기록)", "region": "${AWS::Region}", "stat": "Sum", "period": 300, "view": "timeSeries",
                  "metrics": [
-                   ["AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "wga-chat-history-${Environment}"],
+                   ["AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "vigie-chat-history-${Environment}"],
                    [".", "ConsumedWriteCapacityUnits", ".", "."]]}},
               {"type": "text", "x": 0, "y": 19, "width": 24, "height": 1,
                "properties": {"markdown": "## AI 에이전트 거버넌스 (도구 호출 · 인젝션 의심 · 가리기 · 변경 작업 승인)"}},
               {"type": "metric", "x": 0, "y": 20, "width": 8, "height": 6,
                "properties": {"title": "도구 호출 / 실패", "region": "${AWS::Region}", "stat": "Sum", "period": 300, "view": "timeSeries",
                  "metrics": [
-                   ["WGA/Governance", "ToolCalls", "Environment", "${Environment}"],
+                   ["Vigie/Governance", "ToolCalls", "Environment", "${Environment}"],
                    [".", "ToolErrors", ".", "."]]}},
               {"type": "metric", "x": 8, "y": 20, "width": 8, "height": 6,
                "properties": {"title": "인젝션 의심 / 가린 값", "region": "${AWS::Region}", "stat": "Sum", "period": 300, "view": "timeSeries",
                  "metrics": [
-                   ["WGA/Governance", "InjectionSuspected", "Environment", "${Environment}"],
+                   ["Vigie/Governance", "InjectionSuspected", "Environment", "${Environment}"],
                    [".", "RedactedValues", ".", "."]]}},
               {"type": "metric", "x": 16, "y": 20, "width": 8, "height": 6,
                "properties": {"title": "변경 작업: 요청 / 승인 / 거절 / 실패", "region": "${AWS::Region}", "stat": "Sum", "period": 300, "view": "timeSeries",
                  "metrics": [
-                   ["WGA/Governance", "ApprovalRequested", "Environment", "${Environment}"],
+                   ["Vigie/Governance", "ApprovalRequested", "Environment", "${Environment}"],
                    [".", "ApprovalApproved", ".", "."],
                    [".", "ApprovalDenied", ".", "."],
                    [".", "ActionFailed", ".", "."]]}}
             ]
           }
-        - Api: !Sub 'wga-api-${Environment}'
+        - Api: !Sub 'vigie-api-${Environment}'
 
   # 성능 측정용 저장 쿼리 (Lambda LogFormat: JSON의 platform.report 레코드 기준)
   # 콜드 스타트 비율·초기화 시간, 실행 시간 p50/p95, 메모리 사용률을 함수별로 집계한다
   LambdaPerformanceQuery:
     Type: AWS::Logs::QueryDefinition
     Properties:
-      Name: !Sub 'wga-${Environment}/lambda-performance'
+      Name: !Sub 'vigie-${Environment}/lambda-performance'
       LogGroupNames:
-        - !Sub '/aws/lambda/wga-llm-${Environment}'
-        - !Sub '/aws/lambda/wga-mcp-${Environment}'
-        - !Sub '/aws/lambda/wga-chat-history-${Environment}'
-        - !Sub '/aws/lambda/wga-slackbot-${Environment}'
-        - !Sub '/aws/lambda/wga-athena-utility-${Environment}'
+        - !Sub '/aws/lambda/vigie-llm-${Environment}'
+        - !Sub '/aws/lambda/vigie-mcp-${Environment}'
+        - !Sub '/aws/lambda/vigie-chat-history-${Environment}'
+        - !Sub '/aws/lambda/vigie-slackbot-${Environment}'
+        - !Sub '/aws/lambda/vigie-athena-utility-${Environment}'
       QueryString: |
         filter type = "platform.report"
         | stats count(*) as invocations,
@@ -379,10 +379,10 @@ Resources:
   ColdStartQuery:
     Type: AWS::Logs::QueryDefinition
     Properties:
-      Name: !Sub 'wga-${Environment}/cold-start-vs-warm'
+      Name: !Sub 'vigie-${Environment}/cold-start-vs-warm'
       LogGroupNames:
-        - !Sub '/aws/lambda/wga-llm-${Environment}'
-        - !Sub '/aws/lambda/wga-mcp-${Environment}'
+        - !Sub '/aws/lambda/vigie-llm-${Environment}'
+        - !Sub '/aws/lambda/vigie-mcp-${Environment}'
       QueryString: |
         filter type = "platform.report"
         | fields ispresent(record.metrics.initDurationMs) as isColdStart

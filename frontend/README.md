@@ -1,6 +1,6 @@
-# WGA 프론트엔드
+# Vigie 프론트엔드
 
-React 18 + TypeScript + Vite. 디자인은 AXPI(LG Entrue) 화면의 CSS를 가져와 색만 WGA 색으로 바꿨다.
+React 18 + TypeScript + Vite. 디자인은 AXPI(LG Entrue) 화면의 CSS를 가져와 색만 Vigie 색으로 바꿨다.
 
 ```bash
 npm install

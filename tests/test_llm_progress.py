@@ -12,7 +12,7 @@ import pytest
 
 from conftest import load_service_module
 
-PROGRESS_TABLE = "wga-llm-progress-test"
+PROGRESS_TABLE = "vigie-llm-progress-test"
 REQUEST_ID = "0f8fad5b-d9cb-469f-a165-70867728950e"
 
 
@@ -68,7 +68,7 @@ def client_run(aws, monkeypatch):
         mcp_url="https://example.invalid", api_key="k", model_id="claude-sonnet-5",
         thinking={"type": "adaptive", "display": "summarized"})
     client.tools = [{"name": "describe_log_groups", "description": "로그 그룹", "inputSchema": {},
-                     "_meta": {"wga/risk": "read"}}]  # MCP tools/list가 붙이는 위험도 (없으면 변경 도구로 본다)
+                     "_meta": {"vigie/risk": "read"}}]  # MCP tools/list가 붙이는 위험도 (없으면 변경 도구로 본다)
     monkeypatch.setattr(client.mcp_client, "call_tool",
                         lambda name, args: {"content": [{"type": "text", "text": "3 groups"}]})
     client.progress = ProgressReporter()  # 저장 없이 단계만 모은다

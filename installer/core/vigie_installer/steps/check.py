@@ -85,10 +85,10 @@ PERMISSION_WRITES = (
     "ecr:CreateRepository", "codebuild:CreateProject", "codebuild:StartBuild", "amplify:CreateApp",
     "cloudwatch:PutMetricAlarm", "sns:CreateTopic", "logs:PutQueryDefinition",
 )
-# IAM Role은 템플릿이 모두 wga-*로 이름 짓는다. 그 이름으로 확인해야 github-oidc.yaml의 배포 Role처럼
-# wga-* Role로 좁힌 정책도 통과한다 ("*"로 물으면 좁힌 정책은 거부로 나온다)
+# IAM Role은 템플릿이 모두 vigie-*로 이름 짓는다. 그 이름으로 확인해야 github-oidc.yaml의 배포 Role처럼
+# vigie-* Role로 좁힌 정책도 통과한다 ("*"로 물으면 좁힌 정책은 거부로 나온다)
 PERMISSION_IAM_WRITES = ("iam:CreateRole", "iam:PutRolePolicy", "iam:AttachRolePolicy", "iam:PassRole")
-PERMISSION_CHECK_ROLE = "wga-permission-check"   # 시뮬레이션에만 쓰는 이름 (실제로 만들지 않는다)
+PERMISSION_CHECK_ROLE = "vigie-permission-check"   # 시뮬레이션에만 쓰는 이름 (실제로 만들지 않는다)
 
 # 권한 거부·서비스 미활성화를 알아보는 표시 (AWS 서비스마다 오류 이름이 조금씩 다르다)
 _DENIED_MARKERS = ("AccessDenied", "UnauthorizedOperation", "not authorized to perform")
@@ -210,9 +210,9 @@ def _check_pip(runner: Runner, report) -> None:
 
 
 def _check_python(report) -> None:
-    """설치 마법사를 실행 중인 Python. 3.10 미만이면 wga_installer/__init__.py에서 이미 종료되었으므로
+    """설치 마법사를 실행 중인 Python. 3.10 미만이면 vigie_installer/__init__.py에서 이미 종료되었으므로
     여기까지 왔다면 통과다. 어떤 인터프리터가 선택됐는지 보여 주는 것이 목적이다
-    (installer/core/wga-installer 실행기가 Homebrew Python을 먼저 고른다)."""
+    (installer/core/vigie-installer 실행기가 Homebrew Python을 먼저 고른다)."""
     version = ".".join(str(part) for part in sys.version_info[:3])
     report("python", "Python", CHECK_OK, f"{version} ({sys.executable})")
 
@@ -228,7 +228,7 @@ def _check_homebrew(runner: Runner, report) -> None:
 
 
 def _check_repo(ctx: Context, runner: Runner, report) -> None:
-    title = "WGA 저장소"
+    title = "Vigie 저장소"
     if ctx.repo_root is None:
         if ctx.repo_requested is not None:
             detail = f"{ctx.repo_requested}에 deploy.sh와 cloudformation/ 폴더가 없습니다"
@@ -354,7 +354,7 @@ def _permission_hint(ctx: Context, outputs: list[str], organization: dict | None
     if user:   # 경로(/team/...)가 있으면 이름만
         return (f"IAM 콘솔 → 사용자 → {user} → 권한 탭 → 권한 추가에서 AdministratorAccess를 연결하세요 "
                 "(몇 초 안에 반영됩니다)")
-    return "이 자격 증명의 IAM 역할에 WGA 배포에 필요한 권한을 붙이세요"
+    return "이 자격 증명의 IAM 역할에 Vigie 배포에 필요한 권한을 붙이세요"
 
 
 # 거부한 주체를 한마디로 (점검 결과의 detail에 덧붙인다)
