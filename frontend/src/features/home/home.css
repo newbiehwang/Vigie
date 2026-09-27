@@ -7,7 +7,7 @@
   gap: 0.85rem;
   padding: 1.15rem 1.15rem 0.8rem;
   border-radius: 16px;
-  --composer-shadow: 0 2px 4px rgba(35, 47, 62, 0.06), 0 16px 40px rgba(35, 47, 62, 0.08);
+  --composer-shadow: 0 2px 4px rgba(10, 22, 40, 0.06), 0 16px 40px rgba(10, 22, 40, 0.08);
 }
 
 .composer--home .composer-input {
@@ -50,19 +50,19 @@
   gap: 0.4rem;
   font-family: var(--font-label);
   font-size: 0.75rem;
-  color: #8a94a0;
+  color: var(--ink-3);
 }
 
 .composer-hint kbd {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.6875rem;
   line-height: 1;
   padding: 0.22rem 0.4rem;
-  border: 1px solid #d9e0e8;
+  border: 1px solid var(--line);
   border-bottom-width: 2px;
   border-radius: 5px;
-  color: #3c4650;
-  background: #fff;
+  color: var(--ink-2);
+  background: var(--surface);
 }
 
 @media (max-width: 760px) {
