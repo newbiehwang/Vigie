@@ -251,9 +251,11 @@ export function UsersFilter({
                         <ResetButton onClick={onReset} disabled={!canReset} title="검색어와 거르기를 모두 지웁니다" />
                     </div>
                     <nav key={resetNo} className="audit-facets" aria-label="거르기">
-                        {USER_FACETS.map((facet) => (
-                            <FacetGroup key={facet.id} facet={facet} users={users} selection={selection} onChange={onChange} />
-                        ))}
+                        <div className="audit-facets-columns">
+                            {USER_FACETS.map((facet) => (
+                                <FacetGroup key={facet.id} facet={facet} users={users} selection={selection} onChange={onChange} />
+                            ))}
+                        </div>
                     </nav>
                 </div>
             ) : null}

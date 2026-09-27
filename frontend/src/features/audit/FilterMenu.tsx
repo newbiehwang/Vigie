@@ -73,6 +73,10 @@ interface Chip {
     onRemove?: () => void; // 없으면 ✕ 없음 (처음 값인 기간)
 }
 
+const PANEL_MAX_HEIGHT = 520; // 세부 선택 창의 가장 큰 높이 (넓은 화면)
+const PANEL_MIN_HEIGHT = 220; // 흰 카드가 아주 낮아도 이만큼은 둔다
+const PANEL_GAP = 16; // 흰 카드 바닥과의 간격
+
 export function FilterMenu({
     records,
     allRecords,
@@ -103,6 +107,25 @@ export function FilterMenu({
     const [open, setOpen] = useState(false);
     const box = useRef<HTMLDivElement>(null);
     const button = useRef<HTMLButtonElement>(null);
+    const panel = useRef<HTMLDivElement>(null);
+    const [panelHeight, setPanelHeight] = useState<number>();
+
+    // 세부 선택 창의 높이: 창 위쪽부터 흰 카드(plan-panel) 바닥까지 남은 높이로 고정한다 (PANEL_MAX_HEIGHT까지).
+    // 흰 카드는 넘치는 부분을 잘라 내므로, 거르기가 많아도 창이 카드 밖으로 나가 잘리지 않게 한다. 안쪽 목록은 스크롤된다.
+    // 화면 크기가 바뀌면 다시 잰다
+    useEffect(() => {
+        if (!open) return;
+        const measure = () => {
+            const card = panel.current?.closest('.plan-panel');
+            if (!panel.current || !card) return;
+            const room = card.getBoundingClientRect().bottom - panel.current.getBoundingClientRect().top - PANEL_GAP;
+            setPanelHeight(Math.max(PANEL_MIN_HEIGHT, Math.min(PANEL_MAX_HEIGHT, Math.floor(room))));
+        };
+        measure();
+        // 이 컴포넌트에는 window라는 속성(기간)이 있어 전역 window를 globalThis로 부른다
+        globalThis.addEventListener('resize', measure);
+        return () => globalThis.removeEventListener('resize', measure);
+    }, [open]);
 
     // 바깥을 누르거나 Esc를 누르면 닫는다. 기간 '직접' 입력이 열려 있으면 Esc는 그것부터 닫는다 (PeriodPicker)
     useEffect(() => {
@@ -187,7 +210,14 @@ export function FilterMenu({
             </ul>
 
             {open ? (
-                <div id="audit-filter-panel" className="audit-filter-panel" role="dialog" aria-label="필터 세부 선택">
+                <div
+                    ref={panel}
+                    id="audit-filter-panel"
+                    className="audit-filter-panel"
+                    role="dialog"
+                    aria-label="필터 세부 선택"
+                    style={panelHeight ? { height: panelHeight } : undefined}
+                >
                     {/* 닫기: 이 앱의 다른 팝업창과 같은 오른쪽 위 ✕ */}
                     <button
                         className="vdt-model-close"
