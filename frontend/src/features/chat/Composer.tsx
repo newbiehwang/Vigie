@@ -1,7 +1,7 @@
 // 질문 입력칸 (홈과 대화 화면에서 함께 쓴다).
 // Enter로 보내고 Shift+Enter로 줄을 바꾼다. 답변을 기다리는 중에는 보내기 버튼이 취소 버튼이 되고 Esc로도 취소한다.
 //
-// suggestions를 주면(홈), 입력칸을 누를 때 입력칸 아래에 붙어서 예시 질문이 펼쳐진다.
+// suggestions를 주면(홈), 입력칸을 누를 때 입력칸 바로 아래에 예시 질문이 떠서 펼쳐진다.
 // 입력칸과 예시 목록 밖으로 포커스가 나가면 접히는 효과를 보여 준 뒤 사라진다.
 //
 // 홈(variant="home")은 FinGate-X 첫 화면의 입력창 모양이다: 2줄 입력칸, 아래 줄 왼쪽에 키 안내
@@ -13,6 +13,7 @@ const MAX_HEIGHT = 150; // 입력칸이 늘어나는 최대 높이
 const CLOSE_MS = 160; // 예시 목록이 접히는 시간 (CSS의 composer-suggest-out과 같게)
 const SUGGEST_MAX = 360; // 예시 목록의 최대 높이
 const SUGGEST_MIN = 160; // 카드 아래 공간이 좁아도 이만큼은 보여 주고 목록 안에서 스크롤한다
+const SUGGEST_GAP = 6; // 입력칸과 예시 목록 사이 (CSS의 .composer-suggestions top과 같게)
 
 export interface Suggestion {
     category: string;
@@ -60,7 +61,7 @@ export function Composer({
         const wrap = wrapRef.current;
         const card = wrap?.closest('.plan-panel');
         if (wrap && card) {
-            const space = card.getBoundingClientRect().bottom - wrap.getBoundingClientRect().bottom - 16;
+            const space = card.getBoundingClientRect().bottom - wrap.getBoundingClientRect().bottom - SUGGEST_GAP - 16;
             setSuggestMaxHeight(Math.max(SUGGEST_MIN, Math.min(SUGGEST_MAX, space)));
         }
         setSuggest('open');
@@ -104,7 +105,7 @@ export function Composer({
     return (
         <div ref={wrapRef} className={`composer-wrap composer-wrap--${variant}`} onBlur={handleBlur}>
             <div
-                className={`composer composer--${variant}${compact ? ' is-compact' : ''}${suggest !== 'closed' ? ' is-suggesting' : ''}`}
+                className={`composer composer--${variant}${compact ? ' is-compact' : ''}`}
             >
                 <textarea
                     ref={inputRef}

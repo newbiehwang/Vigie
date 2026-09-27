@@ -197,9 +197,10 @@
 }
 
 .chat-example {
-  border: 1px solid #e1e7ef;
+  border: 1px solid var(--raised-border);
   border-radius: 12px;
   background: #fff;
+  box-shadow: var(--raised-shadow-sm);
   padding: 12px 14px;
   font-family: var(--font-body);
   font-size: 0.88rem;
@@ -211,7 +212,7 @@
 
 .chat-example:hover:not(:disabled) {
   border-color: rgba(0, 123, 255, 0.3);
-  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.08);
+  box-shadow: var(--raised-shadow-sm), 0 2px 8px rgba(0, 123, 255, 0.08);
 }
 
 /* ---------------------------------------------------------------- 메시지 */
@@ -602,9 +603,10 @@
 .artifact {
   margin: 1rem 0;
   padding: 12px 12px 8px;
-  border: 1px solid var(--color-line);
+  border: 1px solid var(--raised-border);
   border-radius: var(--radius-md);
   background: #fff;
+  box-shadow: var(--raised-shadow);
   max-width: 760px;
 }
 
@@ -769,20 +771,24 @@
 
 /* ---------------------------------------------------------------- 질문 입력칸 (홈과 함께 쓴다) */
 
+/* 입체감은 카드와 같다 (styles.css의 --raised-*). 홈은 --composer-shadow만 바꾼다 (home.css).
+   누르면 파란 테두리와 안쪽 선을 더하고 그림자는 그대로 둔다 */
 .composer {
+  --composer-shadow: var(--raised-shadow);
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  border: 1px solid #d9e0e8;
+  border: 1px solid var(--raised-border);
   border-radius: 14px;
   background: #fff;
+  box-shadow: var(--composer-shadow);
   padding: 10px 10px 10px 14px;
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
 .composer:focus-within {
   border-color: rgba(0, 123, 255, 0.56);
-  box-shadow: inset 0 0 0 1px rgba(0, 123, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(0, 123, 255, 0.14), var(--composer-shadow);
 }
 
 .composer-input {
@@ -839,29 +845,27 @@
   stroke: none;
 }
 
-/* 예시 질문 (홈): 입력칸을 누르면 입력칸 아래에 붙어서 펼쳐진다 */
+/* 예시 질문 (홈): 입력칸을 누르면 입력칸 바로 아래에 떠서 펼쳐진다.
+   예전에는 입력칸 아래 모서리를 펴고 목록을 이어 붙였는데, 입력칸의 그림자·파란 안쪽 선이 이음매에 걸려
+   두 상자가 어긋나 보였다. 이제 입력칸은 그대로 두고, 목록은 6px 아래에 모서리가 둥근 따로 떠 있는 상자로 둔다
+   (간격은 Composer.tsx의 SUGGEST_GAP과 같다) */
 .composer-wrap {
   position: relative;
   z-index: 20; /* 아래 대화 목록 행 위에 겹쳐 보이게 */
 }
 
-.composer.is-suggesting {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-}
-
 .composer-suggestions {
   position: absolute;
-  top: calc(100% - 1px);
+  top: calc(100% + 6px);
   left: 0;
   right: 0;
   max-height: min(360px, 50vh);
   overflow-y: auto;
-  border: 1px solid rgba(0, 123, 255, 0.56);
-  border-top-color: #e8edf3;
-  border-radius: 0 0 14px 14px;
+  border: 1px solid var(--raised-border);
+  border-radius: 14px;
   background: #fff;
-  box-shadow: 0 16px 30px rgba(35, 47, 62, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 2px 4px rgba(35, 47, 62, 0.05),
+    0 18px 36px rgba(35, 47, 62, 0.14);
   padding: 8px;
   transform-origin: top center;
   animation: composer-suggest-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -991,15 +995,18 @@
 }
 
 /* ---------------------------------------------------------------- 변경 작업 승인 카드 (ApprovalCard.tsx)
-   답변 아래에 둔다. 승인을 기다리는 동안은 주황 테두리로 눈에 띄게, 의심 신호가 있으면 빨간 테두리와 맨 위의 빨간 띠.
-   결정한 뒤에는 차분한 회색의 한 줄로 접는다 (실패만 옅은 빨강) */
+   답변 아래에 둔다. 홈의 숫자 카드와 같은 흰 입체 카드(styles.css의 --raised-*)이고, 상태는 숫자 카드처럼 위쪽 3px 색 줄로
+   알린다: 승인을 기다리는 동안은 주황, 의심 신호가 있으면 빨강(과 맨 위의 빨간 띠).
+   결정한 뒤에는 색 줄 없는 한 줄로 접는다 (실패만 빨간 줄) */
 
 .approval-card {
   margin-top: 12px;
-  border: 1px solid rgba(255, 153, 0, 0.55);
-  border-radius: 12px;
-  background: #fffaf2;
-  padding: 14px 16px;
+  border: 1px solid var(--raised-border);
+  border-top: 3px solid #f0a020;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--raised-shadow);
+  padding: 12px 16px 14px;
   display: grid;
   grid-template-columns: minmax(0, 1fr); /* 좁은 화면에서 한 줄·호출 줄이 카드 밖으로 넘치지 않게 */
   gap: 10px;
@@ -1007,22 +1014,21 @@
 }
 
 .approval-card.is-tainted {
-  border-color: rgba(220, 53, 69, 0.45);
-  background: #fffafa;
+  border-top-color: #dc3545;
   padding-top: 0;
   overflow: hidden;
 }
 
 .approval-card.is-closed {
-  border-color: var(--color-line);
-  background: #f8fafc;
+  border-top-width: 1px;
+  border-top-color: var(--raised-border);
   padding: 0;
   gap: 0;
 }
 
 .approval-card.is-closed.is-failed {
-  border-color: rgba(220, 53, 69, 0.35);
-  background: #fdf5f6;
+  border-top-width: 3px;
+  border-top-color: #dc3545;
 }
 
 /* 의심 신호: 카드 맨 위를 가로지르는 빨간 띠 (체류 신호, services/llm/approvals.py) */
@@ -1317,9 +1323,10 @@
   gap: 5px;
   height: 28px;
   padding: 0 10px;
-  border: 1px solid var(--color-line);
+  border: 1px solid var(--raised-border);
   border-radius: 8px;
   background: #fff;
+  box-shadow: var(--raised-shadow-sm);
   font-family: var(--font-label);
   font-size: 12px;
   font-weight: 600;

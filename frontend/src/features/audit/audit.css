@@ -92,9 +92,10 @@
   gap: 6px;
   height: 34px;
   padding: 0 10px 0 12px;
-  border: 1px solid var(--color-line);
+  border: 1px solid var(--raised-border);
   border-radius: 10px;
   background: #fff;
+  box-shadow: var(--raised-shadow-sm);
   color: #3c4650;
   font-family: var(--font-label);
   font-size: 0.8rem;
@@ -501,11 +502,14 @@
 
 /* ---------------------------------------------------------------- 시간대별 막대그래프 (AuditHistogram) */
 
+/* 홈 카드와 같은 흰 입체 카드 (styles.css의 --raised-*) */
 .audit-histogram {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   padding: 10px 12px 4px;
-  border: 1px solid #edf1f6;
+  border: 1px solid var(--raised-border);
   border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--raised-shadow);
 }
 
 .audit-histogram-hint {
@@ -746,9 +750,10 @@
   height: 34px;
   margin-left: auto;
   padding: 0 12px;
-  border: 1px solid var(--color-line);
+  border: 1px solid var(--raised-border);
   border-radius: 10px;
   background: #fff;
+  box-shadow: var(--raised-shadow-sm);
   color: #3c4650;
   font-family: var(--font-label);
   font-size: 0.8rem;
@@ -1441,10 +1446,11 @@
   display: grid;
   gap: 6px;
   padding: 10px 12px;
-  border: 1px solid #e3e9f1;
+  border: 1px solid var(--raised-border);
   border-left: 3px solid #b8c2ce;
   border-radius: 10px;
   background: #fff;
+  box-shadow: var(--raised-shadow-sm);
 }
 
 .audit-trace-answer-box.is-ok { border-left-color: #58a779; }
