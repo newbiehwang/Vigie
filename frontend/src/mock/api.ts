@@ -7,6 +7,8 @@
 // - main.ts가 mock 모드일 때만 동적으로 불러오므로 배포용 빌드(npm run build)에는 들어가지 않는다.
 import axios from "axios";
 import { mockIsAdmin } from "../auth/authClient";
+import { demoEntryFor, demoFirstQuestion } from "./demo/answers";
+import { demoChanges, demoDashboard, demoFindings, demoResources } from "./demo/frothly";
 import type {
   AxiosAdapter,
   AxiosResponse,
@@ -17,7 +19,6 @@ import type { Artifact } from "../types/artifacts";
 import type { AdminEvent, AuditQuery, AuditRecord, TraceStep } from "../types/audit";
 import type { ManagedGroup, ManagedUser, UserRole } from "../types/users";
 import type {
-  DashboardAlarm,
   DashboardChange,
   DashboardData,
   DashboardFinding,
@@ -539,45 +540,46 @@ const entryFor = (body: RequestBody): MockEntry => {
   if (text.includes("보존")) return APPROVAL_ENTRIES.retention;
   if (text.includes("알람") && /끄|꺼|멈|중지/.test(text))
     return APPROVAL_ENTRIES.alarm;
-  return ANSWERS[answerIndex++ % ANSWERS.length];
+  // 나머지는 Frothly 계정의 기록으로 질문에 맞춰 답한다 (demo/answers.ts). 관리자 전용 도구가 필요한 질문은
+  // 일반 사용자(?mock-role=member)에게 실제 서버처럼 '관리자만'이라고 답한다
+  return demoEntryFor(text, mockIsAdmin());
 };
 
 const startRun = (
   requestId?: string,
-  entry: MockEntry = ANSWERS[answerIndex++ % ANSWERS.length],
+  entry: MockEntry = demoEntryFor("", mockIsAdmin()),
 ): Run => {
   const run = { started: Date.now(), ...planRun(entry) };
   if (requestId) runs.set(requestId, run);
   return run;
 };
 
-// 처음 열었을 때 보이는 예시 대화 (빈 화면 대신 바로 고칠 대상을 보여 준다)
+// 처음 열었을 때 보이는 예시 대화: 데모의 첫 질문과 그 답 (demo/answers.ts)
 const seedSessions = (): MockSession[] => {
   const time = now();
+  const question = demoFirstQuestion(mockIsAdmin());
+  const first = demoEntryFor(question, mockIsAdmin());
   return [
     {
       sessionId: newId(),
       userId: "mock-user",
-      title: "지난주 Lambda 오류 알려줘",
+      title: question,
       createdAt: time,
       updatedAt: time,
       messages: [
         {
           id: newId(),
           sender: "user",
-          text: "지난주 Lambda 오류 알려줘",
+          text: question,
           timestamp: time,
         },
         {
           id: newId(),
           sender: "assistant",
-          text: ANSWERS[0].answer,
+          text: first.answer,
           timestamp: time,
-          elapsed_time: "4초",
-          inference: inferenceOf(
-            ANSWERS[0].tools,
-            stepsAt(planRun(ANSWERS[0]), Infinity),
-          ),
+          elapsed_time: "9초",
+          inference: inferenceOf(first.tools, stepsAt(planRun(first), Infinity)),
         },
       ],
     },
@@ -585,7 +587,6 @@ const seedSessions = (): MockSession[] => {
 };
 
 let sessions = seedSessions();
-let answerIndex = 1; // 0번은 예시 대화에 이미 나와 있으므로 다음 것부터
 
 // ---------------------------------------------------------------- 감사 로그 (GET /audit, services/llm/audit.py)
 // mock 사용자는 관리자(admins 그룹)로 둔다: '내 기록'과 '모든 사용자'를 모두 확인할 수 있다.
@@ -1624,72 +1625,28 @@ const route = (
 // 이 mock 안의 다른 상태와 이어진다: 대화에서 승인을 기다리는 요청 수, 승인해 실행한 변경(최근 변경),
 // 알람 알림을 끄면 개선 권고에 '알림 꺼진 알람'이 생기고, 보존 기간을 줄이면 '보존 기간이 긴 로그'가 없어진다
 
-// 날짜마다 같은 값이 나오는 가짜 난수 (0~1). 새로 고쳐도 차트가 흔들리지 않게
-const wobble = (n: number) => {
-  const x = Math.sin(n * 12.9898) * 43758.5453;
-  return x - Math.floor(x);
-};
-
 const dashboardData = (): DashboardData => {
   const nowS = Math.floor(Date.now() / 1000);
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
-  const dayOfMonth = today.getDate();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const pad = (n: number) => String(n).padStart(2, "0");
-
-  // 일별 비용: 1일부터 어제까지 (비용 데이터는 하루 늦게 확정된다). 평일이 조금 더 높고, 사흘 전에 한 번 튄다
-  const daily = Array.from({ length: Math.max(dayOfMonth - 1, 1) }, (_, i) => {
-    const day = i + 1;
-    const weekday = new Date(year, month, day).getDay();
-    const base = weekday === 0 || weekday === 6 ? 11.2 : 14.6;
-    const spike = day === dayOfMonth - 3 ? 9.4 : 0;
-    return {
-      date: `${year}-${pad(month + 1)}-${pad(day)}`,
-      amount: Math.round((base + wobble(day + month * 31) * 3.1 + spike) * 100) / 100,
-    };
-  });
-  const monthToDate = Math.round(daily.reduce((sum, d) => sum + d.amount, 0) * 100) / 100;
-  const perDay = monthToDate / daily.length;
-  const forecast = Math.round(perDay * daysInMonth);
-  const shares: [string, number][] = [
-    ["Lambda", 0.34], ["EC2", 0.27], ["CloudWatch", 0.14], ["S3", 0.09], ["DynamoDB", 0.07], ["API Gateway", 0.05],
-  ];
-  const named = shares.map(([service, share]) => ({ service, amount: Math.round(monthToDate * share * 100) / 100 }));
-  const rest = Math.round((monthToDate - named.reduce((sum, s) => sum + s.amount, 0)) * 100) / 100;
-  const byService = [...named, { service: "기타", amount: rest }];
-
-  // 오류: 지난 24시간 1시간마다. 네 시간 전부터 늘었다
-  const hourly = Array.from({ length: 24 }, (_, i) =>
-    Math.round(wobble(i + dayOfMonth * 24) * 2 + (i >= 20 ? 6 + (i - 20) * 2 : 0)),
-  );
-  const total24h = hourly.reduce((sum, n) => sum + n, 0);
 
   // 승인 대기: 대화에서 만든 요청 가운데 아직 결정하지 않은 것
   const pendingActions = [...actions.values()].filter(
     (action) => action.status === "pending" && action.expiresAt > nowS,
   );
 
-  const firing: DashboardAlarm[] = mockResources.alarmActions
-    ? [{ name: MOCK_ALARM, metric: "5XXError > 5 (5분)", since: nowS - 12 * 60 }]
-    : []; // 알림을 끄면 울리지 않는 것으로 본다 (mock)
-
-  const HOUR = 3600;
+  // Frothly 계정의 기록으로 만든 부분 (demo/frothly.ts) + 이 mock의 상태(Vigie 자신의 알람·로그 그룹, 승인한 변경)
+  const demo = demoDashboard();
   const longRetention = mockResources.retention === null || mockResources.retention > 14; // 14일이면 충분한 개발 로그
   const resources: DashboardResource[] = [
-    { id: "vigie-llm-dev", kind: "Lambda", status: "fail", detail: "오류율 4.2% · 시간 초과 증가", errors24h: 31, changedAt: nowS - 26 * HOUR },
-    { id: MOCK_ALARM, kind: "Alarm", status: mockResources.alarmActions ? "fail" : "warn", detail: mockResources.alarmActions ? "ALARM · 5XXError > 5 (5분)" : "알림 비활성화" },
-    { id: "i-0428ab91c3d5e7f60", label: "vigie-batch", kind: "EC2", status: "warn", detail: "최근 14일 CPU 평균 1.8% · 유휴" },
-    { id: "vigie-reports-dev", kind: "S3", status: "warn", detail: "퍼블릭 액세스 차단 2개 해제" },
-    { id: "vigie-mcp-dev", kind: "Lambda", status: "ok", detail: "오류 없음", errors24h: 0 },
-    { id: "vigie-chat-history-dev", kind: "Lambda", status: "ok", detail: "오류 2건 (재시도 후 성공)", errors24h: 2 },
-    { id: "i-0b17c2d9e4a5f6071", label: "vigie-web", kind: "EC2", status: "ok", detail: "상태 검사 2/2 통과" },
-    { id: "vigie-artifacts-dev", kind: "S3", status: "ok", detail: "퍼블릭 액세스 차단 모두 적용" },
-    { id: "vigie-slackbot-dev", kind: "Lambda", status: "none", detail: "호출 없음", errors24h: 0 },
+    ...demoResources(),
+    {
+      id: MOCK_ALARM,
+      kind: "Alarm",
+      status: mockResources.alarmActions ? "ok" : "warn",
+      detail: mockResources.alarmActions ? "OK · 5XXError > 5 (5분)" : "알림 비활성화",
+    },
   ];
 
-  // 최근 변경: 이 mock에서 승인해 실행한 것 + CloudTrail에만 있는 것
+  // 최근 변경: 이 mock에서 승인해 실행한 것 + CloudTrail 기록
   const appChanges: DashboardChange[] = [...actions.values()]
     .filter((action) => action.status === "executed" && action.decidedAt)
     .map((action) => ({
@@ -1698,28 +1655,14 @@ const dashboardData = (): DashboardData => {
       actor: "나 (대화에서 승인)",
       summary: `${action.before} → ${action.after} · ${action.target ?? action.tool}`,
     }));
-  const cloudChanges: DashboardChange[] = [
-    { at: nowS - 47 * 60, source: "cloudtrail", actor: "deploy-bot", summary: "Lambda vigie-llm-dev 코드 배포 (UpdateFunctionCode)" },
-    { at: nowS - 3 * HOUR, source: "app", actor: "kim@example.com", summary: "로그 보존 기간 30일 → 14일 · /aws/lambda/vigie-mcp-dev" },
-    { at: nowS - 9 * HOUR, source: "cloudtrail", actor: "park@example.com", summary: "보안 그룹 sg-0a1b 인바운드 443 추가 (AuthorizeSecurityGroupIngress)" },
-    { at: nowS - 20 * HOUR, source: "cloudtrail", actor: "deploy-bot", summary: "S3 vigie-reports-dev 버킷 정책 변경 (PutBucketPolicy)" },
-    // 카드에 10개까지만 보이는 것을 확인하도록 24시간 안의 변경을 10개보다 많이 둔다
-    { at: nowS - 12 * 60, source: "cloudtrail", actor: "deploy-bot", summary: "Lambda vigie-mcp-dev 환경 변수 변경 (UpdateFunctionConfiguration)" },
-    { at: nowS - 2 * HOUR, source: "cloudtrail", actor: "lee@example.com", summary: "CloudWatch 알람 vigie-dev-llm-errors 임계값 변경 (PutMetricAlarm)" },
-    { at: nowS - 4 * HOUR, source: "cloudtrail", actor: "deploy-bot", summary: "API Gateway vigie-api-dev 스테이지 배포 (CreateDeployment)" },
-    { at: nowS - 6 * HOUR, source: "cloudtrail", actor: "park@example.com", summary: "EC2 vigie-batch 인스턴스 유형 변경 (ModifyInstanceAttribute)" },
-    { at: nowS - 11 * HOUR, source: "cloudtrail", actor: "deploy-bot", summary: "DynamoDB vigie-audit-dev 특정 시점 복구 켜기 (UpdateContinuousBackups)" },
-    { at: nowS - 14 * HOUR, source: "cloudtrail", actor: "kim@example.com", summary: "IAM 역할 vigie-llm-role-dev 인라인 정책 수정 (PutRolePolicy)" },
-    { at: nowS - 17 * HOUR, source: "cloudtrail", actor: "deploy-bot", summary: "CloudFormation vigie-dev-llm 스택 업데이트 (UpdateStack)" },
-    { at: nowS - 22 * HOUR, source: "cloudtrail", actor: "lee@example.com", summary: "SNS vigie-dev-alerts 구독 추가 (Subscribe)" },
-  ];
-  // 서버처럼 최근 10개까지만 보내고 전체 수를 따로 준다 (dashboard_view.MAX_CHANGES)
-  const allChanges = [...appChanges, ...cloudChanges].sort((a, b) => b.at - a.at);
+  // 서버처럼 24시간 안의 것 중 최근 10개까지만 보내고 전체 수를 따로 준다 (dashboard_view.MAX_CHANGES)
+  const allChanges = [...appChanges, ...demoChanges()]
+    .filter((change) => nowS - change.at <= 86400)
+    .sort((a, b) => b.at - a.at);
   const changes = allChanges.slice(0, 10);
 
   const findings: DashboardFinding[] = [
-    { kind: "idle-ec2", status: "warn", title: "유휴 EC2 인스턴스 1대", detail: "vigie-batch · 최근 14일 CPU 평균 1.8%" },
-    { kind: "public-s3", status: "fail", title: "퍼블릭 액세스 차단 미적용 S3 버킷 1개", detail: "vigie-reports-dev" },
+    ...demoFindings(),
     ...(longRetention
       ? [{ kind: "log-retention" as const, status: "warn" as const, title: "보존 기간 과다 로그 그룹 1개", detail: MOCK_LOG_GROUP }]
       : []),
@@ -1745,16 +1688,10 @@ const dashboardData = (): DashboardData => {
       cost: collected(5 * 3600), // 하루 1번
     },
     env: "dev",
-    region: "ap-northeast-2",
-    alarms: { total: 24, firing },
-    errors: { total24h, previous24h: Math.round(total24h * 0.62), hourly },
-    cost: {
-      monthToDate,
-      lastMonthSamePeriod: Math.round((monthToDate / 1.081) * 100) / 100,
-      forecast,
-      daily,
-      byService,
-    },
+    region: demo.region,
+    alarms: demo.alarms,
+    errors: demo.errors,
+    cost: demo.cost,
     approvals: {
       pending: pendingActions.length,
       soonestExpiresAt: pendingActions.length ? Math.min(...pendingActions.map((a) => a.expiresAt)) : undefined,

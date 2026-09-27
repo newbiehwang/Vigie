@@ -747,6 +747,22 @@
 }
 
 /* 기능 카드 네 개 */
+/* 데모 데이터 출처 (데모에서만) */
+.landing-sources {
+  width: min(1180px, 100%);
+  margin: -24px auto 0;
+  padding-bottom: 28px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #6b7785;
+}
+
+.landing-sources a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .landing-features {
   width: min(1180px, 100%);
   margin: 0 auto;
