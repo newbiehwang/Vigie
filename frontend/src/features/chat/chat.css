@@ -259,11 +259,10 @@
   flex-shrink: 0;
 }
 
+/* Vigie V 마크 (assets/brand/vigie-mark.svg): 바탕이 투명한 아이콘을 그대로 둔다 (배경 칸을 깔지 않는다) */
 .message-avatar img {
   width: 32px;
   height: 32px;
-  border-radius: 10px;
-  background: #eef4ff;
   display: block;
 }
 
