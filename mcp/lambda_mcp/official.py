@@ -22,11 +22,21 @@ Lambda 핸들러는 동기 함수이고 공식 도구는 async다. 컨테이너�
 - Lambda 초기화 단계는 10초로 제한되어 있고 늘릴 수 없다. 넘으면 그때까지 한 일을 버리고 첫 요청에서
   초기화를 처음부터 다시 한다. 초기화 단계에서 불러오면 10초를 버리고 같은 import를 한 번 더 하게 된다.
 - 첫 요청에서 불러오면 한 번만 한다. 그 뒤로는 컨테이너가 살아 있는 동안 불러온 서버를 그대로 쓴다.
+
+도구 목록 스냅샷 (official_tools.json, 이미지를 만들 때 쓴다: Dockerfile)
+- 예전에는 tools/list가 처음 올 때 공식 서버 7개를 모두 불러와 목록을 모았다. 질문이 "안녕"이어도 LLM Lambda는
+  질문 전에 도구 목록을 받으므로, MCP Lambda가 차가우면 첫 질문이 10초 넘게 기다렸다.
+- 이제 이미지를 만들 때 도구 정의를 파일로 적어 두고, tools/list는 그 파일을 읽는다 (아무것도 불러오지 않는다).
+- 도구를 실제로 부를 때는 그 도구가 속한 서버 하나만 불러온다 (예: 로그 조회면 CloudWatch 서버만).
+- 파일에는 리전·숨긴 인자 보정 전의 스키마를 적고, 읽을 때 이 Lambda의 리전으로 보정한다 (빌드 리전과 달라도 맞게).
+- 파일이 없거나 읽지 못하면 예전처럼 모두 불러와 모은다 (로컬 실행·테스트, 빌드 때 스냅샷을 못 만든 경우).
 """
 import asyncio
 import copy
+import json
 import logging
 import os
+import sys
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -177,13 +187,17 @@ def _keeping_root_logger(importer: Callable[[], Any]) -> Any:
                 root.removeHandler(handler)
 
 
+SNAPSHOT_PATH = os.path.join(os.path.dirname(__file__), "official_tools.json")
+SNAPSHOT_VERSION = 1
+
+
 def load_default_servers() -> List[Any]:
     """이 서비스가 쓰는 공식 서버: CloudWatch, AWS 문서, Cost Explorer, CloudTrail, Pricing, IAM, 네트워크.
     부를 때 import한다 (무겁다). 불러오면서 바뀐 기본 로거 설정은 되돌린다."""
     return _keeping_root_logger(_import_default_servers)
 
 
-def _import_default_servers() -> List[Any]:
+def _prepare_environment() -> None:
     # 공식 서버는 import할 때 loguru로 로그를 남긴다. Lambda 로그가 넘치지 않게 경고 이상만 남긴다
     os.environ.setdefault("FASTMCP_LOG_LEVEL", "ERROR")
     # Lambda에서는 /tmp만 쓸 수 있고 패키지가 설치된 곳(site-packages)은 읽기 전용이다.
@@ -194,30 +208,90 @@ def _import_default_servers() -> List[Any]:
     # 다시 읽게 한다. 이 서비스는 SQL 도구를 붙이지 않았으므로 옮기지 말고 응답을 그대로 받는다
     # (Lambda 응답 한도 6MB보다 작게)
     os.environ.setdefault("MCP_SQL_THRESHOLD", str(5 * 1024 * 1024))
-    from awslabs.aws_documentation_mcp_server.server_aws import mcp as documentation
-    from awslabs.aws_network_mcp_server.server import mcp as network
-    from awslabs.aws_pricing_mcp_server.server import mcp as pricing
+
+
+def _import_cloudwatch():
+    from awslabs.cloudwatch_mcp_server.server import mcp
+    return mcp
+
+
+def _import_documentation():
+    from awslabs.aws_documentation_mcp_server.server_aws import mcp
+    return mcp
+
+
+def _import_cost_explorer():
     from awslabs.billing_cost_management_mcp_server.tools.cost_explorer_tools import cost_explorer_server
-    from awslabs.cloudtrail_mcp_server.server import mcp as cloudtrail
-    from awslabs.cloudwatch_mcp_server.server import mcp as cloudwatch
+    return cost_explorer_server
+
+
+def _import_cloudtrail():
+    from awslabs.cloudtrail_mcp_server.server import mcp
+    return mcp
+
+
+def _import_pricing():
+    from awslabs.aws_pricing_mcp_server.server import mcp
+    return mcp
+
+
+def _import_iam():
     from awslabs.iam_mcp_server.context import Context as IamContext
-    from awslabs.iam_mcp_server.server import mcp as iam
+    from awslabs.iam_mcp_server.server import mcp
 
     # IAM 서버 자체의 읽기 전용 모드. 기본값이 켜짐이고 --allow-write로 실행할 때만 꺼지지만(main),
     # 같은 프로세스에서 import해 쓰므로 여기서 명시적으로 켜고 확인한다 (켜지지 않았으면 서버를 붙이지 않는다)
     IamContext.set_readonly(True)
     if not IamContext.is_readonly():
         raise RuntimeError("IAM MCP 서버의 읽기 전용 모드를 켜지 못했습니다")
+    return mcp
 
-    return [cloudwatch, documentation, cost_explorer_server, cloudtrail, pricing, iam, network]
+
+def _import_network():
+    from awslabs.aws_network_mcp_server.server import mcp
+    return mcp
+
+
+# 서버 이름 → 불러오는 함수 (이 순서가 tools/list의 순서다). 도구를 부를 때 그 도구의 서버 하나만 불러온다
+SERVER_IMPORTERS: Dict[str, Callable[[], Any]] = {
+    "cloudwatch": _import_cloudwatch,
+    "documentation": _import_documentation,
+    "cost_explorer": _import_cost_explorer,
+    "cloudtrail": _import_cloudtrail,
+    "pricing": _import_pricing,
+    "iam": _import_iam,
+    "network": _import_network,
+}
+
+
+def _import_server(key: str) -> Any:
+    """서버 하나를 불러온다 (환경 준비·기본 로거 되돌리기 포함)."""
+    def importer():
+        _prepare_environment()
+        return SERVER_IMPORTERS[key]()
+    return _keeping_root_logger(importer)
+
+
+def _import_default_servers() -> List[Any]:
+    _prepare_environment()
+    return [importer() for importer in SERVER_IMPORTERS.values()]
 
 
 class OfficialTools:
     """공식 서버 여러 개의 도구를 하나로 모아 목록을 주고, 이름으로 해당 서버에 호출을 넘긴다."""
 
     def __init__(self, load_servers: Callable[[], List[Any]], excluded: Optional[Dict[str, str]] = None,
-                 region_from_env: Optional[set] = None, hidden_arguments: Optional[Dict[str, Dict[str, Any]]] = None):
+                 region_from_env: Optional[set] = None, hidden_arguments: Optional[Dict[str, Dict[str, Any]]] = None,
+                 snapshot_path: Optional[str] = None, server_keys: Optional[List[str]] = None,
+                 import_server: Optional[Callable[[str], Any]] = None):
         self._load_servers = load_servers  # 서버 목록을 돌려주는 함수. 도구 목록이 처음 필요할 때 부른다
+        # 도구 목록 스냅샷 (모듈 설명). server_keys: load_servers가 돌려주는 서버의 이름 (같은 순서),
+        # import_server: 이름으로 서버 하나만 불러오는 함수 (스냅샷으로 목록을 만든 뒤 도구를 부를 때 쓴다)
+        self._snapshot_path = snapshot_path
+        self._server_keys = server_keys
+        self._import_server = import_server
+        self._owner: Dict[str, str] = {}  # 도구 이름 → 서버 이름
+        self._raw: Dict[str, Dict[str, Any]] = {}  # 도구 이름 → 보정 전 정의 (스냅샷에 적는 것)
         self._excluded = excluded or {}
         self._region_from_env = region_from_env or set()
         self._hidden_arguments = hidden_arguments or {}
@@ -229,7 +303,8 @@ class OfficialTools:
     @classmethod
     def default(cls) -> "OfficialTools":
         """이 서비스가 쓰는 공식 서버를 붙인다. 여기서는 불러오지 않는다 (위 모듈 설명)."""
-        return cls(load_default_servers, EXCLUDED_TOOLS, REGION_FROM_ENV_TOOLS, HIDDEN_ARGUMENTS)
+        return cls(load_default_servers, EXCLUDED_TOOLS, REGION_FROM_ENV_TOOLS, HIDDEN_ARGUMENTS,
+                   snapshot_path=SNAPSHOT_PATH, server_keys=list(SERVER_IMPORTERS), import_server=_import_server)
 
     def _without_hidden(self, name: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         """HIDDEN_ARGUMENTS의 인자를 스키마에서 뺀다. 실제로 있던 인자만 부를 때 채워 넣는다."""
@@ -265,11 +340,19 @@ class OfficialTools:
     def _run(self, coro):
         return self._loop.run_until_complete(coro)
 
+    def _finish(self, raw: Dict[str, Any]) -> Dict[str, Any]:
+        """보정 전 정의(스냅샷에 적는 것) → tools/list에 넣을 정의 (이 Lambda의 리전·숨긴 인자 보정)."""
+        name = raw["name"]
+        return {"name": name, "description": raw.get("description", ""),
+                "inputSchema": self._without_hidden(name, self._with_env_region(name, raw["inputSchema"]))}
+
     async def _collect(self) -> None:
         from fastmcp import Client
 
         schemas: Dict[str, Dict[str, Any]] = {}
-        for server in self._load_servers():
+        servers = self._load_servers()
+        keys = self._server_keys if self._server_keys and len(self._server_keys) == len(servers) else None
+        for index, server in enumerate(servers):
             async with Client(server) as client:
                 for tool in await client.list_tools():
                     if tool.name in self._excluded:
@@ -277,30 +360,81 @@ class OfficialTools:
                     if tool.name in schemas:
                         raise ValueError(f"공식 MCP 도구 이름이 겹칩니다: {tool.name}")
                     definition = tool.model_dump(by_alias=True, exclude_none=True, mode="json")
-                    schemas[tool.name] = {
-                        "name": tool.name,
-                        "description": definition.get("description", ""),
-                        "inputSchema": self._without_hidden(tool.name, self._with_env_region(
-                            tool.name, _inline_refs(definition.get("inputSchema", {"type": "object"})))),
-                    }
+                    raw = {"name": tool.name, "description": definition.get("description", ""),
+                           "inputSchema": _inline_refs(definition.get("inputSchema", {"type": "object"}))}
+                    self._raw[tool.name] = raw
+                    schemas[tool.name] = self._finish(raw)
                     self._routes[tool.name] = server
+                    self._owner[tool.name] = keys[index] if keys else str(index)
         self._schemas = schemas
 
+    def _load_snapshot(self) -> bool:
+        """스냅샷 파일로 도구 목록을 만든다 (서버를 불러오지 않는다). 없거나 맞지 않으면 False."""
+        if not self._snapshot_path or not self._import_server or not os.path.exists(self._snapshot_path):
+            return False
+        try:
+            with open(self._snapshot_path, encoding="utf-8") as file:
+                snapshot = json.load(file)
+            if snapshot.get("version") != SNAPSHOT_VERSION:
+                return False
+            tools = snapshot["tools"]
+            if any(tool["server"] not in (self._server_keys or []) for tool in tools):
+                return False
+            schemas = {}
+            for tool in tools:
+                if tool["name"] in self._excluded:  # 스냅샷을 만든 뒤 뺀 도구
+                    continue
+                raw = {"name": tool["name"], "description": tool.get("description", ""),
+                       "inputSchema": tool["inputSchema"]}
+                schemas[tool["name"]] = self._finish(raw)
+                self._owner[tool["name"]] = tool["server"]
+            self._schemas = schemas
+            logger.info("공식 MCP 도구 %d개를 스냅샷에서 읽었습니다 (서버는 부를 때 불러옵니다)", len(schemas))
+            return True
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            logger.warning("공식 MCP 도구 스냅샷을 읽지 못해 서버를 불러와 모읍니다: %s", error)
+            self._owner.clear()
+            return False
+
     def schemas(self) -> List[Dict[str, Any]]:
-        """tools/list에 넣을 도구 정의. 처음 부를 때 공식 서버를 불러와 한 번만 모은다 (컨테이너가 살아 있는 동안 그대로)."""
-        if self._schemas is None:
+        """tools/list에 넣을 도구 정의. 스냅샷이 있으면 그것으로, 없으면 공식 서버를 불러와 한 번만 모은다
+        (컨테이너가 살아 있는 동안 그대로)."""
+        if self._schemas is None and not self._load_snapshot():
             self._run(self._collect())
         return list(self._schemas.values())
 
     def has(self, name: str) -> bool:
         self.schemas()
-        return name in self._routes
+        return name in self._schemas
+
+    def _server_of(self, name: str) -> Any:
+        """도구가 속한 서버 객체. 스냅샷으로 목록을 만들었으면 그 서버 하나만 이때 불러온다."""
+        if name in self._routes:
+            return self._routes[name]
+        key = self._owner.get(name)
+        if key is None or self._import_server is None:
+            self._run(self._collect())  # 스냅샷에 없는 도구: 예전처럼 모두 불러와 모은다
+            return self._routes[name]
+        server = self._import_server(key)
+        for tool_name, owner in self._owner.items():
+            if owner == key:
+                self._routes[tool_name] = server
+        # 숨긴 인자 보정(_injected)은 스냅샷을 읽을 때(_finish) 이미 정해졌다
+        return server
+
+    def write_snapshot(self, path: str) -> int:
+        """모든 서버를 불러와 도구 정의를 파일로 적는다 (이미지를 만들 때, Dockerfile). 적은 도구 수를 돌려준다."""
+        self._run(self._collect())
+        tools = [{**self._raw[name], "server": self._owner[name]} for name in self._schemas]
+        with open(path, "w", encoding="utf-8") as file:
+            json.dump({"version": SNAPSHOT_VERSION, "tools": tools}, file, ensure_ascii=False)
+        return len(tools)
 
     def call(self, name: str, arguments: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], bool]:
         """도구를 부르고 (MCP content 목록, 오류 여부)를 돌려준다. 도구 안의 오류도 예외가 아니라 결과로 온다."""
         from fastmcp import Client
 
-        server = self._routes[name]
+        server = self._server_of(name)
         # 스키마에서 뺀 인자를 채워 넣는다 (공식 서버 결함 보정). 모델이 같은 이름을 보내도 보정 값이 이긴다
         if name in self._injected:
             arguments = {**(arguments or {}), **copy.deepcopy(self._injected[name])}
@@ -317,3 +451,23 @@ class OfficialTools:
         if result.is_error:
             logger.warning("공식 MCP 도구 %s 오류: %s", name, content[:1])
         return content, bool(result.is_error)
+
+
+def main(argv: List[str]) -> int:
+    """이미지를 만들 때 도구 목록 스냅샷을 적는다: python -m lambda_mcp.official --write-snapshot
+    실패해도 빌드를 멈추지 않는다 (스냅샷이 없으면 실행할 때 예전처럼 모두 불러와 모은다)."""
+    if argv[1:] != ["--write-snapshot"]:
+        print("사용법: python -m lambda_mcp.official --write-snapshot")
+        return 2
+    try:
+        count = OfficialTools.default().write_snapshot(SNAPSHOT_PATH)
+        print(f"공식 MCP 도구 {count}개를 {SNAPSHOT_PATH}에 적었습니다")
+    except Exception as error:  # noqa: BLE001 - 빌드는 계속한다
+        print(f"공식 MCP 도구 스냅샷을 만들지 못했습니다 (실행할 때 모두 불러와 모읍니다): {error}")
+        if os.path.exists(SNAPSHOT_PATH):
+            os.remove(SNAPSHOT_PATH)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

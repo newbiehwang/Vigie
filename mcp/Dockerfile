@@ -31,6 +31,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # lambda_mcp 모듈 폴더 복사
 COPY lambda_mcp/ lambda_mcp/
 
+# 공식 MCP 도구 목록 스냅샷 (lambda_mcp/official.py 모듈 설명).
+# 이미지에 설치된 공식 서버를 한 번 불러와 도구 정의를 lambda_mcp/official_tools.json에 적어 둔다.
+# 그러면 tools/list가 공식 서버 7개를 불러오지 않고 이 파일을 읽어, 차가운 MCP Lambda의 첫 질문이 10초 넘게 기다리지 않는다.
+# 만들지 못해도 빌드는 계속한다 (파일이 없으면 실행할 때 예전처럼 모두 불러와 모은다).
+# 리전은 도구 정의에 쓰이지 않는다 (읽을 때 Lambda의 리전으로 채운다). 서버가 import할 때 boto3가 리전을 찾으므로
+# 빌드하는 곳(CodeBuild)의 리전을 받아 둔다 (cloudformation/mcp.yaml의 --build-arg). 실행 환경 변수로는 남지 않는다
+ARG AWS_REGION
+RUN AWS_DEFAULT_REGION=$AWS_REGION python -m lambda_mcp.official --write-snapshot
+
 # 애플리케이션 코드의 나머지를 복사합니다
 COPY app.py .
 
