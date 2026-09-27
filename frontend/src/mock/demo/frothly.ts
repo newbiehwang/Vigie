@@ -213,12 +213,20 @@ export const demoCost = () => {
 };
 
 // ---------------------------------------------------------------- 리소스 · 변경 · 개선 권고
-const PUBLIC_BUCKET = 'frothlywebcode';
+export const PUBLIC_BUCKET = 'frothlywebcode';
+export const FORENSIC_INSTANCE = 'i-08e52f8b5a034012d';
 
-export const idleInstance = () => FROTHLY.instances.find((i) => i.id === 'i-08e52f8b5a034012d')!;
+// 데모 대화에서 승인해 바꾼 상태 (mock/api.ts의 mockResources가 들고 있다). 대시보드와 답이 이것을 따른다
+export interface DemoState {
+    forensicStopped: boolean; // 조사용 인스턴스를 중지했다 (setEc2InstanceState)
+    webcodeBlocked: boolean; // frothlywebcode의 퍼블릭 액세스 차단을 켰다 (enableS3PublicAccessBlock)
+}
+export const INITIAL_DEMO_STATE: DemoState = { forensicStopped: false, webcodeBlocked: false };
+
+export const idleInstance = () => FROTHLY.instances.find((i) => i.id === FORENSIC_INSTANCE)!;
 export const webInstance = () => FROTHLY.instances.find((i) => i.name === 'WebServers')!;
 
-export const demoResources = (): DashboardResource[] => {
+export const demoResources = (state: DemoState = INITIAL_DEMO_STATE): DashboardResource[] => {
     const errors = (key: string) => metricSum(key);
     const rdsErrors = errors(LAMBDA_ERROR_KEYS.RDSAuditLogs);
     const vpcErrors = errors(LAMBDA_ERROR_KEYS.VPCFlowLogs);
@@ -239,19 +247,24 @@ export const demoResources = (): DashboardResource[] => {
             errors24h: rdsErrors,
         },
         { id: 'VPCFlowLogs', kind: 'Lambda', status: vpcErrors ? 'warn' : 'ok', detail: `오류 ${vpcErrors}건`, errors24h: vpcErrors },
-        {
-            id: PUBLIC_BUCKET,
-            kind: 'S3',
-            status: 'warn',
-            detail: '퍼블릭 액세스 차단 해제 · 오늘 공개 읽기·쓰기 ACL이 걸렸다 풀림',
-        },
-        {
-            id: idle.id,
-            label: idle.name ?? undefined,
-            kind: 'EC2',
-            status: 'warn',
-            detail: `${idle.type} · CPU 평균 ${metricAverage('forensicCpu')}% · 유휴`,
-        },
+        state.webcodeBlocked
+            ? { id: PUBLIC_BUCKET, kind: 'S3', status: 'ok', detail: '퍼블릭 액세스 차단 모두 적용 · 대화에서 승인해 켬' }
+            : {
+                  id: PUBLIC_BUCKET,
+                  kind: 'S3',
+                  status: 'warn',
+                  detail: '퍼블릭 액세스 차단 해제 · 오늘 공개 읽기·쓰기 ACL이 걸렸다 풀림',
+              },
+        // 중지한 인스턴스는 서버처럼 '데이터 없음'으로 보인다 (services/llm/dashboard_view.py의 _ec2_row)
+        state.forensicStopped
+            ? { id: idle.id, label: idle.name ?? undefined, kind: 'EC2', status: 'none', detail: '상태 stopped' }
+            : {
+                  id: idle.id,
+                  label: idle.name ?? undefined,
+                  kind: 'EC2',
+                  status: 'warn',
+                  detail: `${idle.type} · CPU 평균 ${metricAverage('forensicCpu')}% · 유휴`,
+              },
         {
             // 이 그룹의 인스턴스는 오늘 여러 번 바뀌어 ID 대신 그룹 이름으로 보인다
             id: 'WebServers',
@@ -274,22 +287,19 @@ export const demoChanges = (): DashboardChange[] =>
         .map((event) => ({ at: epochOf(event.at), source: 'cloudtrail' as const, actor: event.actor, summary: changeSummary(event) }))
         .reverse();
 
-export const demoFindings = (): DashboardFinding[] => {
+export const demoFindings = (state: DemoState = INITIAL_DEMO_STATE): DashboardFinding[] => {
     const idle = idleInstance();
-    return [
-        {
-            kind: 'public-s3',
-            status: 'fail',
-            title: '퍼블릭 액세스 차단 미적용 S3 버킷 1개',
-            detail: PUBLIC_BUCKET,
-        },
-        {
+    const findings: DashboardFinding[] = [];
+    if (!state.webcodeBlocked)
+        findings.push({ kind: 'public-s3', status: 'fail', title: '퍼블릭 액세스 차단 미적용 S3 버킷 1개', detail: PUBLIC_BUCKET });
+    if (!state.forensicStopped)
+        findings.push({
             kind: 'idle-ec2',
             status: 'warn',
             title: '유휴 EC2 인스턴스 1대',
             detail: `${idle.name} · 최근 CPU 평균 ${metricAverage('forensicCpu')}%`,
-        },
-    ];
+        });
+    return findings;
 };
 
 // 대시보드 중 데모 데이터로 채우는 부분 (승인 대기·이 앱의 변경·Vigie 알람 상태는 mock/api.ts가 더한다)
