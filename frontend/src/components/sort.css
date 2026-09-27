@@ -31,16 +31,16 @@
 }
 
 .sort-button:hover {
-  color: #3c4650;
-  background: rgba(31, 41, 51, 0.05);
+  color: var(--ink-2);
+  background: rgba(10, 22, 40, 0.05);
 }
 
 .sort-button.is-active {
-  color: #1f2933;
+  color: var(--ink);
 }
 
 .sort-button:focus-visible {
-  outline: 2px solid rgba(0, 123, 255, 0.35);
+  outline: 2px solid rgba(30, 90, 168, 0.35);
   outline-offset: 1px;
 }
 
@@ -53,26 +53,26 @@
 }
 
 .sort-icon path {
-  stroke: #c3cad3;
+  stroke: var(--line);
   transition: stroke 120ms ease;
 }
 
 .sort-button:hover .sort-icon path {
-  stroke: #9aa4b1;
+  stroke: var(--slate);
 }
 
 /* 지금 방향의 꺾쇠만 진하게, 반대쪽은 거의 보이지 않게 */
 .sort-icon.is-asc .sort-icon-up,
 .sort-icon.is-desc .sort-icon-down {
-  stroke: #1f2933;
+  stroke: var(--ink);
 }
 
 .sort-icon.is-asc .sort-icon-down,
 .sort-icon.is-desc .sort-icon-up {
-  stroke: #dfe4ea;
+  stroke: var(--line);
 }
 
 .sort-button:hover .sort-icon.is-asc .sort-icon-up,
 .sort-button:hover .sort-icon.is-desc .sort-icon-down {
-  stroke: #1f2933;
+  stroke: var(--ink);
 }

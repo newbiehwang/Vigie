@@ -67,11 +67,12 @@ export const layerLabel = (id: TraceLayer) => LAYERS.find((layer) => layer.id ==
 
 // 변경 작업의 사건 → 결과 열에 보일 이름과 모양
 export const ACTION_EVENTS: Record<string, { label: string; className: string }> = {
-    requested: { label: '승인 요청', className: 'audit-event-requested' },
-    approved: { label: '승인', className: 'plan-status-active' },
-    denied: { label: '거절', className: 'plan-status-pending' },
-    executed: { label: '실행', className: 'plan-status-complete' },
-    failed: { label: '실패', className: 'audit-status-error' },
+    // className: 공통 배지(components/badge.css)의 변형. 승인 요청만 파랑 테두리, 실패만 빨강, 나머지는 조용하게
+    requested: { label: '승인 요청', className: 'is-normal' },
+    approved: { label: '승인', className: 'is-quiet' },
+    denied: { label: '거절', className: 'is-quiet is-empty' },
+    executed: { label: '실행', className: 'is-quiet' },
+    failed: { label: '실패', className: 'is-fail' },
 };
 
 // 가린 값의 종류 → 화면에 보일 이름 (services/llm/redaction.py)

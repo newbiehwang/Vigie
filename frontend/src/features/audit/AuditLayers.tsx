@@ -36,6 +36,8 @@ import { ACTION_EVENTS, LAYERS, requesterOf, toolLabelOf } from './auditModel';
 
 // ---------------------------------------------------------------- 판정
 const STATUS_LABELS: Record<TraceStatus, string> = { ok: '정상', warn: '주의', fail: '실패', info: '참고' };
+// 판정 배지 (공통 배지 components/badge.css): 실패 빨강 테두리 · 주의 파랑 테두리 · 정상 글자와 회청색 점 · 참고 옅은 점
+const STATUS_BADGES: Record<TraceStatus, string> = { ok: 'is-quiet', warn: 'is-normal', fail: 'is-fail', info: 'is-quiet is-empty' };
 
 // 판정 개수의 차례 (나쁜 것부터)
 const STATUS_ORDER: TraceStatus[] = ['fail', 'warn', 'ok', 'info'];
@@ -415,7 +417,7 @@ export function AuditLayers({ record }: { record: AuditRecord }) {
                             <strong>{selected.label}</strong>
                             <span className="audit-cycle-en">{selected.en}</span>
                             {selectedStep ? (
-                                <span className={`audit-trace-badge is-${selectedStep.status}`}>{STATUS_LABELS[selectedStep.status]}</span>
+                                <span className={`badge audit-trace-badge ${STATUS_BADGES[selectedStep.status]}`}>{STATUS_LABELS[selectedStep.status]}</span>
                             ) : null}
                         </div>
                         <p className="audit-cycle-panel-text">{selected.description}</p>

@@ -5,31 +5,31 @@
   width: 100%;
   height: 42px;
   border-radius: 10px;
-  border: 1px solid #d9e0e8;
+  border: 1px solid var(--line);
   padding: 0 12px;
   font-family: var(--font-body);
   font-size: 0.94rem;
-  color: #1f2933;
-  background: #fff;
+  color: var(--ink);
+  background: var(--surface);
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
 .login-input::placeholder {
-  color: #a0aab5;
+  color: var(--slate);
 }
 
 .login-input:focus {
   outline: none;
-  border-color: rgba(0, 123, 255, 0.56);
-  box-shadow: inset 0 0 0 1px rgba(0, 123, 255, 0.14);
+  border-color: rgba(30, 90, 168, 0.56);
+  box-shadow: inset 0 0 0 1px rgba(30, 90, 168, 0.14);
 }
 
 .login-error-alert {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  border: 1px solid #f3c2c7;
-  background: #fdf1f2;
+  border: 1px solid rgba(180, 35, 24, 0.25);
+  background: var(--danger-soft);
   border-radius: 10px;
   padding: 10px 12px;
   animation: menu-in 160ms ease both;
@@ -42,8 +42,8 @@
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  background: #dc3545;
-  color: #fff;
+  background: var(--danger);
+  color: var(--surface);
   font-family: var(--font-label);
   font-size: 0.8rem;
   font-weight: 700;
@@ -63,7 +63,7 @@
   font-family: var(--font-label);
   font-size: 0.8rem;
   font-weight: 700;
-  color: #b02a37;
+  color: var(--danger);
 }
 
 .login-error-text {
@@ -71,7 +71,7 @@
   font-family: var(--font-body);
   font-size: 0.8rem;
   line-height: 1.45;
-  color: #8f3b44;
+  color: var(--ink-2);
 }
 
 .login-submit {
@@ -80,13 +80,13 @@
   border: 0;
   border-radius: 10px;
   background: var(--color-primary);
-  color: #fff;
+  color: var(--surface);
   font-family: var(--font-label);
   font-size: 0.94rem;
   font-weight: 700;
   letter-spacing: -0.01em;
   cursor: pointer;
-  box-shadow: 0 8px 16px rgba(0, 123, 255, 0.2);
+  box-shadow: 0 8px 16px rgba(30, 90, 168, 0.2);
   transition: transform 180ms ease, filter 180ms ease;
 }
 
@@ -189,7 +189,7 @@
 }
 
 .nav-link:focus-visible {
-  outline: 2px solid rgba(0, 123, 255, 0.35);
+  outline: 2px solid rgba(30, 90, 168, 0.35);
   outline-offset: 4px;
   border-radius: 4px;
 }
@@ -215,18 +215,18 @@
   width: 32px;
   height: 32px;
   border-radius: var(--radius-pill);
-  border: 1px solid #cfe0f5;
-  background: #eef5ff;
+  border: 1px solid var(--primary-soft-strong);
+  background: var(--primary-soft);
   display: grid;
   place-items: center;
   cursor: pointer;
-  box-shadow: 0 4px 10px rgba(35, 47, 62, 0.12);
+  box-shadow: 0 4px 10px rgba(10, 22, 40, 0.12);
   transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 
 .profile-avatar.is-open {
-  border-color: rgba(0, 123, 255, 0.45);
-  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.12);
+  border-color: rgba(30, 90, 168, 0.45);
+  box-shadow: 0 0 0 2px rgba(30, 90, 168, 0.12);
 }
 
 .profile-avatar span {
@@ -243,9 +243,9 @@
   right: 0;
   width: 378px;
   border-radius: 14px;
-  border: 1px solid #dfe6ee;
+  border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 14px 30px rgba(35, 47, 62, 0.16);
+  box-shadow: 0 14px 30px rgba(10, 22, 40, 0.16);
   padding: 12px 0;
   animation: menu-in 180ms ease both;
 }
@@ -261,11 +261,11 @@
   width: 38px;
   height: 38px;
   border-radius: var(--radius-pill);
-  border: 1px solid #cfe0f5;
-  background: #eef5ff;
+  border: 1px solid var(--primary-soft-strong);
+  background: var(--primary-soft);
   display: grid;
   place-items: center;
-  box-shadow: 0 4px 10px rgba(35, 47, 62, 0.12);
+  box-shadow: 0 4px 10px rgba(10, 22, 40, 0.12);
 }
 
 .summary-avatar span {
@@ -290,7 +290,7 @@
   font-size: 1.02rem;
   font-weight: 700;
   line-height: 1.2;
-  color: #1f2933;
+  color: var(--ink);
 }
 
 .summary-email {
@@ -298,7 +298,7 @@
   font-family: var(--font-body);
   font-size: 0.78rem;
   line-height: 1.2;
-  color: #8a94a0;
+  color: var(--ink-3);
 }
 
 /* 권한 (일반 사용자 · 결정자 · 관리자) */
@@ -307,8 +307,8 @@
   margin: 6px 0 0;
   padding: 1px 8px;
   border-radius: 999px;
-  background: rgba(120, 120, 120, 0.12);
-  color: #5f6670;
+  background: rgba(123, 147, 176, 0.12);
+  color: var(--ink-3);
   font-family: var(--font-label);
   font-size: 11px;
   font-weight: 700;
@@ -316,21 +316,21 @@
 
 .summary-role.is-decider,
 .summary-role.is-admin {
-  background: rgba(0, 123, 255, 0.1);
-  color: #007bff;
+  background: rgba(30, 90, 168, 0.1);
+  color: var(--primary);
 }
 
 .profile-dropdown-divider {
   height: 1px;
   margin: 6px 16px;
-  background: #e6ebf1;
+  background: var(--line-soft);
 }
 
 .profile-dropdown-item {
   width: 100%;
   border: 0;
   background: transparent;
-  color: #1f2933;
+  color: var(--ink);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -344,7 +344,7 @@
 }
 
 .profile-dropdown-item:hover {
-  background: #f1f6fd;
+  background: var(--primary-soft);
 }
 
 .profile-dropdown-item svg {
@@ -354,7 +354,7 @@
 }
 
 .profile-dropdown-item.is-danger {
-  color: #dc3545;
+  color: var(--danger);
 }
 
 .profile-dropdown-item:disabled {
@@ -383,7 +383,7 @@
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(15, 23, 42, 0.38);
+  background: rgba(10, 22, 40, 0.38);
   backdrop-filter: blur(1.5px);
   display: grid;
   place-items: center;
@@ -452,7 +452,7 @@
   display: flex;
   flex-direction: column;
   padding: 0 clamp(16px, 4vw, 56px);
-  background-color: #f7f9fc;
+  background-color: var(--canvas);
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
@@ -527,7 +527,7 @@
   max-width: 34em;
   font-size: 1rem;
   line-height: 1.7;
-  color: #4a5563;
+  color: var(--ink-2);
 }
 
 .landing-actions {
@@ -556,9 +556,9 @@
 .landing-preview {
   border: 1px solid var(--raised-border);
   border-radius: 18px;
-  background: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 2px 4px rgba(35, 47, 62, 0.05),
-    0 28px 60px rgba(35, 47, 62, 0.14);
+  background: var(--surface);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 2px 4px rgba(10, 22, 40, 0.05),
+    0 28px 60px rgba(10, 22, 40, 0.14);
   overflow: hidden;
 }
 
@@ -567,15 +567,15 @@
   align-items: center;
   gap: 6px;
   padding: 11px 14px;
-  border-bottom: 1px solid #eef2f6;
-  background: #fafbfd;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--canvas);
 }
 
 .landing-preview-bar i {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #dfe6ee;
+  background: var(--line);
 }
 
 /* 예시마다 길이가 달라도 창 크기가 흔들리지 않게 가장 긴 예시만큼 높이를 잡아 둔다 */
@@ -584,7 +584,7 @@
   padding: 18px 18px 20px;
   font-size: 0.86rem;
   line-height: 1.55;
-  color: #1f2933;
+  color: var(--ink);
 }
 
 /* 대화 예시 한 벌 (LandingChatDemo.tsx): 사라질 때 서서히 투명해지며 살짝 위로 */
@@ -626,7 +626,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #9aa4b1;
+  background: var(--slate);
   animation: login-splash-dot 900ms ease-in-out infinite;
 }
 
@@ -639,7 +639,7 @@
 }
 
 .landing-table td.is-up {
-  color: #b02a37;
+  color: var(--ink);
   font-weight: 700;
 }
 
@@ -647,9 +647,9 @@
   justify-self: end;
   margin: 0;
   padding: 8px 13px;
-  border: 1px solid #d3e4fb;
+  border: 1px solid var(--primary-soft-strong);
   border-radius: 14px;
-  background: #e7f1ff;
+  background: var(--primary-soft);
 }
 
 .landing-answer {
@@ -675,30 +675,30 @@
 
 .landing-trace {
   font-size: 12px;
-  color: #6b7785;
+  color: var(--ink-3);
 }
 
 .landing-trace b {
-  color: #58a779;
+  color: var(--status-ok);
   font-size: 9px;
   margin-right: 4px;
 }
 
 .landing-trace span {
   margin-left: 4px;
-  color: #9aa4b1;
+  color: var(--slate);
 }
 
 .landing-table {
   border-collapse: collapse;
-  border: 1px solid #e1e7ef;
+  border: 1px solid var(--line);
   border-radius: 8px;
   font-size: 12px;
 }
 
 .landing-table td {
   padding: 5px 10px;
-  border-top: 1px solid #eef2f6;
+  border-top: 1px solid var(--line-soft);
 }
 
 .landing-table td:nth-child(2) {
@@ -712,22 +712,13 @@
   gap: 6px 10px;
   padding: 9px 12px;
   border: 1px solid var(--raised-border);
-  border-top: 3px solid #f0a020;
+  border-top: 3px solid var(--status-pending);
   border-radius: 12px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--raised-shadow-sm);
 }
 
-.landing-approval-badge {
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: rgba(255, 153, 0, 0.18);
-  color: #9a5b00;
-  font-family: var(--font-label);
-  font-size: 11px;
-  font-weight: 700;
-}
-
+/* '승인 필요' 배지는 공통 배지(components/badge.css의 is-normal)를 쓴다 */
 .landing-approval-title {
   font-family: var(--font-label);
   font-size: 12px;
@@ -738,11 +729,11 @@
   margin-left: auto;
   font-family: var(--font-label);
   font-size: 12px;
-  color: #8a94a0;
+  color: var(--ink-3);
 }
 
 .landing-approval-change b {
-  color: #111827;
+  color: var(--ink);
   font-size: 13px;
 }
 
@@ -754,7 +745,7 @@
   padding-bottom: 28px;
   font-size: 12px;
   line-height: 1.6;
-  color: #6b7785;
+  color: var(--ink-3);
 }
 
 .landing-sources a {
@@ -790,7 +781,7 @@
   height: 30px;
   padding: 6px;
   border-radius: 9px;
-  background: #eef4ff;
+  background: var(--primary-soft);
   fill: none;
   stroke: var(--color-primary);
   stroke-width: 1.8;
@@ -810,7 +801,7 @@
   margin: 0;
   font-size: 0.84rem;
   line-height: 1.6;
-  color: #5f6b7a;
+  color: var(--ink-3);
 }
 
 /* 처음 그릴 때 왼쪽 글이 차례로 서서히 나타난다 (--enter 순서: 태그·제목 → 소개 → 버튼, 220ms씩) */
@@ -878,7 +869,7 @@
   display: grid;
   place-items: center;
   padding: 16px;
-  background-color: #f7f9fc;
+  background-color: var(--canvas);
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
@@ -890,10 +881,10 @@
   justify-items: center;
   gap: 18px;
   padding: 40px 28px 32px;
-  border: 1px solid #e1e7ef;
+  border: 1px solid var(--line);
   border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 16px 40px rgba(35, 47, 62, 0.13);
+  background: var(--surface);
+  box-shadow: 0 16px 40px rgba(10, 22, 40, 0.13);
   animation: login-splash-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -911,7 +902,7 @@
   margin: 0;
   font-family: var(--font-label);
   font-size: 0.86rem;
-  color: #6b7785;
+  color: var(--ink-3);
 }
 
 /* 기다리는 동안 차례로 깜빡이는 파란 점 세 개 */
