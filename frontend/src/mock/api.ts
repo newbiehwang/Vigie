@@ -1622,7 +1622,7 @@ const route = (
 // 실제로는 수집 Lambda가 구역마다 모아 둔 값을 서버(services/llm/dashboard_view.py)가 합쳐 준다.
 // mock은 오늘 날짜에 맞춰 그럴듯한 값을 서버와 같은 모양으로 만든다 (리소스별 비용·절약액은 서버처럼 주지 않는다).
 // 이 mock 안의 다른 상태와 이어진다: 대화에서 승인을 기다리는 요청 수, 승인해 실행한 변경(최근 변경),
-// 알람 알림을 끄면 치울 것에 '알림 꺼진 알람'이 생기고, 보존 기간을 줄이면 '보존 기간이 긴 로그'가 없어진다
+// 알람 알림을 끄면 개선 권고에 '알림 꺼진 알람'이 생기고, 보존 기간을 줄이면 '보존 기간이 긴 로그'가 없어진다
 
 // 날짜마다 같은 값이 나오는 가짜 난수 (0~1). 새로 고쳐도 차트가 흔들리지 않게
 const wobble = (n: number) => {
@@ -1680,7 +1680,7 @@ const dashboardData = (): DashboardData => {
   const resources: DashboardResource[] = [
     { id: "wga-llm-dev", kind: "Lambda", status: "fail", detail: "오류율 4.2% · 시간 초과 늘어남", errors24h: 31, changedAt: nowS - 26 * HOUR },
     { id: MOCK_ALARM, kind: "Alarm", status: mockResources.alarmActions ? "fail" : "warn", detail: mockResources.alarmActions ? "ALARM · 12분째" : "알림 꺼짐 (점검 중)" },
-    { id: "i-0428ab91c3d5e7f60", label: "wga-batch", kind: "EC2", status: "warn", detail: "CPU 평균 1.8% (14일) · 놀고 있음" },
+    { id: "i-0428ab91c3d5e7f60", label: "wga-batch", kind: "EC2", status: "warn", detail: "CPU 평균 1.8% (14일) · 유휴" },
     { id: "wga-reports-dev", kind: "S3", status: "warn", detail: "퍼블릭 액세스 차단 일부 꺼짐" },
     { id: "wga-mcp-dev", kind: "Lambda", status: "ok", detail: "오류 없음", errors24h: 0 },
     { id: "wga-chat-history-dev", kind: "Lambda", status: "ok", detail: "오류 2건 (재시도로 성공)", errors24h: 2 },
@@ -1707,13 +1707,13 @@ const dashboardData = (): DashboardData => {
   const changes = [...appChanges, ...cloudChanges].sort((a, b) => b.at - a.at);
 
   const findings: DashboardFinding[] = [
-    { kind: "idle-ec2", status: "warn", title: "놀고 있는 EC2 1대", detail: "wga-batch · 14일 동안 CPU 평균 1.8%" },
-    { kind: "public-s3", status: "fail", title: "공개될 수 있는 S3 버킷 1개", detail: "wga-reports-dev · 퍼블릭 액세스 차단 2개 꺼짐" },
+    { kind: "idle-ec2", status: "warn", title: "유휴 EC2 인스턴스 1대", detail: "wga-batch · 14일 동안 CPU 평균 1.8%" },
+    { kind: "public-s3", status: "fail", title: "퍼블릭 액세스 차단 미적용 S3 버킷 1개", detail: "wga-reports-dev · 퍼블릭 액세스 차단 2개 꺼짐" },
     ...(longRetention
-      ? [{ kind: "log-retention" as const, status: "warn" as const, title: "보존 기간이 긴 로그 그룹 1개", detail: `${MOCK_LOG_GROUP} · ${retentionText(mockResources.retention)} 보관, 14일이면 충분` }]
+      ? [{ kind: "log-retention" as const, status: "warn" as const, title: "보존 기간 과다 로그 그룹 1개", detail: `${MOCK_LOG_GROUP} · ${retentionText(mockResources.retention)} 보관, 14일이면 충분` }]
       : []),
     ...(!mockResources.alarmActions
-      ? [{ kind: "alarm-muted" as const, status: "warn" as const, title: "알림이 꺼진 알람 1개", detail: `${MOCK_ALARM} · 울려도 메일이 가지 않음` }]
+      ? [{ kind: "alarm-muted" as const, status: "warn" as const, title: "알림 비활성 알람 1개", detail: `${MOCK_ALARM} · 울려도 메일이 가지 않음` }]
       : []),
   ];
 

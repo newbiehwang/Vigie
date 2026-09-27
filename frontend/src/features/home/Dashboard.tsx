@@ -8,8 +8,9 @@
 //   [울리는 알람 1/24] [Lambda 오류 37 ▁▂▅] [이번 달 비용 $362 +8%] [승인 대기 1]   ← 숫자 카드 (누르면 대화로)
 //   [일별 비용 (막대 · 평균 점선 · 남은 날 점선 칸)      ] [서비스별 비용 (가로 막대)]
 //   [리소스 상태 (분포 막대 + 정렬되는 표)              ] [최근 변경 (시간 줄)     ]
-//   [치울 것 (카드 여러 개, 누르면 대화로)                                          ]
-// - AI에게 묻는 곳은 '지금 확인할 것'의 줄뿐이다 (누르면 그 내용을 질문으로 새 대화). 숫자 카드·표·치울 것은 보기만 한다.
+//   [개선 권고 (카드 여러 개)                                                       ]
+// - AI에게 묻는 곳은 '지금 확인할 것'의 줄뿐이다 (누르면 그 내용을 질문으로 새 대화). 숫자 카드·표·개선 권고는 보기만 한다.
+// - 설명 글은 두지 않는다: 확인할 것이 없으면 그 상자를 아예 그리지 않고, 값이 없는 칸은 '데이터가 존재하지 않습니다'만
 //   맨 위 입력칸은 그대로 (직접 물을 때)
 // - 처음 그릴 때: 카드가 차례로 떠오르고(AXPI priority-card-enter), 숫자가 0에서 올라가고, 막대가 바닥에서 자란다.
 //   30초마다 다시 읽을 때는 다시 움직이지 않는다 (요소가 그대로라 CSS 등장 효과가 다시 돌지 않는다)
@@ -140,7 +141,7 @@ const CADENCE: Record<SectionName, string> = {
 // 얼마나 새 값인가: '5분마다 · 2분 전' / 실패하면 '모으지 못함 · 마지막 성공 3시간 전' (빨강, 마우스를 올리면 까닭)
 function Freshness({ data, section }: { data: DashboardData; section: SectionName }) {
     const state: SectionState | undefined = data.sections?.[section];
-    if (!state) return <span className="dash-fresh is-missing">아직 모으지 않음</span>;
+    if (!state) return null;
     if (!state.ok) {
         return (
             <span className="dash-fresh is-stale" title={state.error ?? undefined}>
@@ -156,12 +157,8 @@ function Freshness({ data, section }: { data: DashboardData; section: SectionNam
 }
 
 // 한 번도 모으지 못한 칸
-function NotYet({ section }: { section: SectionName }) {
-    return (
-        <p className="dash-card-note dash-notyet">
-            아직 모으지 않았습니다. {CADENCE[section] === '실시간' ? '곧' : CADENCE[section]} 모읍니다.
-        </p>
-    );
+function NotYet() {
+    return <p className="dash-card-note dash-notyet">데이터가 존재하지 않습니다.</p>;
 }
 
 // 한 번도 모으지 못한 숫자 카드 (누를 것이 없다)
@@ -173,7 +170,6 @@ function EmptyKpi({ label, data, section, order }: { label: string; data: Dashbo
                 <Freshness data={data} section={section} />
             </span>
             <span className="dash-kpi-value">–</span>
-            <span className="dash-kpi-sub">{CADENCE[section]} 모읍니다</span>
         </div>
     );
 }
@@ -272,7 +268,6 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                     <h2 className="dash-title">운영 현황</h2>
                     {data ? (
                         <p className="dash-meta">
-                            <span className="dash-env">{data.env}</span>
                             {data.region} · 마지막 업데이트 시각: {data.generatedAt ? kst(data.generatedAt) : '아직 없음'}
                         </p>
                     ) : null}
@@ -331,11 +326,11 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                         <CountUp value={data.alarms.firing.length} />
                                         <span className="dash-kpi-unit"> / {data.alarms.total}개</span>
                                     </span>
-                                    <span className="dash-kpi-sub">
-                                        {data.alarms.firing.length
-                                            ? `${data.alarms.firing[0].name} · ${lasting(data.alarms.firing[0].since)}`
-                                            : '모든 알람이 정상입니다'}
-                                    </span>
+                                    {data.alarms.firing.length ? (
+                                        <span className="dash-kpi-sub">
+                                            {`${data.alarms.firing[0].name} · ${lasting(data.alarms.firing[0].since)}`}
+                                        </span>
+                                    ) : null}
                                 </div>
                             ) : (
                                 <EmptyKpi label="울리는 알람" data={data} section="alarms" order={1} />
@@ -383,13 +378,11 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                     <CountUp value={data.approvals.pending} />
                                     <span className="dash-kpi-unit">건</span>
                                 </span>
-                                <span className="dash-kpi-sub">
-                                    {data.approvals.unavailable
-                                        ? '승인 요청을 읽지 못했습니다'
-                                        : data.approvals.pending && data.approvals.soonestExpiresAt
-                                          ? `가장 빠른 만료 ${until(data.approvals.soonestExpiresAt)}`
-                                          : '기다리는 변경이 없습니다'}
-                                </span>
+                                {data.approvals.unavailable ? (
+                                    <span className="dash-kpi-sub">승인 요청을 읽지 못했습니다</span>
+                                ) : data.approvals.pending && data.approvals.soonestExpiresAt ? (
+                                    <span className="dash-kpi-sub">가장 빠른 만료 {until(data.approvals.soonestExpiresAt)}</span>
+                                ) : null}
                             </div>
                         </div>
 
@@ -417,7 +410,6 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                     </ul>
                                 </header>
                                 <DailyCostChart daily={data.cost.daily} daysInMonth={daysInMonthOf(data.cost.daily[0]?.date)} />
-                                <p className="dash-card-note">비용은 하루 늦게 확정됩니다. 어제까지의 값입니다.</p>
                             </section>
                             <section className="dash-card dash-enter" style={enter(6)} aria-labelledby="dash-service-title">
                                 <header className="dash-card-head">
@@ -434,7 +426,7 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                         일별 비용 <Freshness data={data} section="cost" />
                                     </h3>
                                 </header>
-                                <NotYet section="cost" />
+                                <NotYet />
                             </section>
                         )}
 
@@ -445,9 +437,8 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                     <h3 id="dash-resource-title">
                                         리소스 상태 <Freshness data={data} section="resources" />
                                     </h3>
-                                    {data.sections?.usage ? null : <span className="dash-card-aside">오류·CPU는 1시간마다</span>}
                                 </header>
-                                {!data.sections?.resources && !resources.length ? <NotYet section="resources" /> : null}
+                                {!data.sections?.resources && !resources.length ? <NotYet /> : null}
                                 <StatusBar counts={counts} />
                                 <div className="dash-table-wrap">
                                     <table className="dash-table">
@@ -535,15 +526,15 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                             </section>
                         </div>
 
-                        {/* 치울 것 */}
+                        {/* 개선 권고 */}
                         {data.findings.length ? (
                             <section className="dash-card dash-enter" style={enter(9)} aria-labelledby="dash-finding-title">
                                 <header className="dash-card-head">
-                                    <h3 id="dash-finding-title">치울 것</h3>
+                                    <h3 id="dash-finding-title">개선 권고</h3>
                                     <span className="dash-card-aside">
                                         {(() => {
                                             const savings = data.findings.reduce((sum, f) => sum + (f.savingsMonthly ?? 0), 0);
-                                            return savings ? `치우면 월 ${usd(savings, 0)} 절약` : null;
+                                            return savings ? `적용 시 월 ${usd(savings, 0)} 절감` : null;
                                         })()}
                                     </span>
                                 </header>
@@ -557,7 +548,7 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                                 <span className="dash-finding-title">{finding.title}</span>
                                                 <span className="dash-finding-detail">{finding.detail}</span>
                                                 {finding.savingsMonthly ? (
-                                                    <span className="dash-finding-savings">월 {usd(finding.savingsMonthly)} 절약</span>
+                                                    <span className="dash-finding-savings">월 {usd(finding.savingsMonthly)} 절감</span>
                                                 ) : null}
                                             </li>
                                         ))}
@@ -613,14 +604,7 @@ function Attention({ data, onAsk, onOpenChat }: { data: DashboardData; onAsk: (q
             })),
     ];
 
-    if (!items.length) {
-        return (
-            <div className="dash-attention is-clear" role="status">
-                <span className="dash-attention-dot" aria-hidden="true" />
-                지금 확인할 것이 없습니다. 울리는 알람과 승인 대기가 없습니다.
-            </div>
-        );
-    }
+    if (!items.length) return null; // 확인할 것이 없으면 상자를 그리지 않는다
     return (
         <section className="dash-attention" aria-label="지금 확인할 것">
             <p className="dash-attention-title">지금 확인할 것 {items.length}</p>

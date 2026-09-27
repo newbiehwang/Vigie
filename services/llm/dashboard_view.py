@@ -21,7 +21,7 @@ from boto3.dynamodb.conditions import Key
 SECTIONS = ("alarms", "resources", "errors", "changes", "usage", "cost")
 MAX_RESOURCE_ROWS = 40  # 표에 보일 줄 수 (문제·주의를 먼저 모두, 남는 자리에 정상)
 FAIL_ERROR_RATE = 0.05  # 오류율이 이보다 높으면 문제
-IDLE_CPU = 5.0  # 14일 CPU 평균이 이보다 낮으면 놀고 있는 인스턴스 (MCP의 find_ec2_waste와 같은 기준)
+IDLE_CPU = 5.0  # 14일 CPU 평균이 이보다 낮으면 유휴 인스턴스 (MCP의 find_ec2_waste와 같은 기준)
 MAX_APP_CHANGES = 30
 STATUS_ORDER = ("fail", "warn", "ok", "none")
 
@@ -55,7 +55,7 @@ def _ec2_row(instance: Dict[str, Any], usage: Optional[Dict[str, Any]]) -> Dict[
     if instance.get("checks") == "impaired":
         return {**row, "status": "fail", "detail": "상태 검사 실패"}
     if cpu is not None and cpu < IDLE_CPU:
-        return {**row, "status": "warn", "detail": f"CPU 평균 {cpu}% (14일) · 놀고 있음"}
+        return {**row, "status": "warn", "detail": f"CPU 평균 {cpu}% (14일) · 유휴"}
     if instance.get("checks") == "initializing":
         return {**row, "status": "ok", "detail": "상태 검사 진행 중"}
     return {**row, "status": "ok", "detail": "상태 검사 통과" + (f" · CPU 평균 {cpu}%" if cpu is not None else "")}
@@ -88,26 +88,26 @@ def build_resources(alarms: Optional[Dict[str, Any]], resources: Optional[Dict[s
 
 
 def build_findings(resources: Optional[Dict[str, Any]], usage: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """치울 것: 공개될 수 있는 S3 · 놀고 있는 EC2 · 영구 보관 로그 그룹 (화면은 보기만 한다)."""
+    """개선 권고: 퍼블릭 차단이 꺼진 S3 · 유휴 EC2 · 보존 기간 미설정 로그 그룹 (화면은 보기만 한다)."""
     if not resources:
         return []
     findings = []
     open_buckets = [b["name"] for b in resources.get("s3", []) if b.get("blockOff")]
     if open_buckets:
         findings.append({"kind": "public-s3", "status": "fail",
-                         "title": f"퍼블릭 액세스 차단이 꺼진 S3 버킷 {len(open_buckets)}개",
+                         "title": f"퍼블릭 액세스 차단 미적용 S3 버킷 {len(open_buckets)}개",
                          "detail": _names(open_buckets)})
     cpu = (usage or {}).get("ec2Cpu", {})
     idle = [i.get("name") or i["id"] for i in resources.get("ec2", [])
             if i.get("state") == "running" and cpu.get(i["id"]) is not None and cpu[i["id"]] < IDLE_CPU]
     if idle:
-        findings.append({"kind": "idle-ec2", "status": "warn", "title": f"놀고 있는 EC2 {len(idle)}대",
+        findings.append({"kind": "idle-ec2", "status": "warn", "title": f"유휴 EC2 인스턴스 {len(idle)}대",
                          "detail": f"{_names(idle)} · 14일 CPU 평균 {IDLE_CPU:g}% 미만"})
     logs = resources.get("logs") or {}
     if logs.get("neverExpire"):
         findings.append({"kind": "log-retention", "status": "warn",
-                         "title": f"영구 보관 로그 그룹 {logs['neverExpire']}개",
-                         "detail": f"{_names([g['name'] for g in logs.get('groups', [])])} · 오래된 로그가 계속 쌓임"})
+                         "title": f"보존 기간 미설정 로그 그룹 {logs['neverExpire']}개",
+                         "detail": f"{_names([g['name'] for g in logs.get('groups', [])])} · 로그가 기한 없이 누적됨"})
     return findings
 
 

@@ -64,19 +64,25 @@
   color: #8a94a0;
 }
 
-.dash-env {
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--color-chip);
-  color: #1f4f86;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: 11px;
+/* 입력칸: 예시 목록이 아래 카드들 위에 펼쳐지게 쌓임 순서를 둔다
+   (아래 카드들은 등장 효과로 각자 쌓임 맥락이 생겨, 순서가 없으면 목록이 카드 뒤로 깔린다) */
+.dash-ask {
+  position: relative;
+  z-index: 20;
 }
 
 .dash-ask .composer-wrap {
   width: 100%;
+}
+
+/* 한 줄 입력칸(모서리 14px)에 붙어 펼쳐지는 예시 목록도 같은 모서리로 */
+.dash-ask .composer-suggestions {
+  border-radius: 0 0 14px 14px;
+}
+
+/* 확인할 것이 없으면 '지금 확인할 것' 자리를 비운다 (빈 칸이 간격을 차지하지 않게) */
+.dash-enter:empty {
+  display: none;
 }
 
 /* 아래 내용: 여기만 스크롤 */
@@ -230,25 +236,6 @@
   color: var(--color-primary);
 }
 
-/* 확인할 것이 없을 때: 초록 한 줄 */
-.dash-attention.is-clear {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border-color: rgba(88, 167, 121, 0.35);
-  background: #fff;
-  font-family: var(--font-label);
-  font-size: 0.86rem;
-  font-weight: 600;
-  color: var(--dash-ok-ink);
-}
-
-.dash-attention.is-clear .dash-attention-dot {
-  background: var(--dash-ok);
-  box-shadow: 0 0 0 3px var(--dash-ok-bg);
-}
-
 /* ---------------------------------------------------------------- 숫자 카드 */
 .dash-kpis {
   display: grid;
@@ -256,7 +243,7 @@
   gap: 12px;
 }
 
-/* 숫자 카드와 치울 것 카드의 입체감 (AXPI의 카드: 옅은 테두리 + 아래로 번지는 그림자). 바탕은 흰색이다.
+/* 숫자 카드와 개선 권고 카드의 입체감 (AXPI의 카드: 옅은 테두리 + 아래로 번지는 그림자). 바탕은 흰색이다.
    누르는 카드가 아니라 떠오르는 효과(hover)는 두지 않는다 */
 .dash-kpi,
 .dash-finding {
@@ -379,10 +366,6 @@
 
 .dash-fresh.is-stale {
   color: var(--dash-fail-ink);
-}
-
-.dash-fresh.is-missing {
-  color: #aab3be;
 }
 
 /* 한 번도 모으지 못한 숫자 카드: 입체감(그림자)을 빼고 평평하게 */
@@ -912,7 +895,7 @@
   font-weight: 600;
 }
 
-/* 치울 것 */
+/* 개선 권고 */
 .dash-findings {
   margin: 0;
   padding: 0;
