@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./frontend/src/assets/brand/vigie-logo-white.svg">
+    <img src="./frontend/src/assets/brand/vigie-logo.svg" alt="Vigie" width="280">
+  </picture>
+</p>
+
 # Vigie - AWS 클라우드 운영 정보 챗봇 서비스
 ![thumbnail](./images/thumbnail.png)
 
