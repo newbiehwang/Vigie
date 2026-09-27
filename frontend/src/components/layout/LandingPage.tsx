@@ -3,7 +3,7 @@
 //   #Cloud Native #Serverless #MCP                ┌ 대화 미리 보기 ────────────┐
 //   AWS 운영, 물어보면 답합니다                   │ 지난주 Lambda 오류 알려줘  │
 //   (한 줄 소개)                                  │ ● 로그 조회 … 답변 표      │
-//   [aws에서 로그인]  처음이라면 가입도 거기서     │ [승인 필요] 30일 → 14일    │
+//   [시작하기]                                     │ [승인 필요] 30일 → 14일    │
 //                                                 └────────────────────────────┘
 //   [자연어로 조회] [승인 뒤 실행] [감사 로그] [민감정보 가리기]
 // - 바탕은 Cognito 로그인 페이지·전환 화면과 같은 번짐 이미지 (assets/brand/login-background.svg)
@@ -14,7 +14,6 @@ import type { CSSProperties, ReactNode } from 'react';
 import background from '@/assets/brand/login-background.svg';
 import vigieLogo from '@/assets/brand/vigie-logo.svg';
 import vigieMark from '@/assets/brand/vigie-mark.svg';
-import { AwsLogo } from './AwsLogo';
 
 const enter = (order: number) => ({ '--enter': order }) as CSSProperties;
 
@@ -128,12 +127,10 @@ export function LandingPage({ errorMessage, onLogin }: { errorMessage?: string; 
                     ) : null}
 
                     <div className="landing-actions landing-enter" style={enter(3)}>
-                        {/* 로고가 'AWS' 글자를 대신한다. 버튼 이름은 aria-label로 */}
-                        <button type="button" className="login-submit landing-cta" onClick={onLogin} aria-label="AWS에서 로그인">
-                            <AwsLogo className="login-submit-logo" />
-                            <span>에서 로그인</span>
+                        {/* AWS 계정이 아니라 Vigie 계정(Cognito)으로 로그인·가입하므로 'AWS에서 로그인'이 아니라 '시작하기' */}
+                        <button type="button" className="login-submit landing-cta" onClick={onLogin}>
+                            시작하기
                         </button>
-                        <p className="landing-note">처음이라면 로그인 화면에서 바로 가입할 수 있습니다.</p>
                     </div>
                 </div>
 

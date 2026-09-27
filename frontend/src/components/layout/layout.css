@@ -444,18 +444,6 @@
   gap: 3px;
 }
 
-/* 로고의 'aws' 글자를 옆 글자('에서 로그인')와 한 줄의 낱말처럼 맞춘다 (AWS 로고 비율 640:512).
-   - 크기: 'aws' 글자 높이가 옆 한글 높이의 5/6쯤(11px)이 되게 한다. 소문자라 한글보다 조금 낮아야 자연스럽다
-   - 위치: 로고 아래쪽 절반은 화살표라, 가운데 정렬만 하면 'aws'가 위로 떠 보인다.
-     'aws' 글자의 아래 끝이 한글의 글자 기준선에 오도록 5px 내린다 */
-.login-submit-logo {
-  width: 35px;
-  height: 28px;
-  flex-shrink: 0;
-  transform: translateY(5px);
-}
-
-/* 앱을 여는 중 (로그인 상태 확인) */
 /* ---------------------------------------------------------------- 안내 화면 (LandingPage.tsx)
    바탕은 Cognito 로그인 페이지와 같은 번짐 이미지. 왼쪽에 소개와 로그인 버튼, 오른쪽에 대화 미리 보기(그림),
    아래에 기능 카드 네 개. 카드·미리 보기는 앱 카드와 같은 입체감(--raised-*) */
@@ -548,16 +536,10 @@
 }
 
 .landing-cta.login-submit {
-  min-width: 220px;
+  min-width: 200px;
   padding: 0 28px;
   height: 48px;
-}
-
-.landing-note {
-  margin: 0;
-  font-family: var(--font-label);
-  font-size: 0.8rem;
-  color: #8a94a0;
+  font-size: 1rem;
 }
 
 .landing-copy .login-error-alert {
