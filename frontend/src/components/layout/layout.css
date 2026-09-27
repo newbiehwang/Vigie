@@ -572,6 +572,396 @@
 }
 
 /* 앱을 여는 중 (로그인 상태 확인) */
+/* ---------------------------------------------------------------- 안내 화면 (LandingPage.tsx)
+   바탕은 Cognito 로그인 페이지와 같은 번짐 이미지. 왼쪽에 소개와 로그인 버튼, 오른쪽에 대화 미리 보기(그림),
+   아래에 기능 카드 네 개. 카드·미리 보기는 앱 카드와 같은 입체감(--raised-*) */
+.landing {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 clamp(16px, 4vw, 56px);
+  background-color: #f7f9fc;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+.landing-nav {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: 22px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.landing-logo {
+  display: block;
+  height: 40px;
+  width: auto;
+}
+
+.landing-nav-login {
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--raised-border);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: var(--raised-shadow-sm);
+  font-family: var(--font-label);
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #3c4650;
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease;
+}
+
+.landing-nav-login:hover {
+  border-color: rgba(0, 123, 255, 0.4);
+  color: var(--color-primary);
+}
+
+.landing-hero {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: clamp(24px, 6vh, 72px) 0 clamp(28px, 5vh, 56px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  align-items: center;
+  gap: clamp(28px, 5vw, 72px);
+}
+
+.landing-copy {
+  display: grid;
+  gap: 18px;
+  justify-items: start;
+}
+
+.landing-eyebrow {
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--color-secondary);
+}
+
+.landing-title {
+  margin: 0;
+  font-family: var(--font-headline);
+  font-size: clamp(2rem, 4.2vw, 3.1rem);
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: -0.03em;
+  color: var(--color-ink);
+}
+
+.landing-lead {
+  margin: 0;
+  max-width: 34em;
+  font-size: 1rem;
+  line-height: 1.7;
+  color: #4a5563;
+}
+
+.landing-actions {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  margin-top: 6px;
+}
+
+.landing-cta.login-submit {
+  min-width: 220px;
+  padding: 0 28px;
+  height: 48px;
+}
+
+.landing-note {
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: 0.8rem;
+  color: #8a94a0;
+}
+
+.landing-copy .login-error-alert {
+  width: min(460px, 100%);
+}
+
+/* 대화 미리 보기 (그림): 창 모양 흰 카드 */
+.landing-preview-wrap {
+  min-width: 0;
+}
+
+.landing-preview {
+  border: 1px solid var(--raised-border);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 2px 4px rgba(35, 47, 62, 0.05),
+    0 28px 60px rgba(35, 47, 62, 0.14);
+  overflow: hidden;
+  animation: landing-float 7s ease-in-out 1.2s infinite;
+}
+
+.landing-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 11px 14px;
+  border-bottom: 1px solid #eef2f6;
+  background: #fafbfd;
+}
+
+.landing-preview-bar i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #dfe6ee;
+}
+
+.landing-preview-bar span {
+  margin-left: 8px;
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 600;
+  color: #8a94a0;
+}
+
+.landing-preview-body {
+  display: grid;
+  gap: 14px;
+  padding: 18px 18px 20px;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: #1f2933;
+}
+
+.landing-bubble {
+  justify-self: end;
+  margin: 0;
+  padding: 8px 13px;
+  border: 1px solid #d3e4fb;
+  border-radius: 14px;
+  background: #e7f1ff;
+}
+
+.landing-answer {
+  display: flex;
+  gap: 10px;
+}
+
+.landing-avatar {
+  flex: none;
+  width: 26px;
+  height: 26px;
+}
+
+.landing-answer-body {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.landing-answer-body p {
+  margin: 0;
+}
+
+.landing-trace {
+  font-size: 12px;
+  color: #6b7785;
+}
+
+.landing-trace b {
+  color: #58a779;
+  font-size: 9px;
+  margin-right: 4px;
+}
+
+.landing-trace span {
+  margin-left: 4px;
+  color: #9aa4b1;
+}
+
+.landing-table {
+  border-collapse: collapse;
+  border: 1px solid #e1e7ef;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.landing-table td {
+  padding: 5px 10px;
+  border-top: 1px solid #eef2f6;
+}
+
+.landing-table td:nth-child(2) {
+  text-align: right;
+}
+
+.landing-approval {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--raised-border);
+  border-top: 3px solid #f0a020;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--raised-shadow-sm);
+}
+
+.landing-approval-badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(255, 153, 0, 0.18);
+  color: #9a5b00;
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.landing-approval-title {
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.landing-approval-change {
+  margin-left: auto;
+  font-family: var(--font-label);
+  font-size: 12px;
+  color: #8a94a0;
+}
+
+.landing-approval-change b {
+  color: #111827;
+  font-size: 13px;
+}
+
+/* 기능 카드 네 개 */
+.landing-features {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.landing-feature {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 18px 18px 20px;
+  border: 1px solid var(--raised-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--raised-shadow);
+}
+
+.landing-feature-icon {
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border-radius: 9px;
+  background: #eef4ff;
+  fill: none;
+  stroke: var(--color-primary);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.landing-feature h2 {
+  margin: 4px 0 0;
+  font-family: var(--font-label);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.landing-feature p {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  color: #5f6b7a;
+}
+
+.landing-foot {
+  width: min(1180px, 100%);
+  margin: auto auto 0;
+  padding: 36px 0 24px;
+  font-family: var(--font-label);
+  font-size: 12px;
+  color: #9aa4b1;
+}
+
+/* 처음 그릴 때 차례로 떠오른다 (--enter 순서, 70ms씩) */
+.landing-enter {
+  animation: landing-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--enter, 0) * 70ms + 60ms);
+}
+
+@keyframes landing-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 미리 보기 창이 천천히 떠 있는 듯 오르내린다 */
+@keyframes landing-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@media (max-width: 980px) {
+  .landing-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .landing-features {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .landing-logo {
+    height: 32px;
+  }
+
+  .landing-features {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .landing-cta.login-submit {
+    width: 100%;
+  }
+
+  .landing-actions {
+    justify-items: stretch;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-enter,
+  .landing-preview {
+    animation: none;
+  }
+}
+
 /* 로그인 전환 화면 (LoginSplash.tsx). 바탕은 Cognito 로그인 페이지와 같은 번짐 이미지(style의 backgroundImage),
    가운데 흰 카드는 Cognito 로그인 상자처럼 둥근 흰 카드 + 그림자 + 위쪽 Vigie 로고 */
 .login-splash {

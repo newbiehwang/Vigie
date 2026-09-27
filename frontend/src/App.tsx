@@ -1,12 +1,12 @@
-// 앱 틀: 로그인하지 않았으면 전환 화면(LoginSplash)을 잠깐 보인 뒤 바로 Cognito 로그인 페이지로 보내고,
-// 했으면 위쪽 내비게이션 + 화면(홈 / 대화 / 감사 로그·사용자 관리는 관리자만).
-// 안내 화면(LoginPage)은 로그인에 실패했을 때만 오류와 다시 시도 버튼을 보인다 (그대로 보내면 같은 실패를 되풀이한다)
-import { useEffect, useRef, useState } from 'react';
+// 앱 틀: 로그인하지 않았으면 안내 화면(LandingPage). 로그인 버튼을 누르면 전환 화면(LoginSplash)을 거쳐
+// Cognito 로그인 페이지로 가고, 실패하면 안내 화면에 오류를 보인다.
+// 로그인했으면 위쪽 내비게이션 + 화면(홈 / 대화 / 감사 로그·사용자 관리는 관리자만)
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { setUnauthorizedHandler } from './api/http';
 import { isAdmin, isReturningFromLogin, onLoginResult } from './auth/authClient';
 import { useAuthStore } from './auth/authStore';
-import { LoginPage } from './components/layout/LoginPage';
+import { LandingPage } from './components/layout/LandingPage';
 import { AutoLogin, LoginSplash } from './components/layout/LoginSplash';
 import { LogoutOverlay } from './components/layout/LogoutOverlay';
 import { Navigation } from './components/layout/Navigation';
@@ -24,6 +24,16 @@ export default function App() {
     const refresh = useAuthStore((s) => s.refresh);
     const navigate = useNavigate();
     const [loginError, setLoginError] = useState('');
+    const [startingLogin, setStartingLogin] = useState(false); // 안내 화면에서 로그인을 눌렀다 (전환 화면 → Cognito)
+    // 전환 화면에 넘기는 함수는 바뀌지 않게 둔다 (바뀌면 전환 화면의 예약이 처음부터 다시 걸린다)
+    const finishLogin = useCallback(async () => {
+        await refresh(); // mock 모드: 페이지를 옮기지 않고 로그인된다. 다음 로그아웃 때 안내 화면부터 보이게 되돌린다
+        setStartingLogin(false);
+    }, [refresh]);
+    const failLogin = useCallback((message: string) => {
+        setLoginError(message);
+        setStartingLogin(false);
+    }, []);
     // useNavigate가 돌려주는 함수는 주소가 바뀔 때마다 새로 만들어진다 (React Router 선언형 모드).
     // 아래 로그인 처리가 navigate에 따라 다시 실행되면 탭을 옮길 때마다 구독을 새로 하므로, 최신 함수를 ref로 들고 쓴다
     const navigateRef = useRef(navigate);
@@ -61,10 +71,16 @@ export default function App() {
     if (status === 'loading') return <LoginSplash />;
 
     if (status === 'signedOut' || !user) {
-        return loginError ? (
-            <LoginPage errorMessage={loginError} onSignedIn={refresh} />
+        return startingLogin ? (
+            <AutoLogin onSignedIn={finishLogin} onError={failLogin} />
         ) : (
-            <AutoLogin onSignedIn={refresh} onError={setLoginError} />
+            <LandingPage
+                errorMessage={loginError}
+                onLogin={() => {
+                    setLoginError('');
+                    setStartingLogin(true);
+                }}
+            />
         );
     }
 

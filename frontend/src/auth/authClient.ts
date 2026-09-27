@@ -47,7 +47,8 @@ const MOCK_USER: AuthUser = {
     groups: MOCK_MEMBER ? [] : [ADMIN_GROUP, 'approvers'],
 };
 export const mockIsAdmin = () => isAdmin(MOCK_USER); // mock API가 GET /audit에 403을 흉내 낼 때 쓴다
-let mockSignedIn = true; // mock 모드는 로그인된 상태로 시작한다 (화면만 고칠 때 바로 보이게)
+// mock 모드는 로그인된 상태로 시작한다 (화면만 고칠 때 바로 보이게). ?mock-auth=signed-out을 붙여 열면 안내 화면부터 본다
+let mockSignedIn = !(MOCK && new URLSearchParams(window.location.search).get('mock-auth') === 'signed-out');
 
 const USER_POOL_ID = import.meta.env.USER_POOL_ID;
 const CLIENT_ID = import.meta.env.COGNITO_CLIENT_ID;
