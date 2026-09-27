@@ -40,7 +40,6 @@ export interface DashboardFinding {
     title: string;
     detail: string;
     savingsMonthly?: number; // 치우면 줄어드는 월 비용 (USD)
-    question: string; // 누르면 대화로 보낼 질문
 }
 
 export type SectionName = 'alarms' | 'resources' | 'errors' | 'changes' | 'usage' | 'cost';

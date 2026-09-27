@@ -143,7 +143,6 @@
   padding: 10px 10px 8px;
   display: grid;
   gap: 4px;
-  animation: menu-in 200ms ease both;
 }
 
 .dash-attention-title {
@@ -257,6 +256,18 @@
   gap: 12px;
 }
 
+/* 숫자 카드와 치울 것 카드의 입체감 (AXPI의 카드: 방사형으로 살짝 밝은 바탕 + 옅은 테두리 + 아래로 번지는 그림자).
+   위쪽 안쪽에 흰 선을 두어 윗면이 빛을 받는 느낌을 더한다. 누르는 카드가 아니라 떠오르는 효과(hover)는 두지 않는다 */
+.dash-kpi,
+.dash-finding {
+  border: 1px solid rgba(197, 211, 228, 0.75);
+  background: radial-gradient(circle at 30% 20%, #ffffff 0%, #f5f8fd 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 1px 2px rgba(35, 47, 62, 0.05),
+    0 10px 20px rgba(35, 47, 62, 0.06);
+}
+
 .dash-kpi {
   position: relative;
   min-width: 0;
@@ -265,29 +276,10 @@
   align-items: flex-start;
   gap: 4px;
   padding: 14px 16px 14px;
-  border: 1px solid var(--color-line);
-  border-radius: 12px;
-  background: #fff;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  border-radius: 14px;
 }
 
-.dash-kpi:hover {
-  border-color: rgba(0, 123, 255, 0.35);
-  box-shadow: 0 8px 20px rgba(35, 47, 62, 0.08);
-}
-
-.dash-kpi:hover .dash-ask-arrow {
-  color: var(--color-primary);
-  transform: translate(1px, -1px);
-}
-
-.dash-kpi:focus-visible,
-.dash-finding:focus-visible,
-.dash-attention-item:focus-visible,
-.dash-table tbody tr:focus-visible {
+.dash-attention-item:focus-visible {
   outline: 2px solid rgba(0, 123, 255, 0.45);
   outline-offset: 1px;
 }
@@ -393,14 +385,9 @@
   color: #aab3be;
 }
 
-/* 한 번도 모으지 못한 숫자 카드 */
+/* 한 번도 모으지 못한 숫자 카드: 입체감을 빼고 평평하게 */
 .dash-kpi.is-empty {
-  cursor: default;
   background: #fafbfd;
-}
-
-.dash-kpi.is-empty:hover {
-  border-color: var(--color-line);
   box-shadow: none;
 }
 
@@ -428,8 +415,9 @@
 .dash-card {
   min-width: 0;
   border: 1px solid var(--color-line);
-  border-radius: 12px;
+  border-radius: 14px;
   background: #fff;
+  box-shadow: 0 1px 2px rgba(35, 47, 62, 0.03), 0 8px 18px rgba(35, 47, 62, 0.04);
   padding: 14px 16px 16px;
   display: grid;
   gap: 12px;
@@ -806,14 +794,6 @@
   vertical-align: middle;
 }
 
-.dash-table tbody tr {
-  cursor: pointer;
-  transition: background-color 120ms ease;
-}
-
-.dash-table tbody tr:hover {
-  background: #f7faff;
-}
 
 .dash-table tbody tr:last-child td {
   border-bottom: 0;
@@ -944,25 +924,12 @@
 }
 
 .dash-finding {
-  width: 100%;
-  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
   padding: 12px 14px;
-  border: 1px solid var(--color-line);
-  border-radius: 10px;
-  background: #fafbfd;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 140ms ease, background-color 140ms ease;
-}
-
-.dash-finding:hover {
-  border-color: rgba(0, 123, 255, 0.35);
-  background: #fff;
+  border-radius: 12px;
 }
 
 .dash-finding-title {
@@ -979,36 +946,89 @@
   overflow-wrap: anywhere;
 }
 
-.dash-finding-foot {
+.dash-finding-savings {
   margin-top: auto;
   padding-top: 4px;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.dash-finding-savings {
   font-family: var(--font-label);
   font-size: 12px;
   font-weight: 700;
   color: var(--dash-ok-ink);
 }
 
-.dash-finding-ask {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-family: var(--font-label);
-  font-size: 12px;
-  font-weight: 600;
-  color: #6b7785;
+
+/* ---------------------------------------------------------------- 처음 그릴 때의 효과
+   카드: 아래에서 10px 떠오르며 차례로 (AXPI priority-card-enter, 50ms씩. 순서는 style의 --enter)
+   막대: 바닥에서 자란다 (일별 비용·오류 막대, 막대마다 --i로 조금씩 늦게) · 가로 막대와 상태 분포: 왼쪽부터 드러난다
+   요소가 그대로 있는 동안에는 다시 돌지 않는다 (30초마다 다시 읽어도 움직이지 않는다) */
+.dash-enter {
+  animation: dash-enter 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--enter, 0) * 50ms);
 }
 
-.dash-finding:hover .dash-finding-ask,
-.dash-finding:hover .dash-ask-arrow {
-  color: var(--color-primary);
+@keyframes dash-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dash-bar,
+.dash-spark-bar {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: dash-grow-y 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.dash-bar {
+  animation-delay: calc(320ms + var(--i, 0) * 14ms);
+}
+
+.dash-spark-bar {
+  animation-delay: calc(200ms + var(--i, 0) * 12ms);
+}
+
+@keyframes dash-grow-y {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* 평균선과 남은 날 칸은 막대가 다 자란 뒤 나타난다 */
+.dash-average,
+.dash-bar-future {
+  animation: dash-fade 360ms ease both;
+  animation-delay: 820ms;
+}
+
+@keyframes dash-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.dash-service-fill,
+.dash-statusbar-track {
+  animation: dash-reveal-x 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 380ms;
+}
+
+@keyframes dash-reveal-x {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
 }
 
 /* ---------------------------------------------------------------- 좁은 화면 */
@@ -1055,7 +1075,13 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dash-attention,
-  .dash-kpi,
+  .dash-enter,
+  .dash-bar,
+  .dash-spark-bar,
+  .dash-average,
+  .dash-bar-future,
+  .dash-service-fill,
+  .dash-statusbar-track,
   .dash-ask-arrow {
     animation: none;
     transition: none;
