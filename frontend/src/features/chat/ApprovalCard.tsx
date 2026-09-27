@@ -99,7 +99,8 @@ async function copyText(text: string) {
 // 의심 결과와 이 요청 사이의 거리: 1이면 그 결과를 읽자마자 요청했다
 const distanceText = (seen: TaintedBy) => (seen.callsAgo <= 1 ? '바로 다음 호출' : `${seen.callsAgo}번째 뒤 호출`);
 
-export function ApprovalCard({ action: initial }: { action: PendingAction }) {
+// entering: 방금 받은 답변의 카드라 나타나는 효과를 준다 (예전 대화를 다시 열 때는 효과 없이 바로 보인다)
+export function ApprovalCard({ action: initial, entering = false }: { action: PendingAction; entering?: boolean }) {
     const [action, setAction] = useState(initial);
     const [busy, setBusy] = useState<'approve' | 'deny' | null>(null);
     const [confirmed, setConfirmed] = useState(false); // 의심 신호가 있을 때 '내가 요청한 변경이 맞습니다'
@@ -154,7 +155,10 @@ export function ApprovalCard({ action: initial }: { action: PendingAction }) {
         const change = action.before || action.after ? `${action.before ?? '-'} → ${action.after ?? '-'}` : null;
         const trail = status === 'executed' ? action.cloudtrail : undefined;
         return (
-            <section className={`approval-card is-closed is-${status}`} aria-label="변경 작업 승인 요청">
+            <section
+                className={`approval-card is-closed is-${status}${entering ? ' is-entering' : ''}`}
+                aria-label="변경 작업 승인 요청"
+            >
                 <div className="approval-row">
                     <button
                         type="button"
@@ -212,7 +216,10 @@ export function ApprovalCard({ action: initial }: { action: PendingAction }) {
     }
 
     return (
-        <section className={`approval-card is-pending${tainted ? ' is-tainted' : ''}`} aria-label="변경 작업 승인 요청">
+        <section
+            className={`approval-card is-pending${tainted ? ' is-tainted' : ''}${entering ? ' is-entering' : ''}`}
+            aria-label="변경 작업 승인 요청"
+        >
             {tainted ? (
                 // 체류 신호 (services/llm/approvals.py): 결정은 그대로이고, 승인자가 무엇을 의심할지 알려 준다
                 <div className="approval-alert" role="note">

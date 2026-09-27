@@ -15,6 +15,8 @@ import { ApprovalCard } from './ApprovalCard';
 import { ArtifactView } from './ArtifactView';
 import { LiveLine, ProgressTrace } from './ProgressTrace';
 
+const CARD_DELAY_MS = 350; // 답변 글이 다 나온 뒤 승인 카드가 나타나기까지
+
 // 답변의 승인 요청 (저장된 메시지에서는 inference가 JSON 문자열이다)
 const pendingActionsOf = (inference: unknown): PendingAction[] => {
     let data = inference;
@@ -60,7 +62,19 @@ function ChatMessageView({ message }: { message: ChatMessageType }) {
     );
     const artifacts = useMemo(() => (isUser ? new Map() : artifactsOf(message.inference)), [isUser, message.inference]);
     const actions = useMemo(() => (isUser ? [] : pendingActionsOf(message.inference)), [isUser, message.inference]);
-    const hasMeta = !isUser && !message.isTyping && (message.elapsed_time || steps.length > 0);
+    // 승인 카드는 답변 글이 다 나온 뒤 잠깐 쉬었다가 나타난다 (글과 카드가 한꺼번에 튀어나오지 않게).
+    // 방금 받은 답변(타이핑을 거친 메시지)만 효과를 주고, 예전 대화를 다시 열 때는 바로 보인다
+    const typedNow = useRef(message.animationState === 'typing');
+    if (message.animationState === 'typing') typedNow.current = true;
+    const textDone = !isUser && !message.isTyping && message.animationState !== 'typing';
+    const [cardsReady, setCardsReady] = useState(() => textDone && !typedNow.current);
+    useEffect(() => {
+        if (!textDone || cardsReady) return;
+        const timer = window.setTimeout(() => setCardsReady(true), CARD_DELAY_MS);
+        return () => window.clearTimeout(timer);
+    }, [textDone, cardsReady]);
+    // 실행 시간·사고 과정 줄도 글(과 카드)이 다 나온 뒤에
+    const hasMeta = textDone && (actions.length === 0 || cardsReady) && (message.elapsed_time || steps.length > 0);
     const traceId = `trace-${message.id ?? message.timestamp}`;
 
     return (
@@ -93,8 +107,10 @@ function ChatMessageView({ message }: { message: ChatMessageType }) {
                 )}
 
                 {/* 답변을 다 보여 준 뒤에 승인 카드를 보여 준다 (타이핑 중에 버튼이 먼저 보이지 않게) */}
-                {actions.length > 0 && !message.isTyping && message.animationState !== 'typing'
-                    ? actions.map((action) => <ApprovalCard key={action.actionId} action={action} />)
+                {actions.length > 0 && cardsReady
+                    ? actions.map((action) => (
+                          <ApprovalCard key={action.actionId} action={action} entering={typedNow.current} />
+                      ))
                     : null}
 
                 {hasMeta ? (
