@@ -104,14 +104,17 @@ const enter = (order: number) => ({ '--enter': order }) as CSSProperties;
 // 9분 후
 const until = (at: number) => `${Math.max(1, Math.ceil((at - nowSeconds()) / 60))}분 후`;
 
-// ---------------------------------------------------------------- 상태 배지 (색만으로 알리지 않게 글자와 모양을 함께)
+// ---------------------------------------------------------------- 상태 배지 (공통 배지 components/badge.css. 색이 아니라 진하기로 나눈다)
+// 문제: 남색 채움 · 주의: 파랑 테두리 · 정상: 글자와 회청색 점 · 데이터 없음: 옅은 점
+const BADGE_VARIANT: Record<HealthStatus, string> = {
+    fail: 'is-strong',
+    warn: 'is-normal',
+    ok: 'is-quiet',
+    none: 'is-quiet is-empty',
+};
+
 function StatusBadge({ status }: { status: HealthStatus }) {
-    return (
-        <span className={`dash-badge is-${status}`}>
-            <span className="dash-badge-dot" aria-hidden="true" />
-            {STATUS_LABEL[status]}
-        </span>
-    );
+    return <span className={`badge ${BADGE_VARIANT[status]}`}>{STATUS_LABEL[status]}</span>;
 }
 
 // 누르면 대화로 보낸다는 표시
