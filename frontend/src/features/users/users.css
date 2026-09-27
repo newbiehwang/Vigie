@@ -295,9 +295,10 @@
 .users-account-button {
   height: 30px;
   padding: 0 12px;
-  border: 1px solid var(--color-line);
+  border: 1px solid var(--raised-border);
   border-radius: 8px;
   background: #fff;
+  box-shadow: var(--raised-shadow-sm);
   color: #3c4650;
   font-family: var(--font-label);
   font-size: 12px;

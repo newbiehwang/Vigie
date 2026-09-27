@@ -219,7 +219,8 @@
   padding: 14px 16px;
   gap: 12px;
   background: #fff;
-  border: 1px solid #e1e7ef;
+  box-shadow: var(--raised-shadow-sm);
+  border: 1px solid var(--raised-border);
   border-radius: 12px;
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
   cursor: default;
@@ -238,7 +239,7 @@
 
 .plan-table-row:hover {
   border-color: rgba(0, 123, 255, 0.3);
-  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.08);
+  box-shadow: var(--raised-shadow-sm), 0 2px 8px rgba(0, 123, 255, 0.08);
 }
 
 .plan-table-row.is-action-open {
@@ -403,9 +404,10 @@
   min-width: 32px;
   height: 32px;
   padding: 0 8px;
-  border: 1px solid #e1e7ef;
+  border: 1px solid var(--raised-border);
   border-radius: 8px;
   background: #fff;
+  box-shadow: var(--raised-shadow-sm);
   color: #23364d;
   font-size: 14px;
   font-family: var(--font-label);
@@ -775,8 +777,9 @@
 .confirm-delete-cancel-btn {
   padding: 8px 18px;
   border-radius: 8px;
-  border: 1px solid #cfd7e0;
+  border: 1px solid var(--raised-border);
   background: #fff;
+  box-shadow: var(--raised-shadow-sm);
   color: #1f2933;
   font-size: 14px;
   font-weight: 600;
@@ -842,9 +845,10 @@
 
 /* AXPI에서 가져온 보조 버튼(다시 불러오기) 모양: 흰 바탕 테두리 버튼 */
 .plan-reload-button {
-  border: 1px solid var(--color-line);
+  border: 1px solid var(--raised-border);
   border-radius: 10px;
   background: #fff;
+  box-shadow: var(--raised-shadow-sm);
   color: #3c4650;
   font-family: var(--font-label);
   font-size: 0.84rem;
@@ -869,9 +873,10 @@
   width: 36px;
   height: 36px;
   flex-shrink: 0;
-  border: 1px solid var(--color-line);
+  border: 1px solid var(--raised-border);
   border-radius: 10px;
   background: #fff;
+  box-shadow: var(--raised-shadow-sm);
   color: #3c4650;
   cursor: pointer;
   transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
@@ -981,8 +986,9 @@
 }
 
 .create-plan-wizard-button.is-secondary {
-  background: #f5f8fc;
-  border-color: #d6dee8;
+  background: #fff;
+  box-shadow: var(--raised-shadow-sm);
+  border-color: var(--raised-border);
   color: #4a6078;
 }
 
@@ -1005,20 +1011,17 @@
   height: 38px;
   margin-bottom: 10px;
   padding: 0 10px 0 14px;
-  border: 1px solid #d9e0e8;
+  border: 1px solid var(--raised-border);
   border-radius: 14px;
   background: #fff;
   color: #8a94a0;
-  box-shadow: 0 1px 2px rgba(35, 47, 62, 0.05), 0 8px 22px rgba(35, 47, 62, 0.06);
+  box-shadow: var(--raised-shadow);
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
 .search-box:focus-within {
   border-color: rgba(0, 123, 255, 0.56);
-  box-shadow:
-    inset 0 0 0 1px rgba(0, 123, 255, 0.14),
-    0 1px 2px rgba(35, 47, 62, 0.05),
-    0 8px 22px rgba(35, 47, 62, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(0, 123, 255, 0.14), var(--raised-shadow);
 }
 
 .search-box input {
