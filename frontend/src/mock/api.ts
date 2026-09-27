@@ -8,7 +8,16 @@
 import axios from "axios";
 import { mockIsAdmin } from "../auth/authClient";
 import { demoEntryFor, demoFirstQuestion } from "./demo/answers";
-import { demoChanges, demoDashboard, demoFindings, demoResources, epochOf } from "./demo/frothly";
+import {
+  FORENSIC_INSTANCE,
+  PUBLIC_BUCKET,
+  demoChanges,
+  demoDashboard,
+  demoFindings,
+  demoResources,
+  epochOf,
+  idleInstance,
+} from "./demo/frothly";
 import type {
   AxiosAdapter,
   AxiosResponse,
@@ -65,7 +74,7 @@ interface MockTool {
 }
 
 // 변경 도구 (감사 로그의 층이 유출이다). 나머지는 유입
-const WRITE_TOOLS = new Set(["setLogRetention", "setAlarmActions"]);
+const WRITE_TOOLS = new Set(["setLogRetention", "setAlarmActions", "setEc2InstanceState", "enableS3PublicAccessBlock"]);
 
 // 답변 예시. 보낼 때마다 차례로 돌아가며, 화면에서 자주 고치는 요소(사고 요약·도구 목록·표·목록·코드·실패한 도구)를 모두 담았다.
 // thinking: 도구를 부르기 전과 뒤의 사고 요약
@@ -170,12 +179,21 @@ const ANSWERS: MockEntry[] = [
 ];
 
 // ---------------------------------------------------------------- 변경 작업 승인 (/actions, services/llm/approvals.py)
-// 질문에 '보존'이나 '알람'이 들어 있으면 AI가 변경 도구를 부른 것처럼 승인 요청을 만든다.
-// 승인하면 가짜 리소스 상태를 바꾸고, 이어서 /llm1 {actionId}로 결과 설명을 돌려준다
+// 변경을 부탁하는 질문이면 AI가 변경 도구를 부른 것처럼 승인 요청을 만든다 (entryFor):
+//   '보존' → Vigie 로그 보존 기간 · '알람' + 끄기 → Vigie 알람 알림 끄기
+//   인스턴스 + 멈춰·꺼 / 켜·시작 → 데모의 조사용 인스턴스(Bud's Forensic AMI) 중지·시작
+//   퍼블릭 액세스 차단 → frothlywebcode의 퍼블릭 액세스 차단 켜기
+// 승인하면 가짜 리소스 상태를 바꾸고(대시보드·데모 답이 따른다), 이어서 /llm1 {actionId}로 결과 설명을 돌려준다
 
 const MOCK_LOG_GROUP = "/aws/lambda/vigie-llm-dev";
 const MOCK_ALARM = "vigie-dev-api-5xx";
-const mockResources = { retention: 30 as number | null, alarmActions: true };
+const mockResources = {
+  retention: 30 as number | null,
+  alarmActions: true,
+  // 데모(Frothly) 리소스 상태 (demo/frothly.ts의 DemoState)
+  forensicStopped: false,
+  webcodeBlocked: false,
+};
 const actions = new Map<string, PendingAction>();
 const APPROVAL_TTL_S = 600;
 
@@ -183,7 +201,7 @@ const retentionText = (days: number | null) =>
   days === null ? "영구 보관" : `${days}일`;
 const actionsText = (enabled: boolean) => (enabled ? "알림 켜짐" : "알림 꺼짐");
 
-const APPROVAL_ENTRIES: Record<"retention" | "alarm", MockEntry> = {
+const APPROVAL_ENTRIES: Record<"retention" | "alarm" | "ec2Stop" | "ec2Start" | "s3Block", MockEntry> = {
   retention: {
     answer: [
       "`/aws/lambda/vigie-llm-dev` 로그 그룹의 보존 기간을 **14일**로 줄이려면 승인이 필요합니다.",
@@ -236,7 +254,73 @@ const APPROVAL_ENTRIES: Record<"retention" | "alarm", MockEntry> = {
       warning: "알람이 울려도 알림이 가지 않습니다",
     }),
   },
+  ec2Stop: ec2StateEntry("stop"),
+  ec2Start: ec2StateEntry("start"),
+  s3Block: {
+    answer: [
+      `\`${PUBLIC_BUCKET}\` 버킷의 퍼블릭 액세스 차단 네 가지를 모두 켜려면 승인이 필요합니다.`,
+      "",
+      "켜면 ACL이나 버킷 정책으로 다시 공개할 수 없습니다. 이 버킷을 공개로 서비스하고 있다면 먼저 확인해 주세요.",
+    ].join("\n"),
+    search: { query: "enableS3PublicAccessBlock", found: ["enableS3PublicAccessBlock"] },
+    tools: [
+      { tool_name: "listS3Buckets", input: {}, status: "ok" },
+      { tool_name: "enableS3PublicAccessBlock", input: { bucket_name: PUBLIC_BUCKET }, status: "ok" },
+    ],
+    thinking: [
+      "버킷이 다시 공개되지 않게 막아 달라는 요청이다. 퍼블릭 액세스 차단을 켜는 것은 변경 작업이라 승인 요청을 만든다.",
+      "승인 대기 중이다. 무엇이 바뀌는지와 승인이 필요하다는 것을 알린다.",
+    ],
+    approval: () => ({
+      tool: "enableS3PublicAccessBlock",
+      args: { bucket_name: PUBLIC_BUCKET },
+      before: "꺼짐",
+      after: "켜짐",
+      summary: `${PUBLIC_BUCKET} 버킷 퍼블릭 액세스 차단 꺼짐 → 켜짐`,
+      target: PUBLIC_BUCKET,
+    }),
+  },
 };
+
+// 조사용 인스턴스 중지·시작 (setEc2InstanceState). 이미 그 상태면 승인 요청 없이 그렇다고 답한다 (entryFor)
+function ec2StateEntry(action: "stop" | "start"): MockEntry {
+  const idle = idleInstance();
+  const [before, after] = action === "stop" ? ["실행 중", "중지"] : ["중지", "실행 중"];
+  return {
+    answer: [
+      `\`${FORENSIC_INSTANCE}\`(${idle.name}) 인스턴스를 ${action === "stop" ? "중지" : "시작"}하려면 승인이 필요합니다.`,
+      "",
+      action === "stop"
+        ? "조사용으로 띄운 인스턴스입니다. 조사가 끝났는지 확인한 뒤 승인해 주세요. 중지해도 EBS 볼륨 요금은 계속 나갑니다."
+        : "다시 켜면 시간당 요금이 다시 나갑니다.",
+    ].join("\n"),
+    search: { query: "setEc2InstanceState", found: ["setEc2InstanceState"] },
+    tools: [
+      { tool_name: "listEc2Instances", input: {}, status: "ok" },
+      { tool_name: "setEc2InstanceState", input: { instance_id: FORENSIC_INSTANCE, action }, status: "ok" },
+    ],
+    thinking: [
+      `인스턴스를 ${action === "stop" ? "멈춰" : "켜"} 달라는 요청이다. 인스턴스 목록에서 대상을 확인하고, 변경 작업이라 승인 요청을 만든다.`,
+      "승인 대기 중이다. 무엇이 바뀌는지와 승인이 필요하다는 것을 알린다.",
+    ],
+    approval: () => ({
+      tool: "setEc2InstanceState",
+      args: { instance_id: FORENSIC_INSTANCE, action },
+      before,
+      after,
+      summary: `EC2 ${FORENSIC_INSTANCE} (${idle.name}) ${before} → ${after}`,
+      target: FORENSIC_INSTANCE,
+      ...(action === "stop" && { warning: "인스턴스 안에서 돌던 작업이 멈춥니다" }),
+    }),
+  };
+}
+
+// 이미 원하는 상태여서 바꿀 것이 없을 때 (도구는 목록 조회만)
+const alreadyEntry = (text: string, tool: MockTool): MockEntry => ({
+  answer: text,
+  tools: [tool],
+  thinking: ["바꾸기 전에 지금 상태를 확인한다.", "이미 원하는 상태라 승인 요청을 만들지 않는다."],
+});
 
 // 차트를 그린 답변 (질문에 '차트'·'그려'가 있으면). 브라우저가 ECharts로 그린다 (features/chat/ArtifactView).
 // 주소는 목업이라 열리지 않는다 (PNG로 열기). 실제로는 서버가 만든 presigned URL이다
@@ -546,9 +630,33 @@ const entryFor = (body: RequestBody): MockEntry => {
   if (text.includes("보존")) return APPROVAL_ENTRIES.retention;
   if (text.includes("알람") && /끄|꺼|멈|중지/.test(text))
     return APPROVAL_ENTRIES.alarm;
+  // 퍼블릭 액세스 차단 켜기 (데모의 공개됐던 버킷)
+  if (/퍼블릭\s*(액세스\s*)?차단|공개\s*(를|을)?\s*(막|차단)|공개되지\s*않게/.test(text))
+    return mockResources.webcodeBlocked
+      ? alreadyEntry(`\`${PUBLIC_BUCKET}\`의 퍼블릭 액세스 차단은 이미 켜져 있습니다. 바꿀 것이 없습니다.`,
+          { tool_name: "listS3Buckets", input: {}, status: "ok" })
+      : APPROVAL_ENTRIES.s3Block;
+  // 인스턴스 중지·시작 (데모의 조사용 인스턴스). 부탁하는 말일 때만 ("언제 시작됐어?" 같은 질문은 조회로 답한다)
+  const STOP = /멈춰|멈추|중지\s*(해|시켜)|정지\s*(해|시켜)|꺼\s*(줘|주|라|도\s*돼)|끄세요|끄자/;
+  const START = /켜\s*(줘|주|라)|시작\s*(해|시켜)|다시\s*켜/;
+  if (/EC2|인스턴스|서버|Forensic|포렌식/i.test(text) && (STOP.test(text) || START.test(text))) {
+    const ec2List: MockTool = { tool_name: "listEc2Instances", input: {}, status: "ok" };
+    // 데모에서 바꿀 수 있는 것은 조사용 인스턴스뿐이다. 다른 인스턴스 ID나 웹 서버를 말하면 그렇다고 답한다
+    const otherId = (text.match(/i-[0-9a-f]{8,17}/g) ?? []).some((id) => id !== FORENSIC_INSTANCE);
+    if (otherId || /웹\s*서버|WebServers/i.test(text))
+      return alreadyEntry(
+        `데모에서는 조사용 인스턴스 \`${FORENSIC_INSTANCE}\`(Bud's Forensic AMI)만 중지·시작할 수 있습니다. 웹 서버는 Auto Scaling 그룹이 관리해서, 멈추면 그룹이 새 인스턴스를 띄웁니다.`,
+        ec2List);
+    const start = START.test(text) && !STOP.test(text);
+    if (start && !mockResources.forensicStopped)
+      return alreadyEntry(`\`${FORENSIC_INSTANCE}\`(Bud's Forensic AMI)은 이미 실행 중입니다. 바꿀 것이 없습니다.`, ec2List);
+    if (!start && mockResources.forensicStopped)
+      return alreadyEntry(`\`${FORENSIC_INSTANCE}\`(Bud's Forensic AMI)은 이미 중지되어 있습니다. 바꿀 것이 없습니다.`, ec2List);
+    return start ? APPROVAL_ENTRIES.ec2Start : APPROVAL_ENTRIES.ec2Stop;
+  }
   // 나머지는 Frothly 계정의 기록으로 질문에 맞춰 답한다 (demo/answers.ts). 관리자 전용 도구가 필요한 질문은
-  // 일반 사용자(?mock-role=member)에게 실제 서버처럼 '관리자만'이라고 답한다
-  return demoEntryFor(text, mockIsAdmin());
+  // 일반 사용자(?mock-role=member)에게 실제 서버처럼 '관리자만'이라고 답한다. 승인해 바꾼 상태도 답에 반영한다
+  return demoEntryFor(text, mockIsAdmin(), mockResources);
 };
 
 const startRun = (
@@ -1443,6 +1551,26 @@ const summary = ({
 
 type Result = [number, unknown];
 
+// 승인한 변경을 가짜 리소스에 적용하고, 실제 AWS라면 남았을 CloudTrail 이벤트를 돌려준다
+const executeMock = (action: PendingAction): { event_source: string; event_name: string } => {
+  switch (action.tool) {
+    case "setLogRetention":
+      mockResources.retention = Number(action.args.retention_days ?? 14); // '로그대로'의 1일도 그대로 (예전에는 늘 14일)
+      return { event_source: "logs.amazonaws.com", event_name: "PutRetentionPolicy" };
+    case "setEc2InstanceState": {
+      const stop = action.args.action === "stop";
+      mockResources.forensicStopped = stop;
+      return { event_source: "ec2.amazonaws.com", event_name: stop ? "StopInstances" : "StartInstances" };
+    }
+    case "enableS3PublicAccessBlock":
+      mockResources.webcodeBlocked = true;
+      return { event_source: "s3.amazonaws.com", event_name: "PutPublicAccessBlock" };
+    default: // setAlarmActions
+      mockResources.alarmActions = false;
+      return { event_source: "monitoring.amazonaws.com", event_name: "DisableAlarmActions" };
+  }
+};
+
 const route = (
   method: string,
   path: string,
@@ -1554,23 +1682,12 @@ const route = (
         events.push("denied");
       } else {
         // 가짜 리소스를 바꾼다 (실제로는 MCP Lambda가 승인을 다시 확인하고 한 번만 실행한다)
-        if (action.tool === "setLogRetention") mockResources.retention = 14;
-        else mockResources.alarmActions = false;
+        const executed = executeMock(action);
         action.status = "executed";
-        const cloudtrail = {
-          event_source:
-            action.tool === "setLogRetention"
-              ? "logs.amazonaws.com"
-              : "monitoring.amazonaws.com",
-          event_name:
-            action.tool === "setLogRetention"
-              ? "PutRetentionPolicy"
-              : "DisableAlarmActions",
-          request_id: newId(),
-        };
+        const cloudtrail = { ...executed, request_id: newId() };
         action.result = JSON.stringify({
           status: "success",
-          target: action.args.log_group_name ?? action.args.alarm_name,
+          target: action.target ?? action.args.log_group_name ?? action.args.alarm_name,
           before: action.before,
           after: action.after,
           cloudtrail,
@@ -1654,7 +1771,7 @@ const dashboardData = (): DashboardData => {
   const demo = demoDashboard();
   const longRetention = mockResources.retention === null || mockResources.retention > 14; // 14일이면 충분한 개발 로그
   const resources: DashboardResource[] = [
-    ...demoResources(),
+    ...demoResources(mockResources),
     {
       id: MOCK_ALARM,
       kind: "Alarm",
@@ -1679,7 +1796,7 @@ const dashboardData = (): DashboardData => {
   const changes = allChanges.slice(0, 10);
 
   const findings: DashboardFinding[] = [
-    ...demoFindings(),
+    ...demoFindings(mockResources),
     ...(longRetention
       ? [{ kind: "log-retention" as const, status: "warn" as const, title: "보존 기간 과다 로그 그룹 1개", detail: MOCK_LOG_GROUP }]
       : []),

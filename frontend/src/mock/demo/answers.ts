@@ -25,6 +25,8 @@ import {
     round,
     when,
     LAMBDA_ERROR_KEYS,
+    INITIAL_DEMO_STATE,
+    type DemoState,
 } from './frothly';
 
 export interface DemoTool {
@@ -44,7 +46,7 @@ export interface DemoEntry {
 interface DemoAnswer {
     match: RegExp;
     adminOnly?: boolean;
-    build: () => DemoEntry;
+    build: (state: DemoState) => DemoEntry; // state: 대화에서 승인해 바꾼 것 (중지한 인스턴스, 켠 퍼블릭 액세스 차단)
 }
 
 const ok = (tool_name: string, input: Record<string, unknown> = {}): DemoTool => ({ tool_name, input, status: 'ok' });
@@ -277,6 +279,42 @@ const DEMO_ANSWERS: DemoAnswer[] = [
         }),
     },
     {
+        // 비용 관리: 쓰지 않는 리소스. 비용 답보다 먼저 본다 (예시 질문 "비용 최적화를 위해 삭제 가능한 미사용 리소스가
+        // 있나요?"에 '비용'이 들어 있어, 뒤에 두면 비용 증가 답을 받았다)
+        match: /미사용|안\s*쓰는|쓰지\s*않는|삭제\s*가능|낭비|유휴/,
+        build: (state) => {
+            const idle = idleInstance();
+            const stopped = state.forensicStopped;
+            const eip = FROTHLY.eips.find((e) => !e.attached);
+            const eipMonthly = 0.005 * 730; // 연결 안 된 탄력적 IP: 시간당 $0.005
+            const idleMonthly = 0.0138 * 730; // t2.micro 온디맨드 (us-west-1)
+            return {
+                search: { query: 'findEc2Waste', found: ['findEc2Waste'] },
+                tools: [ok('findEc2Waste', {})],
+                thinking: [
+                    '연결되지 않은 EBS 볼륨, 오래 쓰지 않은 인스턴스, 연결되지 않은 탄력적 IP를 한 번에 찾는다.',
+                    '연결 안 된 볼륨은 없다. 탄력적 IP 하나와 거의 쓰지 않는 인스턴스 하나가 있다.',
+                ],
+                answer: lines(
+                    stopped
+                        ? `정리할 수 있는 리소스가 **1개** 있습니다. 치우면 한 달에 약 ${usd(eipMonthly)}를 아낍니다.`
+                        : `정리할 수 있는 리소스가 **2개** 있습니다. 모두 치우면 한 달에 약 ${usd(eipMonthly + idleMonthly)}를 아낍니다.`,
+                    '',
+                    '| 리소스 | 상태 | 월 비용 (예상) |',
+                    '|:--|:--|--:|',
+                    eip ? `| 탄력적 IP \`${eip.ip}\` | 어느 인스턴스에도 연결되지 않음 | ${usd(eipMonthly)} |` : undefined,
+                    !stopped &&
+                        `| ${idle.name} (\`${idle.id}\`, ${idle.type}) | CPU 평균 ${metricAverage('forensicCpu')}% · 조사용으로 띄운 뒤 켜져 있음 | ${usd(idleMonthly)} |`,
+                    '',
+                    '- 연결되지 않은 EBS 볼륨은 없습니다 (종료된 웹 서버의 볼륨은 함께 지워지게 설정되어 있습니다).',
+                    stopped
+                        ? `- \`${idle.name}\`는 대화에서 승인해 중지했습니다 (EBS 볼륨 요금은 계속 나갑니다).`
+                        : `- 인스턴스는 조사가 끝났는지 확인한 뒤 멈추세요. "${idle.name} 멈춰 줘"라고 하면 승인 요청을 만듭니다.`,
+                ),
+            };
+        },
+    },
+    {
         // 비용 관리
         match: /비용|요금|청구|얼마/,
         build: () => {
@@ -306,35 +344,6 @@ const DEMO_ANSWERS: DemoAnswer[] = [
                     `- **EC2**: 웹 서버 그룹이 오늘만 ${asgLaunches()}번 인스턴스를 새로 띄웠고, 조사용 \`${idleInstance().name}\`이 계속 켜져 있습니다.`,
                     '- **CloudWatch**: 로그 수집 Lambda가 늘어난 로그를 올리고 있습니다. 보존 기간이 없는 로그 그룹이 있는지 확인하세요.',
                     '- **Config**: 규칙 평가 호출이 많습니다(오늘 CloudTrail 조회 호출 중 가장 많음). 평가 주기를 늘리면 줄어듭니다.',
-                ),
-            };
-        },
-    },
-    {
-        // 비용 관리: 쓰지 않는 리소스
-        match: /미사용|안\s*쓰는|쓰지\s*않는|삭제\s*가능|낭비|유휴/,
-        build: () => {
-            const idle = idleInstance();
-            const eip = FROTHLY.eips.find((e) => !e.attached);
-            const eipMonthly = 0.005 * 730; // 연결 안 된 탄력적 IP: 시간당 $0.005
-            const idleMonthly = 0.0138 * 730; // t2.micro 온디맨드 (us-west-1)
-            return {
-                search: { query: 'findEc2Waste', found: ['findEc2Waste'] },
-                tools: [ok('findEc2Waste', {})],
-                thinking: [
-                    '연결되지 않은 EBS 볼륨, 오래 쓰지 않은 인스턴스, 연결되지 않은 탄력적 IP를 한 번에 찾는다.',
-                    '연결 안 된 볼륨은 없다. 탄력적 IP 하나와 거의 쓰지 않는 인스턴스 하나가 있다.',
-                ],
-                answer: lines(
-                    `정리할 수 있는 리소스가 **2개** 있습니다. 모두 치우면 한 달에 약 ${usd(eipMonthly + idleMonthly)}를 아낍니다.`,
-                    '',
-                    '| 리소스 | 상태 | 월 비용 (예상) |',
-                    '|:--|:--|--:|',
-                    eip ? `| 탄력적 IP \`${eip.ip}\` | 어느 인스턴스에도 연결되지 않음 | ${usd(eipMonthly)} |` : undefined,
-                    `| ${idle.name} (\`${idle.id}\`, ${idle.type}) | CPU 평균 ${metricAverage('forensicCpu')}% · 조사용으로 띄운 뒤 켜져 있음 | ${usd(idleMonthly)} |`,
-                    '',
-                    '- 연결되지 않은 EBS 볼륨은 없습니다 (종료된 웹 서버의 볼륨은 함께 지워지게 설정되어 있습니다).',
-                    '- 인스턴스는 조사가 끝났는지 확인한 뒤 멈추세요. 대화에서 "멈춰 줘"라고 하면 승인 요청을 만듭니다.',
                 ),
             };
         },
@@ -402,9 +411,10 @@ const DEMO_ANSWERS: DemoAnswer[] = [
         // S3 공개 버킷
         match: /버킷|S3|s3|공개/,
         adminOnly: true,
-        build: () => {
+        build: (state) => {
             const acl = publicAcl()!;
             const restored = aclRestored();
+            const blocked = state.webcodeBlocked;
             return {
                 search: { query: 'listS3Buckets|checkS3BucketSecurity', found: ['listS3Buckets', 'checkS3BucketSecurity'] },
                 tools: [ok('listS3Buckets', {}), ok('checkS3BucketSecurity', {})],
@@ -413,13 +423,15 @@ const DEMO_ANSWERS: DemoAnswer[] = [
                     'frothlywebcode가 오늘 공개 ACL이 걸렸다 풀렸고, 퍼블릭 액세스 차단은 여전히 꺼져 있다.',
                 ],
                 answer: lines(
-                    `지금 공개된 버킷은 없습니다. 하지만 **\`frothlywebcode\`는 오늘 ${restored ? minutesBetween(acl.at, restored.at) : '?'}분 동안 누구나 읽고 쓸 수 있었고**, 퍼블릭 액세스 차단이 아직 꺼져 있습니다.`,
+                    `지금 공개된 버킷은 없습니다. 하지만 **\`frothlywebcode\`는 오늘 ${restored ? minutesBetween(acl.at, restored.at) : '?'}분 동안 누구나 읽고 쓸 수 있었습니다**${blocked ? '. 지금은 퍼블릭 액세스 차단이 켜져 있습니다.' : ', 퍼블릭 액세스 차단이 아직 꺼져 있습니다.'}`,
                     '',
                     `- ${when(acl.at)}: ${acl.actor}가 ACL로 모든 사용자에게 ${acl.publicPermissions?.join('·')} 권한을 줌`,
                     restored ? `- ${when(restored.at)}: ${restored.actor}가 공개 권한을 뺌` : undefined,
                     '- 암호화·버전 관리·SSL 강제도 꺼져 있습니다 (AWS Config 규칙 위반).',
                     '',
-                    '다시 공개되지 않게 퍼블릭 액세스 차단을 켜 두는 것을 권합니다. "frothlywebcode 퍼블릭 액세스 차단 켜 줘"라고 하면 승인 요청을 만듭니다.',
+                    blocked
+                        ? '퍼블릭 액세스 차단을 대화에서 승인해 켰으므로, ACL이나 버킷 정책으로 다시 공개할 수 없습니다.'
+                        : '다시 공개되지 않게 퍼블릭 액세스 차단을 켜 두는 것을 권합니다. "frothlywebcode 퍼블릭 액세스 차단 켜 줘"라고 하면 승인 요청을 만듭니다.',
                 ),
             };
         },
@@ -456,6 +468,7 @@ const fallback = (): DemoEntry => ({
         '- 보안: "최근 보안 이벤트를 심각도 순으로", "루트 계정 로그인 기록 있어?", "최소 권한에 어긋나는 사용자"',
         '- 운영: "CPU가 가장 높은 EC2", "Lambda 오류", "지금 울리는 알람"',
         '- 비용: "비용이 가장 많이 늘어난 서비스", "쓰지 않는 리소스"',
+        '- 변경 (승인 뒤 실행): "Bud\'s Forensic AMI 멈춰 줘", "frothlywebcode 퍼블릭 액세스 차단 켜 줘"',
     ),
 });
 
@@ -467,12 +480,12 @@ const adminOnlyRefusal = (): DemoEntry => ({
         '이 내용은 **관리자(admins 그룹)만 볼 수 있습니다.** CloudTrail·IAM·네트워크·S3 보안 점검 조회는 관리자 전용이라, 필요하면 관리자에게 요청해 주세요.\n\n로그·지표·비용·EC2 상태는 지금 권한으로도 물어볼 수 있습니다.',
 });
 
-// 질문에 맞는 데모 답 (admin: 요청자가 관리자인가)
-export const demoEntryFor = (text: string, admin: boolean): DemoEntry => {
+// 질문에 맞는 데모 답 (admin: 요청자가 관리자인가, state: 대화에서 승인해 바꾼 것)
+export const demoEntryFor = (text: string, admin: boolean, state: DemoState = INITIAL_DEMO_STATE): DemoEntry => {
     const found = DEMO_ANSWERS.find((entry) => entry.match.test(text));
     if (!found) return fallback();
     if (found.adminOnly && !admin) return adminOnlyRefusal();
-    return found.build();
+    return found.build(state);
 };
 
 // 처음 열었을 때 보이는 예시 대화의 질문. 일반 사용자에게는 관리자 전용 도구가 필요 없는 질문
