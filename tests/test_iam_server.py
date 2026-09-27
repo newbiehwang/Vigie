@@ -58,7 +58,7 @@ def test_write_tools_cannot_be_called_even_by_name(iam_env):
                        ("attach_user_policy", {"user_name": "alice",
                                                "policy_arn": "arn:aws:iam::aws:policy/AdministratorAccess"})):
         with pytest.raises(Exception, match="not found"):
-            env["mcp"].call_tool(name, args)
+            env["mcp"].call_admin(name, args)
     users = [u["UserName"] for u in boto3.client("iam").list_users()["Users"]]
     assert users == ["alice"]
     assert len(boto3.client("iam").list_access_keys(UserName="alice")["AccessKeyMetadata"]) == 1
@@ -70,8 +70,8 @@ def test_user_tools_work_despite_the_upstream_ctx_bug(iam_env):
     for name in ("list_users", "get_user"):
         schema = tools[name]["inputSchema"]
         assert "ctx" not in schema.get("properties", {}) and "ctx" not in schema.get("required", [])
-    assert "alice" in text_of(env["mcp"].call_tool("list_users", {}))
-    assert "alice" in text_of(env["mcp"].call_tool("get_user", {"user_name": "alice"}))
+    assert "alice" in text_of(env["mcp"].call_admin("list_users", {}))
+    assert "alice" in text_of(env["mcp"].call_admin("get_user", {"user_name": "alice"}))
 
 
 def test_hidden_argument_patch_does_nothing_when_the_argument_is_gone(iam_env):
@@ -88,16 +88,16 @@ def test_server_runs_in_its_own_read_only_mode(iam_env):
 
 def test_roles_and_inline_policies_can_be_read(iam_env):
     env, _ = iam_env
-    assert ROLE in text_of(env["mcp"].call_tool("list_roles", {}))
-    assert "LlmReadLogs" in text_of(env["mcp"].call_tool("list_role_policies", {"role_name": ROLE}))
-    policy = text_of(env["mcp"].call_tool("get_role_policy", {"role_name": ROLE, "policy_name": "LlmReadLogs"}))
+    assert ROLE in text_of(env["mcp"].call_admin("list_roles", {}))
+    assert "LlmReadLogs" in text_of(env["mcp"].call_admin("list_role_policies", {"role_name": ROLE}))
+    policy = text_of(env["mcp"].call_admin("get_role_policy", {"role_name": ROLE, "policy_name": "LlmReadLogs"}))
     assert "logs:DescribeLogGroups" in policy
 
 
 def test_access_key_ids_in_results_are_redacted_before_claude(iam_env):
     # get_user는 액세스 키 ID도 돌려준다. Claude로 보내기 전에 가린다 (redaction.py, PR 1)
     env, _ = iam_env
-    raw = text_of(env["mcp"].call_tool("get_user", {"user_name": "alice"}))
+    raw = text_of(env["mcp"].call_admin("get_user", {"user_name": "alice"}))
     key_id = boto3.client("iam").list_access_keys(UserName="alice")["AccessKeyMetadata"][0]["AccessKeyId"]
     assert key_id in raw
     from redaction import Redactor

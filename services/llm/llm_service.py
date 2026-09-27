@@ -20,6 +20,7 @@ from mcp_client import MCPClient
 from common.dashboard_store import DashboardStore
 from dashboard_view import app_changes_from_audit, build_view, pending_approvals
 import metrics
+import tool_access
 from system_prompt import build_system_blocks, build_system_prompt
 from timing import Stopwatch
 from tool_cache import ToolCache
@@ -363,7 +364,7 @@ def get_client(timer=None):
     return client_cache[model_id]
 
 
-def handle_llm1_with_mcp(body, origin, caller_id=None, caller_email=None):
+def handle_llm1_with_mcp(body, origin, caller_id=None, caller_email=None, caller_groups=None):
     """
     MCP 클라이언트를 사용하여 llm1 요청을 처리하고 도구 사용 과정 및 결과 포함
     세션 기반 메시지 캐싱 지원 (개선된 messages 배열 방식)
@@ -373,6 +374,8 @@ def handle_llm1_with_mcp(body, origin, caller_id=None, caller_email=None):
         origin: CORS origin
         caller_id: Cognito Authorizer가 검증한 요청자 sub (웹 요청), Slack 봇 직접 호출은 None
         caller_email: 요청자 이메일 (ID 토큰의 email, 감사 로그에 남긴다)
+        caller_groups: 요청자의 Cognito 그룹 (ID 토큰의 cognito:groups). admins가 아니면 관리자 전용 도구를 쓸 수 없다
+            (tool_access.py). Slack 봇 직접 호출은 None (일반 사용자)
 
     Returns:
         응답 객체 (도구 사용 과정 및 결과 포함)
@@ -449,6 +452,9 @@ def handle_llm1_with_mcp(body, origin, caller_id=None, caller_email=None):
                                        request_id=request_id, session_id=session_id, audit=audit)
                      if caller_id and approval_store is not None else None)
         client.approvals = approvals
+        # 그룹별로 쓸 수 있는 도구 (tool_access.py): 관리자가 아니면 CloudTrail·IAM·네트워크 등을 모델에게 보이지 않는다.
+        # Slack 봇 요청은 그룹이 없어 일반 사용자다. 클라이언트는 여러 요청이 함께 쓰므로 요청마다 넣는다
+        client.role = tool_access.role_of(caller_groups if caller_id else None)
         audit.model_id = getattr(client, "model_id", None) or model_id
 
         # 사용자 입력 처리 시작 시간 기록

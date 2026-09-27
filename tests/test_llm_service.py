@@ -12,7 +12,7 @@ def llm_lambda(monkeypatch):
     module = load_service_module("services/llm", "lambda_function")
     calls = []
     monkeypatch.setattr(module, "handle_llm1_with_mcp",
-                        lambda body, origin, caller_id=None, caller_email=None:
+                        lambda body, origin, caller_id=None, caller_email=None, caller_groups=None:
                         calls.append((body, caller_id)) or {"statusCode": 200})
     module.calls = calls
     return module
@@ -120,8 +120,10 @@ def test_anthropic_tools_keep_the_full_input_schema(aws):
         },
         "required": ["dimensions"],
     }
-    client.tools = [{"name": "get_metric_data", "description": "메트릭 조회", "inputSchema": schema},
-                    {"name": "listCloudwatchDashboards", "description": "대시보드 목록", "inputSchema": {}}]
+    everyone = {"vigie/risk": "read", "vigie/access": "all"}  # MCP tools/list가 붙이는 표시 (없으면 관리자 전용)
+    client.tools = [{"name": "get_metric_data", "description": "메트릭 조회", "inputSchema": schema, "_meta": everyone},
+                    {"name": "listCloudwatchDashboards", "description": "대시보드 목록", "inputSchema": {},
+                     "_meta": everyone}]
     client.tool_search = False  # 모든 도구를 싣는 경우 (도구 검색을 켠 경우는 test_tool_search.py)
 
     converted = {tool["name"]: tool for tool in client._convert_tools_format()}

@@ -90,6 +90,7 @@ def anthropic_tools(tools, enabled, model="claude-sonnet-5"):
     client = AnthropicMCPClient(mcp_url="https://example.invalid", api_key=None, model_id=model)
     client.tools = tools
     client.tool_search = enabled
+    client.role = "admin"  # 모든 도구를 싣는 경우를 잰다 (일반 사용자는 관리자 전용 도구가 빠져 더 작다)
     return client._convert_tools_format()
 
 

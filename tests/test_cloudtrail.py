@@ -47,11 +47,11 @@ def test_lookup_uses_this_deployments_region_when_omitted(ct_env, monkeypatch):
                         lambda self, region: regions.append(region) or FakeCloudTrail())
     tools_of(ct_env)  # 공식 서버를 불러온다
 
-    result = ct_env["mcp"].call_tool("lookup_events", {"attribute_key": "EventName",
+    result = ct_env["mcp"].call_admin("lookup_events", {"attribute_key": "EventName",
                                                         "attribute_value": "PutRetentionPolicy"})
     assert not result.get("isError"), result
     assert "PutRetentionPolicy" in json.dumps(result)
-    ct_env["mcp"].call_tool("lookup_events", {"region": "us-west-2"})  # 직접 준 리전은 그대로
+    ct_env["mcp"].call_admin("lookup_events", {"region": "us-west-2"})  # 직접 준 리전은 그대로
     assert regions == ["ap-southeast-2", "us-west-2"]
 
 

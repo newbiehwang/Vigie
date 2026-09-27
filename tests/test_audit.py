@@ -102,7 +102,7 @@ def client_run(audit_env, monkeypatch):
     monkeypatch.setattr(mcp_anthropic_client.HTTP, "post", fake_post)
     client = mcp_anthropic_client.AnthropicMCPClient(
         mcp_url="https://example.invalid", api_key="k", model_id="claude-sonnet-5")
-    read = {"vigie/risk": "read"}  # MCP tools/list가 붙이는 위험도 (없으면 변경 도구로 본다)
+    read = {"vigie/risk": "read", "vigie/access": "all"}  # MCP tools/list가 붙이는 위험도·쓸 수 있는 사람
     client.tools = [{"name": "describe_log_groups", "description": "", "inputSchema": {}, "_meta": read},
                     {"name": "analyze_log_group", "description": "", "inputSchema": {}, "_meta": read}]
     monkeypatch.setattr(client.mcp_client, "call_tool", fake_call_tool)
@@ -579,11 +579,14 @@ def test_llm1_route_passes_the_email_claim(audit_env, monkeypatch):
     lambda_function = load_service_module("services/llm", "lambda_function")
     captured = {}
     monkeypatch.setattr(lambda_function, "handle_llm1_with_mcp",
-                        lambda body, origin, caller_id, email: captured.update(sub=caller_id, email=email) or {})
+                        lambda body, origin, caller_id, email, groups: captured.update(
+                            sub=caller_id, email=email, groups=groups) or {})
     lambda_function.lambda_handler({"path": "/llm1", "httpMethod": "POST", "headers": {}, "body": "{}",
                                     "requestContext": {"authorizer": {"claims": {
-                                        "sub": "alice", "email": "alice@example.com"}}}}, None)
-    assert captured == {"sub": "alice", "email": "alice@example.com"}
+                                        "sub": "alice", "email": "alice@example.com",
+                                        "cognito:groups": "admins"}}}}, None)
+    # 그룹도 넘긴다: 관리자 전용 도구를 쓸 수 있는지 정한다 (tool_access.py)
+    assert captured == {"sub": "alice", "email": "alice@example.com", "groups": ["admins"]}
 
 
 # ---------------------------------------------------------------- CloudFormation

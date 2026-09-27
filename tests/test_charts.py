@@ -183,7 +183,9 @@ def test_chart_tools_get_pseudonyms_but_lookups_get_real_values(env, monkeypatch
     monkeypatch.setattr(client.mcp_client, "call_tool", call_tool)
     monkeypatch.setattr(llm, "get_client", lambda *_: client)
 
-    llm.handle_llm1_with_mcp({"text": f"{ARN} 역할 정책을 차트로 그려줘"}, ORIGIN, caller_id="alice")
+    # IAM 조회는 관리자 전용이라 관리자의 요청으로 보낸다 (tool_access.py)
+    llm.handle_llm1_with_mcp({"text": f"{ARN} 역할 정책을 차트로 그려줘"}, ORIGIN, caller_id="alice",
+                             caller_groups=["admins"])
 
     assert alias and OTHER_ACCOUNT not in alias
     lookups = dict(calls)

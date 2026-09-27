@@ -1,7 +1,7 @@
 # llm/lambda_function.py
 import requests
 from llm_service import (current_model, parse_body, handle_llm1_with_mcp, handle_progress, handle_audit,
-                         handle_action, handle_dashboard)
+                         handle_action, handle_dashboard, groups_of)
 from common.config import get_config
 from common.utils import cors_response
 
@@ -32,7 +32,8 @@ def lambda_handler(event, context):
                 # Slack 봇은 API Gateway를 거치지 않고 Lambda를 직접 호출한다.
                 body.pop("user_id", None)
                 body.pop("previous_questions", None)
-            return handle_llm1_with_mcp(body, origin, caller_id, claims.get("email"))
+            # 그룹(cognito:groups)으로 쓸 수 있는 도구가 정해진다 (관리자 전용 도구, tool_access.py)
+            return handle_llm1_with_mcp(body, origin, caller_id, claims.get("email"), groups_of(claims))
 
         elif path.startswith("/llm1/progress/") and http_method == "GET":
             # 답변을 만드는 동안의 진행 상황 (화면이 /llm1 응답을 기다리며 1초마다 묻는다)

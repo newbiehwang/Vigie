@@ -9,6 +9,7 @@ from mcp_client import MCPClient
 from redaction import Redactor
 from approvals import PREVIEW_META, is_registered, risk_of
 import injection
+import tool_access
 import tool_search
 
 
@@ -97,6 +98,9 @@ class AnthropicMCPClient:
         self._seen_suspicious: List[Dict[str, Any]] = []
         # 요청마다 llm_service가 넣어 주는 시간 기록 (timing.Stopwatch). 모델 호출·도구마다 걸린 시간을 모은다
         self.timer = None
+        # 요청마다 llm_service가 넣어 주는 요청자의 권한 (tool_access.role_of). 관리자가 아니면 관리자 전용 도구를
+        # 모델에게 보이지 않고, 불러도 거절한다. 넣어 주지 않으면(Slack 등) 일반 사용자로 본다
+        self.role = tool_access.MEMBER
 
     # system에 블록 목록(system_prompt.build_system_blocks: 캐시되는 본문 + 요청 시각)을 받는다
     supports_system_blocks = True
@@ -120,6 +124,12 @@ class AnthropicMCPClient:
 
     def _tool_definition(self, name: str) -> Optional[Dict[str, Any]]:
         return next((tool for tool in self.tools if tool.get("name") == name), None)
+
+    def _can_use(self, name: str) -> bool:
+        """이 요청자가 이 도구를 쓸 수 있나 (tool_access.py). 목록에 없는 이름은 여기서 막지 않는다:
+        예전처럼 변경 도구로 다뤄지고, MCP가 없는 도구라고 돌려준다."""
+        definition = self._tool_definition(name)
+        return definition is None or tool_access.can_use(definition, self.role)
 
     def _tool_risk(self, name: str) -> str:
         """MCP tools/list가 알려 준 위험도 (mcp/lambda_mcp/risk.py). 모르는 도구는 변경 도구로 본다."""
@@ -211,6 +221,10 @@ class AnthropicMCPClient:
         if self.tools:
             return
         cached = self.tool_cache.load() if self.tool_cache is not None else None
+        # 이 기능 전에 저장한 목록에는 '쓸 수 있는 사람' 표시가 없다: 일반 사용자에게 도구가 하나도 보이지 않으므로
+        # 쓰지 않고 연결을 기다린다 (새로 받은 목록이 저장되면 다음부터는 저장한 목록을 쓴다)
+        if cached and not tool_access.labeled(cached):
+            cached = None
         if cached:
             self.tools = cached
             timer = self.timer  # 이 요청의 시간 기록 (연결이 요청보다 늦게 끝나면 기록되지 않는다)
@@ -248,7 +262,8 @@ class AnthropicMCPClient:
             Anthropic API 형식의 도구 목록
         """
         anthropic_tools = []
-        for tool in self.tools:
+        # 요청자가 쓸 수 없는 도구(일반 사용자에게 관리자 전용 도구)는 싣지 않는다. 도구 검색으로도 찾을 수 없다
+        for tool in tool_access.visible(self.tools, self.role):
             # MCP 입력 스키마(JSON Schema)를 그대로 넘긴다. 예전에는 속성마다 type·description만 남겼는데,
             # AWS 공식 MCP 도구는 배열 안의 객체(items), 선택 인자(anyOf), 선택지(enum)를 쓰므로 그 정보를 지우면
             # 모델이 인자를 엉뚱한 모양으로 보낸다. ($ref는 MCP 서버가 미리 풀어서 보낸다: mcp/lambda_mcp/official.py)
@@ -268,15 +283,21 @@ class AnthropicMCPClient:
         return tool_search.build(anthropic_tools, self.tool_search)
 
     def _system_prompt(self, system_prompt):
-        """요청에 넣을 시스템 프롬프트. 도구 검색을 켰으면 찾는 방법을 덧붙인다.
-        블록 목록(캐시되는 본문 + 요청 시각)이면 찾는 방법을 본문 블록 끝에 붙인다 (캐시되는 앞부분에 들어가게)."""
-        if not system_prompt or not self.tool_search:
+        """요청에 넣을 시스템 프롬프트. 도구 검색을 켰으면 찾는 방법을, 일반 사용자면 쓸 수 없는 도구 안내를 덧붙인다.
+        블록 목록(캐시되는 본문 + 요청 시각)이면
+        - 찾는 방법은 본문 블록 끝에 붙인다 (모두에게 같으므로 캐시되는 앞부분에 들어가게)
+        - 권한 안내는 맨 뒤의 새 블록으로 둔다 (캐시 표시 뒤라 관리자와 일반 사용자가 같은 캐시를 쓴다)"""
+        if not system_prompt:
             return system_prompt
+        note = tool_access.MEMBER_NOTE if self.role != tool_access.ADMIN else ""
         if isinstance(system_prompt, list):
             blocks = [dict(block) for block in system_prompt]
-            blocks[0]["text"] = blocks[0]["text"] + tool_search.SYSTEM_HINT
+            if self.tool_search:
+                blocks[0]["text"] = blocks[0]["text"] + tool_search.SYSTEM_HINT
+            if note:
+                blocks.append({"type": "text", "text": note.strip()})
             return blocks
-        return system_prompt + tool_search.SYSTEM_HINT
+        return system_prompt + (tool_search.SYSTEM_HINT if self.tool_search else "") + note
 
     def _post(self, payload: Dict[str, Any], system_prompt: Optional[str]):
         """Messages API 요청 (스트리밍). 모델이 도구 검색을 받지 않으면(400) 끄고 모든 도구를 실어 한 번 다시 보낸다.
@@ -292,7 +313,7 @@ class AnthropicMCPClient:
             self.tool_search = False
             payload["tools"] = self._convert_tools_format()
             if system_prompt:
-                payload["system"] = system_prompt
+                payload["system"] = self._system_prompt(system_prompt)
             response = HTTP.post(self.api_url, headers=self.api_headers, json=payload, timeout=HTTP_TIMEOUT,
                                  stream=True)
         return response
@@ -1152,7 +1173,11 @@ class AnthropicMCPClient:
             for index, tool_use in enumerate(tool_uses):
                 try:
                     prepared = self._start_tool(tool_use)
-                    if prepared["risk"] == "write":
+                    if not self._can_use(prepared["name"]):
+                        # 모델에게 보이지 않은 관리자 전용 도구를 이름으로 불렀다: 부르지 않는다.
+                        # 시작·실패가 진행 상황과 감사 로그에 남는다 (누가 무엇을 시도했는지)
+                        results[index] = self._finish_tool(prepared, tool_access.denied_result(prepared["name"]))
+                    elif prepared["risk"] == "write":
                         result = self._request_approval(prepared["name"], prepared["input"],
                                                         self._tainted_by(prepared["call_no"]))
                         results[index] = self._finish_tool(prepared, result)
@@ -1176,6 +1201,10 @@ class AnthropicMCPClient:
     def _call_tool_timed(self, name: str, arguments: Dict[str, Any]) -> Any:
         """도구 하나를 MCP로 부른다 (다른 스레드에서 돈다. 진행 상황·감사 로그는 건드리지 않는다)."""
         with self._time(f"tool:{name}"):
+            # 관리자의 요청이면 MCP에 알린다 (없으면 MCP가 관리자 전용 도구를 거절한다, tool_access.call_meta)
+            meta = tool_access.call_meta(self.role)
+            if meta:
+                return self.mcp_client.call_tool(name, arguments, meta=meta)
             return self.mcp_client.call_tool(name, arguments)
 
     def _start_tool(self, tool_use: Dict[str, Any]) -> Dict[str, Any]:
