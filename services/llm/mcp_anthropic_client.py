@@ -1,6 +1,8 @@
 import json
 import time
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import requests
 from typing import Dict, Any, List, Optional, Tuple
 from mcp_client import MCPClient
@@ -18,6 +20,10 @@ MAX_TAINTED = 5
 # 새 세션을 만들어 연결을 버린다. 제한 시간: 연결 10초, 응답을 기다리는 시간 300초 (사고가 긴 답변도 끊기지 않게)
 HTTP = requests.Session()
 HTTP_TIMEOUT = (10, 300)
+# 한 응답에서 부른 조회 도구를 함께 부르는 최대 수 (_run_tools). MCP Lambda가 동시에 여러 개 뜬다
+MAX_PARALLEL_TOOLS = 4
+# 인사처럼 도구가 필요 없는 짧은 말에 답할 때의 최대 출력 토큰 (사고 없이 바로 답한다, use_tools=False)
+SMALL_TALK_MAX_TOKENS = 1024
 
 
 class StreamError(Exception):
@@ -91,6 +97,9 @@ class AnthropicMCPClient:
 
     # system에 블록 목록(system_prompt.build_system_blocks: 캐시되는 본문 + 요청 시각)을 받는다
     supports_system_blocks = True
+    # 도구 없이 바로 답하기(use_tools=False)를 받는다. MCP 세션·도구 목록은 도구가 필요한 질문에서 처음 준비한다
+    supports_small_talk = True
+    lazy_tools = True
 
     def _time(self, name: str):
         """걸린 시간을 재는 with 블록 (시간 기록이 없으면 재지 않는다)."""
@@ -796,7 +805,8 @@ class AnthropicMCPClient:
                     }
                 }
 
-    def invoke_with_tools(self, prompt: str, system_prompt: str = None, previous_messages: list = None) -> Dict[
+    def invoke_with_tools(self, prompt: str, system_prompt: str = None, previous_messages: list = None,
+                          use_tools: bool = True) -> Dict[
         str, Any]:
         """
         MCP 도구를 사용하여 Anthropic 모델 호출
@@ -809,9 +819,10 @@ class AnthropicMCPClient:
         Returns:
             Anthropic 모델 응답 (표준 형식으로 변환됨)
         """
-        # 세션 및 도구가 초기화되지 않은 경우
-        if not self.tools:
-            self.initialize()
+        # 세션 및 도구가 초기화되지 않은 경우 (도구가 필요한 질문에서 처음 준비한다. 인사에는 MCP를 부르지 않는다)
+        if use_tools and not self.tools:
+            with self._time("mcp_init"):
+                self.initialize()
 
         # 시스템 프롬프트 저장 (나중에 재사용)
         if system_prompt:
@@ -863,8 +874,8 @@ class AnthropicMCPClient:
                 "content": prompt
             })
 
-        # Anthropic 도구 형식으로 변환
-        anthropic_tools = self._convert_tools_format()
+        # Anthropic 도구 형식으로 변환 (도구 없이 답하면 빈 목록)
+        anthropic_tools = self._convert_tools_format() if use_tools else []
 
         # 디버그 로그에 사용 가능한 도구 기록
         self.debug_log.append({
@@ -896,22 +907,19 @@ class AnthropicMCPClient:
             # 대화에도 캐시 표시를 둔다: 다음 반복에서 앞 대화(도구 결과, 검색으로 찾은 도구 정의)를 캐시로 읽는다
             payload = {
                 "model": self.model_id,
-                "max_tokens": MAX_TOKENS,
+                "max_tokens": MAX_TOKENS if use_tools else SMALL_TALK_MAX_TOKENS,
                 "messages": tool_search.with_cache_breakpoint(self.messages)
             }
-            # 사고 과정: 화면에 보여 주려면 사고 요약을 받아야 한다 (display: summarized)
-            if self.thinking:
+            # 사고 과정: 화면에 보여 주려면 사고 요약을 받아야 한다 (display: summarized). 인사에는 생각하지 않고 바로 답한다
+            if self.thinking and use_tools:
                 payload["thinking"] = self.thinking
-            # 마지막 반복에서는 도구 호출 중지
-            if iteration == self.max_iterations - 1:
-                payload["tool_choice"] = {"type": "none"}
-            else:
-                payload["tool_choice"] = {"type": "auto"}
 
             # 도구가 있는 경우 추가 (도구 검색이 도중에 꺼졌을 수 있어 반복마다 다시 만든다)
-            anthropic_tools = self._convert_tools_format()
+            anthropic_tools = self._convert_tools_format() if use_tools else []
             if anthropic_tools:
                 payload["tools"] = anthropic_tools
+                # 마지막 반복에서는 도구 호출 중지 (도구가 없으면 tool_choice를 보낼 수 없다)
+                payload["tool_choice"] = {"type": "none" if iteration == self.max_iterations - 1 else "auto"}
 
             # 시스템 프롬프트가 있는 경우 추가
             if system_prompt:
@@ -1024,96 +1032,8 @@ class AnthropicMCPClient:
                     "timestamp": time.time()
                 })
 
-                # 각 도구에 대해 MCP 도구 호출
-                tool_results = []
-                for tool_use in tool_uses:
-                    try:
-                        # 도구 정보 추출
-                        tool_use_id = tool_use.get("id")
-                        tool_name = tool_use.get("name")
-                        tool_input = tool_use.get("input", {})
-
-                        print(f"도구 호출: {tool_name}, 입력: {json.dumps(tool_input, ensure_ascii=False)}")
-                        # 조회 도구에는 가명을 원래 값으로 되돌려 넘긴다 (ARN으로 다시 조회하는 흐름이 깨지지 않게).
-                        # 결과물 도구(차트·다이어그램)는 AWS를 부르지 않고 모델이 쓴 값을 그림에 옮길 뿐이라 가명 그대로
-                        # 넘긴다: 그림은 링크로 공유될 수 있고, 답변과 같이 가명만 보이는 것이 맞다 (docs/threat-model.md R1)
-                        risk = self._tool_risk(tool_name)
-                        restore = risk != "artifact"
-                        self._tool_calls += 1
-                        call_no = self._tool_calls
-                        # 감사 로그의 층 (audit.py 모듈 설명): 등록부에 없는 도구는 경계, 변경 도구는 유출, 나머지는 유입
-                        locus = ("interface" if not is_registered(self._tool_definition(tool_name))
-                                 else "egress" if risk == "write" else "ingress")
-                        self._report("tool_started", tool_use_id, tool_name, tool_input, restore, locus)
-
-                        # 디버그 로그에 도구 사용 요청 기록
-                        self.debug_log.append({
-                            "type": "tool_result",
-                            "tool_name": tool_name,
-                            "input": tool_input,
-                            "timestamp": time.time()
-                        })
-
-                        # MCP 도구 호출. AWS를 바꾸는 도구는 실행하지 않고 승인 요청을 만든다 (approvals.py)
-                        is_write = risk == "write"
-                        if is_write:
-                            result = self._request_approval(tool_name, tool_input, self._tainted_by(call_no))
-                        else:
-                            with self._time(f"tool:{tool_name}"):
-                                result = self.mcp_client.call_tool(
-                                    tool_name,
-                                    self.redactor.restore(tool_input) if restore else tool_input
-                                )
-                            # 결과물은 주소·그릴 내용을 떼어 두고 모델에는 참조(artifact://…)만 준다
-                            if risk == "artifact" and self.artifacts is not None:
-                                result = self.artifacts.take(tool_name, result)
-
-                        print(f"도구 결과: {self.redactor.text(json.dumps(result, ensure_ascii=False))[:200]}...")
-                        # MCP 도구는 실패를 예외 대신 결과의 isError로 알리기도 한다
-                        failed = isinstance(result, dict) and result.get("isError") is True
-                        # 도구 결과(제3자가 쓴 글)에 지시문처럼 보이는 문구가 있는지 (injection.py).
-                        # 승인 요청 결과는 이 서비스가 만든 글이라 보지 않는다
-                        suspicious = [] if is_write else injection.scan(json.dumps(result, ensure_ascii=False))
-                        self._report("tool_finished", tool_use_id, not failed,
-                                     self._tool_error_text(result) if failed else None,
-                                     len(json.dumps(result, ensure_ascii=False, default=str)), suspicious)
-
-                        # 디버그 로그에 도구 결과 기록
-                        self.debug_log.append({
-                            "type": "tool_result",
-                            "tool_name": tool_name,
-                            "input": tool_input,
-                            "output": result,
-                            "timestamp": time.time()
-                        })
-
-                        # 도구 결과를 저장
-                        tool_results.append({
-                            "tool_id": tool_use_id,
-                            "name": tool_name,
-                            "result": result,
-                            "suspicious": suspicious,
-                            "call_no": call_no,
-                        })
-                    except Exception as e:
-                        # 오류 처리
-                        print(f"도구 호출 오류: {str(e)}")
-                        self._report("tool_finished", tool_use_id, False, str(e))
-
-                        # 디버그 로그에 도구 오류 기록
-                        self.debug_log.append({
-                            "type": "tool_error",
-                            "tool_name": tool_name,
-                            "input": tool_input,
-                            "error": str(e),
-                            "timestamp": time.time()
-                        })
-
-                        tool_results.append({
-                            "tool_id": tool_use_id,
-                            "name": tool_name,
-                            "error": str(e)
-                        })
+                # 각 도구에 대해 MCP 도구 호출 (조회 도구는 함께, 변경 도구는 차례로. _run_tools)
+                tool_results = self._run_tools(tool_uses)
 
                 # Append user tool_result message in the required format
                 tool_results_list = []
@@ -1171,6 +1091,93 @@ class AnthropicMCPClient:
             }
         }
 
+    def _run_tools(self, tool_uses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """모델이 한 응답에서 부른 도구들을 실행하고, 결과를 부른 차례대로 돌려준다.
+        - 조회·결과물 도구는 함께 부른다 (스레드, 최대 MAX_PARALLEL_TOOLS). 예전에는 하나씩 차례로 불러, 로그 그룹 셋을
+          함께 조회하면 셋의 시간을 모두 더해 기다렸다
+        - 변경 도구는 승인 요청을 만든다 (AWS를 바꾸지 않는다). 차례로 만든다
+        - 진행 상황·감사 로그·결과물 정리는 이 스레드에서만 한다 (둘 다 한 번에 하나씩 쓰는 기록이다).
+          끝나는 차례로 알려 도구마다 걸린 시간이 맞게 한다. 모델에 돌려주는 결과는 부른 차례 그대로다"""
+        results: List[Optional[Dict[str, Any]]] = [None] * len(tool_uses)
+        running = {}
+        with ThreadPoolExecutor(max_workers=max(1, min(MAX_PARALLEL_TOOLS, len(tool_uses)))) as pool:
+            for index, tool_use in enumerate(tool_uses):
+                try:
+                    prepared = self._start_tool(tool_use)
+                    if prepared["risk"] == "write":
+                        result = self._request_approval(prepared["name"], prepared["input"],
+                                                        self._tainted_by(prepared["call_no"]))
+                        results[index] = self._finish_tool(prepared, result)
+                    else:
+                        arguments = self.redactor.restore(prepared["input"]) if prepared["restore"] else prepared["input"]
+                        running[pool.submit(self._call_tool_timed, prepared["name"], arguments)] = (index, prepared)
+                except Exception as error:
+                    results[index] = self._tool_failed(tool_use, error)
+            for future in as_completed(running):
+                index, prepared = running[future]
+                try:
+                    result = future.result()
+                    # 결과물은 주소·그릴 내용을 떼어 두고 모델에는 참조(artifact://…)만 준다
+                    if prepared["risk"] == "artifact" and self.artifacts is not None:
+                        result = self.artifacts.take(prepared["name"], result)
+                    results[index] = self._finish_tool(prepared, result)
+                except Exception as error:
+                    results[index] = self._tool_failed(prepared["tool_use"], error)
+        return [result for result in results if result is not None]
+
+    def _call_tool_timed(self, name: str, arguments: Dict[str, Any]) -> Any:
+        """도구 하나를 MCP로 부른다 (다른 스레드에서 돈다. 진행 상황·감사 로그는 건드리지 않는다)."""
+        with self._time(f"tool:{name}"):
+            return self.mcp_client.call_tool(name, arguments)
+
+    def _start_tool(self, tool_use: Dict[str, Any]) -> Dict[str, Any]:
+        """도구 하나를 부르기 전: 위험도·층을 정하고 시작을 알린다."""
+        tool_use_id = tool_use.get("id")
+        tool_name = tool_use.get("name")
+        tool_input = tool_use.get("input", {})
+        print(f"도구 호출: {tool_name}, 입력: {json.dumps(tool_input, ensure_ascii=False)}")
+        # 조회 도구에는 가명을 원래 값으로 되돌려 넘긴다 (ARN으로 다시 조회하는 흐름이 깨지지 않게).
+        # 결과물 도구(차트·다이어그램)는 AWS를 부르지 않고 모델이 쓴 값을 그림에 옮길 뿐이라 가명 그대로
+        # 넘긴다: 그림은 링크로 공유될 수 있고, 답변과 같이 가명만 보이는 것이 맞다 (docs/threat-model.md R1)
+        risk = self._tool_risk(tool_name)
+        restore = risk != "artifact"
+        self._tool_calls += 1
+        call_no = self._tool_calls
+        # 감사 로그의 층 (audit.py 모듈 설명): 등록부에 없는 도구는 경계, 변경 도구는 유출, 나머지는 유입
+        locus = ("interface" if not is_registered(self._tool_definition(tool_name))
+                 else "egress" if risk == "write" else "ingress")
+        self._report("tool_started", tool_use_id, tool_name, tool_input, restore, locus)
+        self.debug_log.append({"type": "tool_result", "tool_name": tool_name, "input": tool_input,
+                               "timestamp": time.time()})
+        return {"tool_use": tool_use, "id": tool_use_id, "name": tool_name, "input": tool_input, "risk": risk,
+                "restore": restore, "call_no": call_no}
+
+    def _finish_tool(self, prepared: Dict[str, Any], result: Any) -> Dict[str, Any]:
+        """도구 하나가 끝난 뒤: 실패·의심 문구를 살피고 끝을 알린다. 모델에 돌려줄 결과 항목을 만든다."""
+        is_write = prepared["risk"] == "write"
+        print(f"도구 결과: {self.redactor.text(json.dumps(result, ensure_ascii=False))[:200]}...")
+        # MCP 도구는 실패를 예외 대신 결과의 isError로 알리기도 한다
+        failed = isinstance(result, dict) and result.get("isError") is True
+        # 도구 결과(제3자가 쓴 글)에 지시문처럼 보이는 문구가 있는지 (injection.py).
+        # 승인 요청 결과는 이 서비스가 만든 글이라 보지 않는다
+        suspicious = [] if is_write else injection.scan(json.dumps(result, ensure_ascii=False))
+        self._report("tool_finished", prepared["id"], not failed,
+                     self._tool_error_text(result) if failed else None,
+                     len(json.dumps(result, ensure_ascii=False, default=str)), suspicious)
+        self.debug_log.append({"type": "tool_result", "tool_name": prepared["name"], "input": prepared["input"],
+                               "output": result, "timestamp": time.time()})
+        return {"tool_id": prepared["id"], "name": prepared["name"], "result": result, "suspicious": suspicious,
+                "call_no": prepared["call_no"]}
+
+    def _tool_failed(self, tool_use: Dict[str, Any], error: Exception) -> Dict[str, Any]:
+        """도구 하나가 예외로 끝났다 (MCP 연결 실패 등). 모델에는 오류 글을 돌려준다."""
+        tool_use_id, tool_name, tool_input = tool_use.get("id"), tool_use.get("name"), tool_use.get("input", {})
+        print(f"도구 호출 오류: {str(error)}")
+        self._report("tool_finished", tool_use_id, False, str(error))
+        self.debug_log.append({"type": "tool_error", "tool_name": tool_name, "input": tool_input,
+                               "error": str(error), "timestamp": time.time()})
+        return {"tool_id": tool_use_id, "name": tool_name, "error": str(error)}
+
     @staticmethod
     def _tool_error_text(result) -> str:
         """isError 결과의 첫 글자 블록 (화면에 보일 실패 이유)."""
@@ -1213,7 +1220,7 @@ class AnthropicMCPClient:
 
         return str(response)
 
-    def process_user_input(self, user_input: str, system_prompt: str = None) -> str:
+    def process_user_input(self, user_input: str, system_prompt: str = None, use_tools: bool = True) -> str:
         """
         사용자 입력 처리 및 최종 텍스트 응답 반환
 
@@ -1242,7 +1249,7 @@ class AnthropicMCPClient:
         })
 
         # LLM이 모든 필요한 도구를 사용하여 완전한 응답 생성
-        response = self.invoke_with_tools(user_input, system_prompt)
+        response = self.invoke_with_tools(user_input, system_prompt, use_tools=use_tools)
 
         # 응답에서 텍스트 추출
         output_message = response.get('output', {}).get('message', {})
@@ -1281,7 +1288,7 @@ class AnthropicMCPClient:
         return final_text
 
     def process_user_input_with_history(self, user_input: str, system_prompt: str = None,
-                                        previous_messages: list = None) -> str:
+                                        previous_messages: list = None, use_tools: bool = True) -> str:
         """
         이전 대화 기록을 포함하여 사용자 입력 처리
 
@@ -1309,7 +1316,7 @@ class AnthropicMCPClient:
         })
 
         # LLM이 모든 필요한 도구를 사용하여 완전한 응답 생성 (이전 메시지 포함)
-        response = self.invoke_with_tools(user_input, system_prompt, previous_messages)
+        response = self.invoke_with_tools(user_input, system_prompt, previous_messages, use_tools=use_tools)
 
         # 응답에서 텍스트 추출
         output_message = response.get('output', {}).get('message', {})
