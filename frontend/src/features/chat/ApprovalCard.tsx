@@ -244,7 +244,7 @@ export function ApprovalCard({ action: initial, entering = false }: { action: Pe
             ) : null}
 
             <header className="approval-head">
-                <span className="approval-badge">승인 필요</span>
+                <span className="badge is-normal">승인 필요</span>
                 <span className="approval-tool" title={action.tool}>
                     {toolName(action.tool)}
                 </span>

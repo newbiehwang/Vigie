@@ -790,13 +790,13 @@ const briefingEntry = ({ admin, state }: DemoContext): DemoEntry => {
             '| 영역 | 상태 | 요약 |',
             '|:--|:--|:--|',
             admin
-                ? `| 보안 | 🔴 | \`${PUBLIC_BUCKET}\` ${restored ? minutesBetween(acl.at, restored.at) : '?'}분 공개, memcached ${closed ? minutesBetween(open.at, closed.at) : '?'}분 개방 (지금은 닫힘), 샌 것으로 보이는 키 1개 |`
+                ? `| 보안 | **문제** | \`${PUBLIC_BUCKET}\` ${restored ? minutesBetween(acl.at, restored.at) : '?'}분 공개, memcached ${closed ? minutesBetween(open.at, closed.at) : '?'}분 개방 (지금은 닫힘), 샌 것으로 보이는 키 1개 |`
                 : undefined,
-            `| 알람 | 🟠 | ${alarms.total}개 중 ${alarms.firing.length}개 울림 (보안 알람) |`,
-            `| 오류 | 🟡 | 로그 수집 Lambda 2개에서 ${errors}건 (최근 3시간) |`,
-            `| 웹 서비스 | 🟢 | 정상 호스트 평균 ${metricAverage('healthyHosts')}대, 인스턴스 ${asgLaunches()}번 교체 |`,
-            `| 비용 | 🟡 | 이번 달 ${usd(cost.monthToDate)}, 월말 예상 ${usd(cost.forecast)} (지난달보다 ${round((cost.monthToDate / cost.lastMonthSamePeriod - 1) * 100)}%↑) |`,
-            `| 개선 권고 | ${state.webcodeBlocked && state.forensicStopped ? '🟢' : '🟡'} | ${[!state.webcodeBlocked && '퍼블릭 액세스 차단 안 된 버킷 1개', !state.forensicStopped && '유휴 EC2 1대'].filter(Boolean).join(', ') || '없음'} |`,
+            `| 알람 | **주의** | ${alarms.total}개 중 ${alarms.firing.length}개 울림 (보안 알람) |`,
+            `| 오류 | 주의 | 로그 수집 Lambda 2개에서 ${errors}건 (최근 3시간) |`,
+            `| 웹 서비스 | 정상 | 정상 호스트 평균 ${metricAverage('healthyHosts')}대, 인스턴스 ${asgLaunches()}번 교체 |`,
+            `| 비용 | 주의 | 이번 달 ${usd(cost.monthToDate)}, 월말 예상 ${usd(cost.forecast)} (지난달보다 ${round((cost.monthToDate / cost.lastMonthSamePeriod - 1) * 100)}%↑) |`,
+            `| 개선 권고 | ${state.webcodeBlocked && state.forensicStopped ? '정상' : '주의'} | ${[!state.webcodeBlocked && '퍼블릭 액세스 차단 안 된 버킷 1개', !state.forensicStopped && '유휴 EC2 1대'].filter(Boolean).join(', ') || '없음'} |`,
             '',
             admin
                 ? nextHint('사고 경위를 시간 순으로', '지금 울리는 알람 알려줘', 'Lambda 오류 원인은?')
@@ -1298,12 +1298,12 @@ const DEMO_ANSWERS: DemoAnswer[] = [
                     '',
                     '| 심각도 | 무엇 | 대상 | 언제 · 누가 | 지금 |',
                     '|:--|:--|:--|:--|:--|',
-                    `| 🔴 심각 | 버킷에 **모든 사용자 읽기·쓰기** ACL (\`PutBucketAcl\`) | \`frothlywebcode\` | ${when(acl.at)} · ${acl.actor} | ${restored ? `${minutesBetween(acl.at, restored.at)}분 뒤 원복` : '공개 중'} |`,
-                    `| 🔴 심각 | UDP 11211(memcached)을 0.0.0.0/0 · ::/0에 개방 | \`${open.target}\` (웹 서버용) | ${when(open.at)} · ${open.actor} | ${closed ? `${minutesBetween(open.at, closed.at)}분 뒤 닫힘` : '열림'} |`,
-                    `| 🟠 높음 | \`web_admin\` 액세스 키로 권한 탐색 (거부 ${probes.length}건, IP ${unique(probes.map((e) => e.ip)).length}곳) | IAM·S3·EC2 | ${kstClock(epochOf(probes[0].at))}~${kstClock(epochOf(probes[probes.length - 1].at))} | ${disabled ? `${kstClock(epochOf(disabled.at))}에 ${disabled.actor} 계정이 키 비활성화` : '키 활성'} |`,
-                    `| 🟡 중간 | MFA 없는 콘솔 로그인 ${noMfa.length}회 | \`bstoll\` | 마지막 ${when(noMfa[noMfa.length - 1].at)} | MFA 미설정 |`,
-                    `| 🟡 중간 | SSH(22)나 모든 포트를 전 세계에 연 보안 그룹 ${ssh.length}개 | \`production-FrothlyWebPubSecGroup\` 외 | 설정 상태 | 열림 |`,
-                    `| 🔵 낮음 | 인스턴스 콘솔 출력 조회 ${outputs.length}회 (\`GetConsoleOutput\`) | 웹 서버 인스턴스 ${unique(outputs.map((e) => e.target)).length}대 | ${kstClock(epochOf(outputs[0].at))}~ · bstoll | 조사 활동으로 보임 |`,
+                    `| **심각** | 버킷에 **모든 사용자 읽기·쓰기** ACL (\`PutBucketAcl\`) | \`frothlywebcode\` | ${when(acl.at)} · ${acl.actor} | ${restored ? `${minutesBetween(acl.at, restored.at)}분 뒤 원복` : '공개 중'} |`,
+                    `| **심각** | UDP 11211(memcached)을 0.0.0.0/0 · ::/0에 개방 | \`${open.target}\` (웹 서버용) | ${when(open.at)} · ${open.actor} | ${closed ? `${minutesBetween(open.at, closed.at)}분 뒤 닫힘` : '열림'} |`,
+                    `| **높음** | \`web_admin\` 액세스 키로 권한 탐색 (거부 ${probes.length}건, IP ${unique(probes.map((e) => e.ip)).length}곳) | IAM·S3·EC2 | ${kstClock(epochOf(probes[0].at))}~${kstClock(epochOf(probes[probes.length - 1].at))} | ${disabled ? `${kstClock(epochOf(disabled.at))}에 ${disabled.actor} 계정이 키 비활성화` : '키 활성'} |`,
+                    `| 중간 | MFA 없는 콘솔 로그인 ${noMfa.length}회 | \`bstoll\` | 마지막 ${when(noMfa[noMfa.length - 1].at)} | MFA 미설정 |`,
+                    `| 중간 | SSH(22)나 모든 포트를 전 세계에 연 보안 그룹 ${ssh.length}개 | \`production-FrothlyWebPubSecGroup\` 외 | 설정 상태 | 열림 |`,
+                    `| 낮음 | 인스턴스 콘솔 출력 조회 ${outputs.length}회 (\`GetConsoleOutput\`) | 웹 서버 인스턴스 ${unique(outputs.map((e) => e.target)).length}대 | ${kstClock(epochOf(outputs[0].at))}~ · bstoll | 조사 활동으로 보임 |`,
                     '',
                     '**먼저 할 일**',
                     '1. `frothlywebcode`가 공개로 열려 있던 동안 누가 파일을 올리거나 바꿨는지 S3 서버 액세스 로그로 확인하세요. 공개 **쓰기**였으므로 웹 코드가 바뀌었을 수 있습니다.',
