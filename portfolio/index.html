@@ -45,9 +45,12 @@ body {
   html, body { background: #fff; }
   .deck { padding: 0; gap: 0; }
   .page { box-shadow: none; break-after: page; }
+  /* 흐린 그림자는 PDF에 반투명 이미지로 들어가, 미리보기(macOS) 같은 뷰어에서 회색 판으로 깨져 보인다.
+     인쇄할 때는 빼고 1px 테두리로만 상자를 나눈다 (.shot 정의가 이 아래에 있어 선택자를 한 단계 더 구체적으로) */
+  .page .shot { box-shadow: none; }
 }
 
-/* 쪽 머리: 작은 구역 이름 → 결론 문장 → 한두 줄 설명 */
+/* 쪽 머리: 결론 문장 → 한두 줄 설명 */
 h2 { font-size: 36px; line-height: 1.28; font-weight: 800; letter-spacing: -0.02em; }
 .lead { font-size: 18px; color: var(--ink-2); margin-top: 14px; max-width: 980px; }
 .body { flex: 1; min-height: 0; margin-top: 30px; display: flex; gap: 36px; }
