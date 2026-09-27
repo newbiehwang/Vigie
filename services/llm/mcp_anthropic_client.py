@@ -2,7 +2,7 @@ import json
 import time
 import re
 import requests
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from mcp_client import MCPClient
 from redaction import Redactor
 from approvals import PREVIEW_META, is_registered, risk_of
@@ -18,6 +18,10 @@ MAX_TAINTED = 5
 # 새 세션을 만들어 연결을 버린다. 제한 시간: 연결 10초, 응답을 기다리는 시간 300초 (사고가 긴 답변도 끊기지 않게)
 HTTP = requests.Session()
 HTTP_TIMEOUT = (10, 300)
+
+
+class StreamError(Exception):
+    """스트리밍 응답 도중 온 오류 이벤트 (overloaded_error 등)."""
 
 
 class AnthropicMCPClient:
@@ -219,18 +223,118 @@ class AnthropicMCPClient:
         return system_prompt + tool_search.SYSTEM_HINT
 
     def _post(self, payload: Dict[str, Any], system_prompt: Optional[str]):
-        """Messages API 요청. 모델이 도구 검색을 받지 않으면(400) 끄고 모든 도구를 실어 한 번 다시 보낸다.
+        """Messages API 요청 (스트리밍). 모델이 도구 검색을 받지 않으면(400) 끄고 모든 도구를 실어 한 번 다시 보낸다.
         self.tool_search를 끄므로 같은 질문의 다음 반복과 이 모델의 다음 질문도 모든 도구로 보낸다.
-        거절은 첫 요청에서 오므로 대화에 검색 블록이 남아 있지 않다."""
-        response = HTTP.post(self.api_url, headers=self.api_headers, json=payload, timeout=HTTP_TIMEOUT)
-        if self.tool_search and tool_search.is_unsupported(response.status_code, response.text):
+        거절은 첫 요청에서 오므로 대화에 검색 블록이 남아 있지 않다.
+        스트리밍: 응답 머리만 받고 돌아온다. 본문(이벤트)은 _read_message가 읽는다. 오류 응답(200이 아님)은 JSON 본문이다."""
+        payload = {**payload, "stream": True}
+        response = HTTP.post(self.api_url, headers=self.api_headers, json=payload, timeout=HTTP_TIMEOUT, stream=True)
+        # 200이면 본문을 읽지 않는다 (스트림을 여기서 다 읽어 버리면 사고 과정을 실시간으로 볼 수 없다)
+        if (self.tool_search and response.status_code == 400
+                and tool_search.is_unsupported(response.status_code, response.text)):
             print(f"도구 검색을 쓸 수 없어 모든 도구를 싣고 다시 보냅니다 ({self.model_id}): {response.text[:300]}")
             self.tool_search = False
             payload["tools"] = self._convert_tools_format()
             if system_prompt:
                 payload["system"] = system_prompt
-            response = HTTP.post(self.api_url, headers=self.api_headers, json=payload, timeout=HTTP_TIMEOUT)
+            response = HTTP.post(self.api_url, headers=self.api_headers, json=payload, timeout=HTTP_TIMEOUT,
+                                 stream=True)
         return response
+
+    def _read_message(self, response, started: float) -> Tuple[Dict[str, Any], bool]:
+        """응답 본문 → 스트리밍하지 않은 응답과 같은 모양의 메시지 {"content", "usage", "stop_reason"}.
+        두 번째 값은 사고 요약을 이미 진행 상황에 알렸는지 (스트리밍이면 True: 블록이 끝날 때 알렸다).
+        스트리밍이 아닌 응답(JSON)도 받는다 (테스트의 가짜 응답, 스트리밍을 받지 않는 경로)."""
+        content_type = str((getattr(response, "headers", None) or {}).get("content-type", ""))
+        if "text/event-stream" not in content_type:
+            return response.json(), False
+        try:
+            return self._read_stream(response, started), True
+        finally:
+            response.close()
+
+    def _read_stream(self, response, started: float) -> Dict[str, Any]:
+        """Messages API 스트리밍 이벤트(SSE)를 읽어 메시지를 다시 조립한다.
+        - content_block_start로 블록을 만들고, content_block_delta로 글자·사고·서명·도구 입력(JSON 조각)을 이어 붙인다
+        - 사고 요약은 받는 대로 진행 상황에 보낸다 (llm_progress.thinking_live, 가린 뒤). 블록이 끝나면 마무리한다
+        - 첫 글자가 오기까지 걸린 시간을 model_first_token으로 남긴다 (timing.py)
+        블록은 받은 그대로 다시 보내야 하므로(사고 블록의 서명 등) 스트리밍하지 않은 응답과 같은 필드만 둔다."""
+        message: Dict[str, Any] = {"content": [], "usage": {}, "stop_reason": None}
+        blocks: Dict[int, Dict[str, Any]] = {}
+        partial_json: Dict[int, str] = {}
+        first_token = False
+        event_name, data_lines = None, []
+
+        def handle(name: Optional[str], data: str) -> None:
+            nonlocal first_token
+            if not data:
+                return
+            event = json.loads(data)
+            kind = event.get("type") or name
+            if kind == "message_start":
+                started_message = event.get("message") or {}
+                message["usage"].update(started_message.get("usage") or {})
+            elif kind == "content_block_start":
+                block = dict(event.get("content_block") or {})
+                blocks[event["index"]] = block
+                if block.get("type") in ("tool_use", "server_tool_use"):
+                    partial_json[event["index"]] = ""
+            elif kind == "content_block_delta":
+                if not first_token and self.timer is not None:
+                    first_token = True
+                    self.timer.add("model_first_token", (time.perf_counter() - started) * 1000)
+                block = blocks.get(event["index"])
+                delta = event.get("delta") or {}
+                if block is None:
+                    return
+                delta_type = delta.get("type")
+                if delta_type == "text_delta":
+                    block["text"] = block.get("text", "") + delta.get("text", "")
+                elif delta_type == "thinking_delta":
+                    block["thinking"] = block.get("thinking", "") + delta.get("thinking", "")
+                    if self.progress is not None:
+                        self.progress.thinking_live(self.redactor.text(block["thinking"]))
+                elif delta_type == "signature_delta":
+                    block["signature"] = block.get("signature", "") + delta.get("signature", "")
+                elif delta_type == "input_json_delta":
+                    partial_json[event["index"]] = partial_json.get(event["index"], "") + delta.get("partial_json", "")
+                elif delta_type == "citations_delta":
+                    block.setdefault("citations", []).append(delta.get("citation"))
+            elif kind == "content_block_stop":
+                index = event["index"]
+                block = blocks.get(index)
+                if block is None:
+                    return
+                if index in partial_json:
+                    raw = partial_json.pop(index)
+                    block["input"] = json.loads(raw) if raw.strip() else (block.get("input") or {})
+                if block.get("type") == "thinking":
+                    self._report("thought", block.get("thinking", ""))
+            elif kind == "message_delta":
+                delta = event.get("delta") or {}
+                if "stop_reason" in delta:
+                    message["stop_reason"] = delta["stop_reason"]
+                message["usage"].update(event.get("usage") or {})
+            elif kind == "error":
+                error = event.get("error") or {}
+                raise StreamError(f"{error.get('type', 'error')}: {error.get('message', data)}")
+
+        for line in response.iter_lines(decode_unicode=True):
+            if line is None:
+                continue
+            if isinstance(line, bytes):
+                line = line.decode("utf-8")
+            if not line:  # 빈 줄: 이벤트 하나가 끝났다
+                handle(event_name, "\n".join(data_lines))
+                event_name, data_lines = None, []
+            elif line.startswith("event:"):
+                event_name = line[6:].strip()
+            elif line.startswith("data:"):
+                data_lines.append(line[5:].lstrip())
+        handle(event_name, "\n".join(data_lines))  # 마지막 줄 뒤에 빈 줄이 없어도
+
+        message["content"] = [blocks[index] for index in sorted(blocks)]
+        return message
 
     def _is_response_complete(self, message_content: str, tool_uses: List) -> bool:
         """
@@ -816,18 +920,24 @@ class AnthropicMCPClient:
             # 요청 요약만 남긴다 (예전에는 도구 정의까지 든 페이로드 전체를 들여쓰기 JSON으로 만든 뒤 500자만 찍었다)
             print(f"API 요청: 모델={self.model_id}, 메시지 {len(self.messages)}개, 도구 {len(payload.get('tools', []))}개")
 
-            # API 요청 전송 (응답을 기다리는 동안 화면에는 '생각하는 중')
+            # API 요청 전송 (응답을 기다리는 동안 화면에는 '생각하는 중'. 스트리밍이라 사고 요약은 받는 대로 보인다)
             self._report("thinking_started")
+            error_message = None
+            thoughts_reported = False
             with self._time("model"):
+                started = time.perf_counter()
                 response = self._post(payload, system_prompt)
-
-            # 디버깅을 위한 응답 로깅
-            print(f"API 응답 상태 코드: {response.status_code}")
-            print(f"API 응답 내용: {response.text[:500]}...")
+                print(f"API 응답 상태 코드: {response.status_code}")
+                if response.status_code != 200:
+                    error_message = f"Anthropic API 오류: {response.status_code} - {response.text}"
+                else:
+                    try:
+                        response_json, thoughts_reported = self._read_message(response, started)
+                    except (StreamError, ValueError, requests.RequestException) as error:
+                        error_message = f"Anthropic API 오류 (응답을 받는 중): {error}"
 
             # 응답 파싱
-            if response.status_code != 200:
-                error_message = f"Anthropic API 오류: {response.status_code} - {response.text}"
+            if error_message:
 
                 # 디버그 로그에 API 오류 기록
                 self.debug_log.append({
@@ -844,7 +954,6 @@ class AnthropicMCPClient:
                     }
                 }
 
-            response_json = response.json()
             content = response_json.get("content", [])
             usage = response_json.get("usage", {})
 
@@ -867,7 +976,7 @@ class AnthropicMCPClient:
                     message_content += item.get("text", "")
                 elif item.get("type") == "tool_use":
                     tool_uses.append(item)
-                elif item.get("type") == "thinking":
+                elif item.get("type") == "thinking" and not thoughts_reported:  # 스트리밍이면 이미 알렸다
                     self._report("thought", item.get("thinking", ""))
             # 도구 검색(서버에서 돈다)은 실행할 것이 없고, 무엇을 찾았는지만 화면에 알린다
             for search in tool_search.searches(content):
