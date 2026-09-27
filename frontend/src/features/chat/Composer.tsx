@@ -24,11 +24,13 @@ export function Composer({
     placeholder,
     onSend,
     suggestions,
+    compact = false,
 }: {
     variant: 'home' | 'chat';
     placeholder: string;
     onSend: (text: string) => void;
     suggestions?: Suggestion[];
+    compact?: boolean; // 홈 대시보드 위의 한 줄 입력칸 (입력칸 1줄, 키 안내는 오른쪽)
 }) {
     const [text, setText] = useState('');
     // 예시 목록: 'closed' → (포커스) 'open' → (포커스가 나감) 'closing' → CLOSE_MS 뒤 'closed'
@@ -101,11 +103,13 @@ export function Composer({
 
     return (
         <div ref={wrapRef} className={`composer-wrap composer-wrap--${variant}`} onBlur={handleBlur}>
-            <div className={`composer composer--${variant}${suggest !== 'closed' ? ' is-suggesting' : ''}`}>
+            <div
+                className={`composer composer--${variant}${compact ? ' is-compact' : ''}${suggest !== 'closed' ? ' is-suggesting' : ''}`}
+            >
                 <textarea
                     ref={inputRef}
                     className="composer-input"
-                    rows={variant === 'home' ? 2 : 1}
+                    rows={variant === 'home' && !compact ? 2 : 1}
                     placeholder={placeholder}
                     value={text}
                     onChange={(event) => setText(event.target.value)}
