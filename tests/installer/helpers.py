@@ -16,7 +16,7 @@ CORE = ROOT / "installer" / "core"
 FAKE_TOOL = Path(__file__).parent / "fakes" / "fake_tool.sh"
 
 IDENTITY = {"UserId": "AIDAEXAMPLE", "Account": "123456789012",
-            "Arn": "arn:aws:iam::123456789012:user/wga-installer"}
+            "Arn": "arn:aws:iam::123456789012:user/vigie-installer"}
 
 # 호출 기록 한 줄의 구분 문자: 도구·인자 사이는 US(0x1f), 인자 부분과 환경 변수 부분 사이는 RS(0x1e).
 # 인자에 공백·따옴표가 있어도 안전하게 나눌 수 있도록 일반 텍스트에 나오지 않는 제어 문자를 쓴다.
@@ -142,8 +142,8 @@ def healthy_mac(fake: FakeCli, identity: dict | None = None) -> FakeCli:
 
 def run_cli(fake: FakeCli, *args: str, input: str = "", cwd: Path | None = None,
             env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
-    """`python -m wga_installer ...`를 별도 프로세스로 실행한다 (실제 사용과 같은 방식)."""
-    return subprocess.run([sys.executable, "-m", "wga_installer", *args], input=input,
+    """`python -m vigie_installer ...`를 별도 프로세스로 실행한다 (실제 사용과 같은 방식)."""
+    return subprocess.run([sys.executable, "-m", "vigie_installer", *args], input=input,
                           capture_output=True, text=True, cwd=cwd or fake.root,
                           env=env or fake.env(), timeout=60)
 
@@ -163,9 +163,9 @@ def run_step(fake: FakeCli, step_run, *, stdin: str = "", env: str = "dev", dry_
     대기 시간 상수를 monkeypatch로 줄여야 하는 단계(oidc의 워크플로 확인 등)는 이 방식으로 테스트한다."""
     import io
 
-    from wga_installer.context import build_context
-    from wga_installer.events import JsonEmitter, Redactor
-    from wga_installer.runner import Interaction, Runner
+    from vigie_installer.context import build_context
+    from vigie_installer.events import JsonEmitter, Redactor
+    from vigie_installer.runner import Interaction, Runner
 
     out = io.StringIO()
     emitter = JsonEmitter(Redactor(), out)

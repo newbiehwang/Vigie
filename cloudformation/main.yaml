@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "WGA - Main CloudFormation Template"
+Description: "Vigie - Main CloudFormation Template"
 
 Parameters:
   Environment:
@@ -81,7 +81,7 @@ Resources:
   LlmStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://wga-cloudformation-${AWS::AccountId}.s3.${AWS::Region}.amazonaws.com/llm.yaml"
+      TemplateURL: !Sub "https://vigie-cloudformation-${AWS::AccountId}.s3.${AWS::Region}.amazonaws.com/llm.yaml"
       Parameters:
         Environment: !Ref Environment
         CodeVersion: !Ref CodeVersion
@@ -99,7 +99,7 @@ Resources:
   DBStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://wga-cloudformation-${AWS::AccountId}.s3.${AWS::Region}.amazonaws.com/logs.yaml"
+      TemplateURL: !Sub "https://vigie-cloudformation-${AWS::AccountId}.s3.${AWS::Region}.amazonaws.com/logs.yaml"
       Parameters:
         Environment: !Ref Environment
         CodeVersion: !Ref CodeVersion
@@ -114,7 +114,7 @@ Resources:
   SlackbotStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://wga-cloudformation-${AWS::AccountId}.s3.${AWS::Region}.amazonaws.com/slackbot.yaml"
+      TemplateURL: !Sub "https://vigie-cloudformation-${AWS::AccountId}.s3.${AWS::Region}.amazonaws.com/slackbot.yaml"
       Parameters:
         Environment: !Ref Environment
         CodeVersion: !Ref CodeVersion
@@ -130,7 +130,7 @@ Resources:
   ChatHistoryStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://wga-cloudformation-${AWS::AccountId}.s3.${AWS::Region}.amazonaws.com/chat-history.yaml"
+      TemplateURL: !Sub "https://vigie-cloudformation-${AWS::AccountId}.s3.${AWS::Region}.amazonaws.com/chat-history.yaml"
       Parameters:
         Environment: !Ref Environment
         CodeVersion: !Ref CodeVersion
@@ -146,7 +146,7 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub "/wga/${Environment}/ApiEndpoint"
+      Name: !Sub "/vigie/${Environment}/ApiEndpoint"
       Type: String
       Value: !Sub "https://${ApiGatewayIdParameter}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
       Description: API Gateway endpoint URL
@@ -154,7 +154,7 @@ Resources:
   MonitoringStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://wga-cloudformation-${AWS::AccountId}.s3.${AWS::Region}.amazonaws.com/monitoring.yaml"
+      TemplateURL: !Sub "https://vigie-cloudformation-${AWS::AccountId}.s3.${AWS::Region}.amazonaws.com/monitoring.yaml"
       Parameters:
         Environment: !Ref Environment
         AlarmEmail: !Ref AlarmEmail

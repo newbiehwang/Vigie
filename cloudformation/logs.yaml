@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: WGA - Athena Query & Table Lambda
+Description: Vigie - Athena Query & Table Lambda
 
 Parameters:
   Environment:
@@ -30,7 +30,7 @@ Resources:
   AthenaUtilityLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub wga-athena-utility-role-${Environment}
+      RoleName: !Sub vigie-athena-utility-role-${Environment}
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -59,7 +59,7 @@ Resources:
                   - ssm:GetParameters
                   - ssm:GetParametersByPath
                   - kms:Decrypt
-                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/wga/${Environment}/*"
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/vigie/${Environment}/*"
 
   AthenaUtilityLambdaLayer:
     Type: AWS::Lambda::LayerVersion
@@ -67,7 +67,7 @@ Resources:
       LayerName: !Sub 'athena-utility-layer-${Environment}'
       Description: Common Python dependencies
       Content:
-        S3Bucket: !Sub 'wga-deployment-${AWS::AccountId}-${Environment}'
+        S3Bucket: !Sub 'vigie-deployment-${AWS::AccountId}-${Environment}'
         S3Key: !Sub 'layers/common-layer-${Environment}-${CodeVersion}.zip'
       CompatibleRuntimes:
         - python3.12
@@ -75,7 +75,7 @@ Resources:
   AthenaUtilityLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub 'wga-athena-utility-${Environment}'
+      FunctionName: !Sub 'vigie-athena-utility-${Environment}'
       Role: !GetAtt AthenaUtilityLambdaRole.Arn
       # X-Ray 추적과 JSON 구조화 로그 (REPORT 레코드의 initDurationMs로 콜드 스타트 측정 가능)
       TracingConfig:
@@ -92,11 +92,11 @@ Resources:
       MemorySize: 512
       Environment:
         Variables:
-          ATHENA_DB: !Sub 'wga_logs_${Environment}'
+          ATHENA_DB: !Sub 'vigie_logs_${Environment}'
           S3_QUERY_OUTPUT: !Sub "s3://${AthenaOutputBucketName}/results/"
           ENV: !Ref Environment
       Code:
-        S3Bucket: !Sub 'wga-deployment-${AWS::AccountId}-${Environment}'
+        S3Bucket: !Sub 'vigie-deployment-${AWS::AccountId}-${Environment}'
         S3Key: !Sub 'db/athena-utility-lambda-${Environment}-${CodeVersion}.zip'
 
   ExecuteQueryApiResource:

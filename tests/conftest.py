@@ -39,7 +39,7 @@ TEST_CONFIG = {
     "slackbot": {"token": "xoxb-test", "signing_secret": "test-signing-secret"},
     "mcp": {"function_url": "https://abc123.lambda-url.us-east-1.on.aws/"},
     "kb": {"kb_id": ""},
-    "db": {"chat_history_table": "wga-chat-history-test"},
+    "db": {"chat_history_table": "vigie-chat-history-test"},
     "anthropic": {"api_key": ""},
     "s3": {},
 }

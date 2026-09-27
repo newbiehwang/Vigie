@@ -1,4 +1,4 @@
-"""Python 선택 실행기(installer/core/wga-installer)와 오래된 Python에 대한 보호"""
+"""Python 선택 실행기(installer/core/vigie-installer)와 오래된 Python에 대한 보호"""
 import ast
 import json
 import subprocess
@@ -6,11 +6,11 @@ import sys
 
 from .helpers import CORE
 
-LAUNCHER = CORE / "wga-installer"
+LAUNCHER = CORE / "vigie-installer"
 
 
 def launch(*args, env):
-    # PYTHONPATH를 빼고 실행한다: 실행기가 스스로 wga_installer 위치를 PYTHONPATH에 넣는지 확인하기 위해
+    # PYTHONPATH를 빼고 실행한다: 실행기가 스스로 vigie_installer 위치를 PYTHONPATH에 넣는지 확인하기 위해
     env = {k: v for k, v in env.items() if k != "PYTHONPATH"}
     return subprocess.run(["/bin/bash", str(LAUNCHER), *args], capture_output=True, text=True,
                           env=env, timeout=60)
@@ -30,19 +30,19 @@ def test_launcher_syntax():
 
 
 def test_launcher_runs_cli_with_chosen_python(fake):
-    result = launch("check", "--help", env=fake.env(WGA_PYTHON=sys.executable))
+    result = launch("check", "--help", env=fake.env(VIGIE_PYTHON=sys.executable))
     assert result.returncode == 0 and "--dry-run" in result.stdout
 
 
 def test_launcher_rejects_old_explicit_python_as_json(fake, tmp_path):
-    result = launch("check", "--json", env=fake.env(WGA_PYTHON=str(old_python(tmp_path))))
+    result = launch("check", "--json", env=fake.env(VIGIE_PYTHON=str(old_python(tmp_path))))
     assert result.returncode == 3
     event = json.loads(result.stdout)
-    assert event["type"] == "error" and event["step"] == "python" and "WGA_PYTHON" in event["message"]
+    assert event["type"] == "error" and event["step"] == "python" and "VIGIE_PYTHON" in event["message"]
 
 
 def test_launcher_rejects_old_explicit_python_as_text(fake, tmp_path):
-    result = launch("check", env=fake.env(WGA_PYTHON=str(old_python(tmp_path))))
+    result = launch("check", env=fake.env(VIGIE_PYTHON=str(old_python(tmp_path))))
     assert result.returncode == 3 and result.stdout == "" and "오류:" in result.stderr
 
 
@@ -57,12 +57,12 @@ def test_launcher_prefers_homebrew_path_order():
 
 def test_package_init_parses_on_old_python():
     # __init__.py는 3.9 이하에서도 해석되어야 버전 오류 안내를 보여 줄 수 있다
-    ast.parse((CORE / "wga_installer" / "__init__.py").read_text(), feature_version=(3, 6))
+    ast.parse((CORE / "vigie_installer" / "__init__.py").read_text(), feature_version=(3, 6))
 
 
 def test_package_init_guard_emits_json_error():
     # 실제 오래된 Python 없이 보호 코드의 동작을 확인하기 위해 최소 버전을 현재보다 높게 바꿔 실행한다
-    source = (CORE / "wga_installer" / "__init__.py").read_text().replace(
+    source = (CORE / "vigie_installer" / "__init__.py").read_text().replace(
         "MIN_PYTHON = (3, 10)", "MIN_PYTHON = (99, 0)")
     result = subprocess.run([sys.executable, "-c", source, "--json"], capture_output=True, text=True)
     assert result.returncode == 3

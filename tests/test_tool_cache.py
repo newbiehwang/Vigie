@@ -12,11 +12,11 @@ import pytest
 
 from conftest import load_service_module
 
-TABLE = "wga-llm-progress-test"
+TABLE = "vigie-llm-progress-test"
 MCP_URL = "https://abc123.lambda-url.us-east-1.on.aws/"
 
 READ_TOOL = {"name": "describe_log_groups", "description": "로그 그룹", "inputSchema": {"type": "object"},
-             "_meta": {"wga/risk": "read"}}
+             "_meta": {"vigie/risk": "read"}}
 
 
 class JsonResponse:
@@ -164,7 +164,7 @@ def test_tool_call_waits_for_mcp_and_uses_the_fresh_risk(client, cache_module, t
     """저장해 둔 목록에는 조회 도구였지만 새 목록에서는 변경 도구다: 바로 부르지 않고 승인 요청 길로 간다."""
     made, module = client
     cache_module.ToolCache(table, MCP_URL).save([READ_TOOL])
-    changed = [{**READ_TOOL, "_meta": {"wga/risk": "write"}}]
+    changed = [{**READ_TOOL, "_meta": {"vigie/risk": "write"}}]
     calls = fake_mcp(made, monkeypatch, changed)
     sent = fake_model(module, monkeypatch, [
         {"content": [{"type": "tool_use", "id": "t1", "name": "describe_log_groups", "input": {}}],

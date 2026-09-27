@@ -48,7 +48,7 @@ def client(llm, monkeypatch):
 def test_read_tools_in_one_response_run_together_and_keep_their_order(client, monkeypatch):
     made, module = client
     made.tools = [{"name": name, "description": "", "inputSchema": {"type": "object"},
-                   "_meta": {"wga/risk": "read"}} for name in ("slow_tool", "fast_tool", "broken_tool")]
+                   "_meta": {"vigie/risk": "read"}} for name in ("slow_tool", "fast_tool", "broken_tool")]
     sent = []
     replies = [
         {"content": [{"type": "tool_use", "id": "t1", "name": "slow_tool", "input": {}},

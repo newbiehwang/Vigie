@@ -1,6 +1,6 @@
 """사용자 관리 (관리자 화면의 '사용자 관리' 탭): Cognito 사용자 목록 · 권한 · 정지 · 초대
 
-이 파일은 LLM Lambda와 같은 코드 묶음에 들어 있지만 **다른 Lambda(wga-user-admin-<env>)가 다른 역할로** 실행한다.
+이 파일은 LLM Lambda와 같은 코드 묶음에 들어 있지만 **다른 Lambda(vigie-user-admin-<env>)가 다른 역할로** 실행한다.
 Cognito 사용자를 바꾸는 권한은 그 역할에만 있고, 모델을 돌리는 LLM Lambda 역할에는 없다 (cloudformation/llm.yaml).
 
 권한은 세 단계이고, 위 단계는 아래 단계를 모두 할 수 있다. Cognito 그룹 이름은 바꾸지 않는다

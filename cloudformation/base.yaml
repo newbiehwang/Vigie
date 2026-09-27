@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'WGA - Base Infrastructure CloudFormation Template'
+Description: 'Vigie - Base Infrastructure CloudFormation Template'
 
 Parameters:
   Environment:
@@ -99,7 +99,7 @@ Resources:
     Condition: ShouldCreateBucket
     DeletionPolicy: Retain
     Properties:
-      BucketName: !Sub 'wga-deployment-${AWS::AccountId}-${Environment}'
+      BucketName: !Sub 'vigie-deployment-${AWS::AccountId}-${Environment}'
       VersioningConfiguration:
         Status: Enabled
       BucketEncryption:
@@ -129,7 +129,7 @@ Resources:
     Condition: ShouldCreateAthenaOutputBucket
     DeletionPolicy: Retain
     Properties:
-      BucketName: !Sub 'wga-athenaoutputbucket-${AWS::AccountId}-${Environment}'
+      BucketName: !Sub 'vigie-athenaoutputbucket-${AWS::AccountId}-${Environment}'
       VersioningConfiguration:
         !If
         - ShouldCreateAthenaOutputBucket
@@ -157,7 +157,7 @@ Resources:
     Condition: ShouldCreateOutputBucket
     DeletionPolicy: Retain
     Properties:
-      BucketName: !Sub 'wga-outputbucket-${AWS::AccountId}-${Environment}'
+      BucketName: !Sub 'vigie-outputbucket-${AWS::AccountId}-${Environment}'
       VersioningConfiguration:
         !If
           - ShouldCreateOutputBucket
@@ -185,7 +185,7 @@ Resources:
     Condition: ShouldCreateGuardDutyExportBucket
     DeletionPolicy: Retain
     Properties:
-      BucketName: !Sub 'wga-guarddutyexportbucket-${AWS::AccountId}-${Environment}'
+      BucketName: !Sub 'vigie-guarddutyexportbucket-${AWS::AccountId}-${Environment}'
       VersioningConfiguration:
         !If
         - ShouldCreateGuardDutyExportBucket
@@ -213,7 +213,7 @@ Resources:
     Condition: ShouldCreateDockerBuildBucket
     DeletionPolicy: Retain
     Properties:
-      BucketName: !Sub 'wga-dockerbuildbucket-${AWS::AccountId}-${Environment}'
+      BucketName: !Sub 'vigie-dockerbuildbucket-${AWS::AccountId}-${Environment}'
       VersioningConfiguration:
         !If
         - ShouldCreateDockerBuildBucket
@@ -241,7 +241,7 @@ Resources:
     Condition: ShouldCreateFrontendBucket
     DeletionPolicy: Retain
     Properties:
-      BucketName: !Sub 'wga-frontend-${AWS::AccountId}-${Environment}'
+      BucketName: !Sub 'vigie-frontend-${AWS::AccountId}-${Environment}'
       VersioningConfiguration:
         !If
         - ShouldCreateFrontendBucket
@@ -269,7 +269,7 @@ Resources:
     Condition: ShouldCreateDiagramBucket
     DeletionPolicy: Retain
     Properties:
-      BucketName: !Sub 'wga-diagrambucket-${AWS::AccountId}-${Environment}'
+      BucketName: !Sub 'vigie-diagrambucket-${AWS::AccountId}-${Environment}'
       VersioningConfiguration:
         !If
         - ShouldCreateDiagramBucket
@@ -336,7 +336,7 @@ Resources:
   ChatHistoryTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub 'wga-chat-history-${Environment}'
+      TableName: !Sub 'vigie-chat-history-${Environment}'
       # 실수로 인한 삭제·덮어쓰기에 대비해 최근 35일 내 임의 시점으로 복구 가능
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -367,7 +367,7 @@ Resources:
   McpSessionsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub 'wga-mcp-sessions-${Environment}'
+      TableName: !Sub 'vigie-mcp-sessions-${Environment}'
       # 실수로 인한 삭제·덮어쓰기에 대비해 최근 35일 내 임의 시점으로 복구 가능
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -387,7 +387,7 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
         - Key: Service
-          Value: WGA
+          Value: Vigie
         - Key: Purpose
           Value: MCP Session Management
 
@@ -395,7 +395,7 @@ Resources:
   UserPool:
     Type: AWS::Cognito::UserPool
     Properties:
-      UserPoolName: !Sub 'wga-user-pool-${Environment}'
+      UserPoolName: !Sub 'vigie-user-pool-${Environment}'
       AutoVerifiedAttributes:
         - email
       UsernameAttributes:
@@ -425,8 +425,8 @@ Resources:
         # 관리자가 만드는 계정(deploy.sh의 ADMIN_EMAIL, 사용자 관리 탭의 초대)에만 가는 초대 메일. 스스로 가입한 사용자는 받지 않는다.
         # Cognito는 아이디({username})와 임시 비밀번호({####}) 자리가 모두 있어야 받는다. 임시 비밀번호는 7일 동안 유효
         InviteMessageTemplate:
-          EmailSubject: WGA 계정이 만들어졌습니다
-          EmailMessage: 'WGA 계정이 만들어졌습니다. 아이디 {username} / 임시 비밀번호 {####} 로 로그인한 뒤 새 비밀번호를 정하세요. 임시 비밀번호는 7일 동안 쓸 수 있습니다.'
+          EmailSubject: Vigie 계정이 만들어졌습니다
+          EmailMessage: 'Vigie 계정이 만들어졌습니다. 아이디 {username} / 임시 비밀번호 {####} 로 로그인한 뒤 새 비밀번호를 정하세요. 임시 비밀번호는 7일 동안 쓸 수 있습니다.'
       UserPoolTags:
         Environment: !Ref Environment
 
@@ -436,7 +436,7 @@ Resources:
     Type: AWS::Cognito::UserPoolGroup
     Properties:
       GroupName: admins
-      Description: WGA 관리자 (모든 사용자의 감사 로그 조회)
+      Description: Vigie 관리자 (모든 사용자의 감사 로그 조회)
       UserPoolId: !Ref UserPool
 
   # 승인자 그룹: AI가 요청한 변경 작업(로그 보존 기간, 알람 알림, EC2 중지·시작, S3 퍼블릭 액세스 차단)을
@@ -446,14 +446,14 @@ Resources:
     Type: AWS::Cognito::UserPoolGroup
     Properties:
       GroupName: approvers
-      Description: WGA 승인자 (AI가 요청한 변경 작업 승인)
+      Description: Vigie 승인자 (AI가 요청한 변경 작업 승인)
       UserPoolId: !Ref UserPool
 
   # User Pool Client
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
     Properties:
-      ClientName: !Sub 'wga-app-client-${Environment}'
+      ClientName: !Sub 'vigie-app-client-${Environment}'
       UserPoolId: !Ref UserPool
       GenerateSecret: false
       AllowedOAuthFlowsUserPoolClient: true
@@ -482,14 +482,14 @@ Resources:
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
-      Domain: !Sub 'wga-auth-${Environment}-${AWS::AccountId}'
+      Domain: !Sub 'vigie-auth-${Environment}-${AWS::AccountId}'
       UserPoolId: !Ref UserPool
 
   # Identity Pool
   IdentityPool:
     Type: AWS::Cognito::IdentityPool
     Properties:
-      IdentityPoolName: !Sub 'wga_identity_pool_${Environment}'
+      IdentityPoolName: !Sub 'vigie_identity_pool_${Environment}'
       AllowUnauthenticatedIdentities: false
       CognitoIdentityProviders:
         - ClientId: !Ref UserPoolClient
@@ -507,7 +507,7 @@ Resources:
   AuthenticatedUserRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'wga-authenticated-user-role-${Environment}'
+      RoleName: !Sub 'vigie-authenticated-user-role-${Environment}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -523,7 +523,7 @@ Resources:
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
       Policies:
-        - PolicyName: !Sub 'wga-authenticated-user-policy-${Environment}'
+        - PolicyName: !Sub 'vigie-authenticated-user-policy-${Environment}'
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -539,8 +539,8 @@ Resources:
                       - !GetAtt OutputBucket.Arn
                       - !Sub '${OutputBucket.Arn}/*'
                     -
-                      - !Sub 'arn:aws:s3:::wga-outputbucket-${Environment}'
-                      - !Sub 'arn:aws:s3:::wga-outputbucket-${Environment}/*'
+                      - !Sub 'arn:aws:s3:::vigie-outputbucket-${Environment}'
+                      - !Sub 'arn:aws:s3:::vigie-outputbucket-${Environment}/*'
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -549,8 +549,8 @@ Resources:
   ApiGateway:
     Type: AWS::ApiGateway::RestApi
     Properties:
-      Name: !Sub 'wga-api-${Environment}'
-      Description: 'WGA API Gateway'
+      Name: !Sub 'vigie-api-${Environment}'
+      Description: 'Vigie API Gateway'
       EndpointConfiguration:
         Types:
           - REGIONAL
@@ -597,7 +597,7 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/CognitoAuthorizerId'
+      Name: !Sub '/vigie/${Environment}/CognitoAuthorizerId'
       Type: String
       Value: !Ref CognitoAuthorizer
       Description: API Gateway Cognito User Pool Authorizer ID
@@ -607,70 +607,70 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/DeploymentBucketName'
+      Name: !Sub '/vigie/${Environment}/DeploymentBucketName'
       Type: String
-      Value: !If [ShouldCreateBucket, !Ref DeploymentBucket, !Sub 'wga-deployment-${AWS::AccountId}-${Environment}']
+      Value: !If [ShouldCreateBucket, !Ref DeploymentBucket, !Sub 'vigie-deployment-${AWS::AccountId}-${Environment}']
       Description: Name of the S3 bucket for deployment packages
 
   OutputBucketParameter:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/OutputBucketName'
+      Name: !Sub '/vigie/${Environment}/OutputBucketName'
       Type: String
-      Value: !If [ShouldCreateOutputBucket, !Ref OutputBucket, !Sub 'wga-outputbucket-${AWS::AccountId}-${Environment}']
+      Value: !If [ShouldCreateOutputBucket, !Ref OutputBucket, !Sub 'vigie-outputbucket-${AWS::AccountId}-${Environment}']
       Description: Name of the S3 bucket for output files
 
   AthenaOutputBucketParameter:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/AthenaOutputBucketName'
+      Name: !Sub '/vigie/${Environment}/AthenaOutputBucketName'
       Type: String
-      Value: !If [ShouldCreateAthenaOutputBucket, !Ref AthenaOutputBucket, !Sub 'wga-athenaoutputbucket-${AWS::AccountId}-${Environment}']
+      Value: !If [ShouldCreateAthenaOutputBucket, !Ref AthenaOutputBucket, !Sub 'vigie-athenaoutputbucket-${AWS::AccountId}-${Environment}']
       Description: S3 bucket for Athena query results
 
   GuardDutyExportBucketParameter:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/GuardDutyExportBucketName'
+      Name: !Sub '/vigie/${Environment}/GuardDutyExportBucketName'
       Type: String
-      Value: !If [ShouldCreateGuardDutyExportBucket, !Ref GuardDutyExportBucket, !Sub 'wga-guarddutyexportbucket-${AWS::AccountId}-${Environment}']
+      Value: !If [ShouldCreateGuardDutyExportBucket, !Ref GuardDutyExportBucket, !Sub 'vigie-guarddutyexportbucket-${AWS::AccountId}-${Environment}']
       Description: S3 bucket for GuardDuty Export
 
   DockerBuildBucketParameter:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/DockerBuildBucketName'
+      Name: !Sub '/vigie/${Environment}/DockerBuildBucketName'
       Type: String
-      Value: !If [ ShouldCreateDockerBuildBucket, !Ref DockerBuildBucket, !Sub 'wga-dockerbuildbucket-${AWS::AccountId}-${Environment}' ]
+      Value: !If [ ShouldCreateDockerBuildBucket, !Ref DockerBuildBucket, !Sub 'vigie-dockerbuildbucket-${AWS::AccountId}-${Environment}' ]
       Description: S3 bucket for Docker Build
 
   FrontendBucketParameter:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/FrontendBucketName'
+      Name: !Sub '/vigie/${Environment}/FrontendBucketName'
       Type: String
-      Value: !If [ ShouldCreateFrontendBucket, !Ref FrontendBucket, !Sub 'wga-frontend-${AWS::AccountId}-${Environment}' ]
+      Value: !If [ ShouldCreateFrontendBucket, !Ref FrontendBucket, !Sub 'vigie-frontend-${AWS::AccountId}-${Environment}' ]
       Description: S3 bucket for frontend hosting
 
   DiagramBucketParameter:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/DiagramBucketName'
+      Name: !Sub '/vigie/${Environment}/DiagramBucketName'
       Type: String
-      Value: !If [ ShouldCreateDiagramBucket, !Ref DiagramBucket, !Sub 'wga-diagrambucket-${AWS::AccountId}-${Environment}' ]
+      Value: !If [ ShouldCreateDiagramBucket, !Ref DiagramBucket, !Sub 'vigie-diagrambucket-${AWS::AccountId}-${Environment}' ]
       Description: S3 bucket for MCP diagram storage
 
   UserPoolIdParameter:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/UserPoolId'
+      Name: !Sub '/vigie/${Environment}/UserPoolId'
       Type: String
       Value: !Ref UserPool
       Description: ID of the Cognito User Pool
@@ -679,7 +679,7 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/UserPoolClientId'
+      Name: !Sub '/vigie/${Environment}/UserPoolClientId'
       Type: String
       Value: !Ref UserPoolClient
       Description: ID of the Cognito User Pool Client
@@ -688,7 +688,7 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/UserPoolDomain'
+      Name: !Sub '/vigie/${Environment}/UserPoolDomain'
       Type: String
       Value: !Sub 'https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com'
       Description: Domain of the Cognito User Pool
@@ -697,7 +697,7 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/IdentityPoolId'
+      Name: !Sub '/vigie/${Environment}/IdentityPoolId'
       Type: String
       Value: !Ref IdentityPool
       Description: ID of the Cognito Identity Pool
@@ -706,7 +706,7 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/ApiGatewayId'
+      Name: !Sub '/vigie/${Environment}/ApiGatewayId'
       Type: String
       Value: !Ref ApiGateway
       Description: ID of the API Gateway
@@ -715,7 +715,7 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/ApiGatewayRootResourceId'
+      Name: !Sub '/vigie/${Environment}/ApiGatewayRootResourceId'
       Type: String
       Value: !GetAtt ApiGateway.RootResourceId
       Description: Root Resource ID of the API Gateway
@@ -724,7 +724,7 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/FrontendRedirectDomain'
+      Name: !Sub '/vigie/${Environment}/FrontendRedirectDomain'
       Type: String
       Value: !Ref FrontendRedirectDomain
       Description: Frontend redirect domain
@@ -733,7 +733,7 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/CallbackDomain'
+      Name: !Sub '/vigie/${Environment}/CallbackDomain'
       Type: String
       Value: !Ref CallbackDomain
       Description: Slackbot callback domain
@@ -742,7 +742,7 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/KnowledgeBaseId'
+      Name: !Sub '/vigie/${Environment}/KnowledgeBaseId'
       Type: String
       Value: !Ref KnowledgeBaseId
       Description: KnowledgeBaseId
@@ -751,7 +751,7 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/McpFunctionUrl'
+      Name: !Sub '/vigie/${Environment}/McpFunctionUrl'
       Type: String
       Value: !Ref McpFunctionUrl
       Description: McpFunctionUrl
@@ -760,7 +760,7 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/ChatHistoryTable'
+      Name: !Sub '/vigie/${Environment}/ChatHistoryTable'
       Type: String
       Value: !Ref ChatHistoryTable
       Description: 'Name of the DynamoDB table for chat history'
@@ -769,7 +769,7 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/McpSessionsTable'
+      Name: !Sub '/vigie/${Environment}/McpSessionsTable'
       Type: String
       Value: !Ref McpSessionsTable
       Description: 'Name of the DynamoDB table for mcp sessions'
@@ -781,31 +781,31 @@ Outputs:
     Value: !Ref CognitoAuthorizer
   DeploymentBucketName:
     Description: Name of the S3 bucket for deployment packages
-    Value: !If [ShouldCreateBucket, !Ref DeploymentBucket, !Sub 'wga-deployment-${AWS::AccountId}-${Environment}']
+    Value: !If [ShouldCreateBucket, !Ref DeploymentBucket, !Sub 'vigie-deployment-${AWS::AccountId}-${Environment}']
 
   OutputBucketName:
     Description: Name of the S3 bucket for output files
-    Value: !If [ShouldCreateOutputBucket, !Ref OutputBucket, !Sub 'wga-outputbucket-${AWS::AccountId}-${Environment}']
+    Value: !If [ShouldCreateOutputBucket, !Ref OutputBucket, !Sub 'vigie-outputbucket-${AWS::AccountId}-${Environment}']
 
   AthenaOutputBucketName:
     Description: Name of the S3 bucket for athena output files
-    Value: !If [ShouldCreateAthenaOutputBucket, !Ref AthenaOutputBucket, !Sub 'wga-athenaoutputbucket-${AWS::AccountId}-${Environment}']
+    Value: !If [ShouldCreateAthenaOutputBucket, !Ref AthenaOutputBucket, !Sub 'vigie-athenaoutputbucket-${AWS::AccountId}-${Environment}']
 
   GuardDutyExportBucketName:
     Description: Name of the S3 bucket for guardduty export files
-    Value: !If [ShouldCreateGuardDutyExportBucket, !Ref GuardDutyExportBucket, !Sub 'wga-guarddutyexportbucket-${AWS::AccountId}-${Environment}']
+    Value: !If [ShouldCreateGuardDutyExportBucket, !Ref GuardDutyExportBucket, !Sub 'vigie-guarddutyexportbucket-${AWS::AccountId}-${Environment}']
 
   DockerBuildBucketName:
     Description: Name of the S3 bucket for docker build files
-    Value: !If [ ShouldCreateDockerBuildBucket, !Ref DockerBuildBucket, !Sub 'wga-dockerbuildbucket-${AWS::AccountId}-${Environment}' ]
+    Value: !If [ ShouldCreateDockerBuildBucket, !Ref DockerBuildBucket, !Sub 'vigie-dockerbuildbucket-${AWS::AccountId}-${Environment}' ]
 
   FrontendBucketName:
     Description: Name of the S3 bucket for frontend hosting
-    Value: !If [ShouldCreateFrontendBucket, !Ref FrontendBucket, !Sub 'wga-frontend-${AWS::AccountId}-${Environment}']
+    Value: !If [ShouldCreateFrontendBucket, !Ref FrontendBucket, !Sub 'vigie-frontend-${AWS::AccountId}-${Environment}']
 
   DiagramBucketName:
     Description: Name of the S3 bucket for MCP diagram storage
-    Value: !If [ShouldCreateDiagramBucket, !Ref DiagramBucket, !Sub 'wga-diagrambucket-${AWS::AccountId}-${Environment}']
+    Value: !If [ShouldCreateDiagramBucket, !Ref DiagramBucket, !Sub 'vigie-diagrambucket-${AWS::AccountId}-${Environment}']
 
   UserPoolId:
     Description: ID of the Cognito User Pool

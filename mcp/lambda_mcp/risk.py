@@ -1,6 +1,6 @@
 """도구 위험도 목록: 어떤 도구가 AWS를 바꾸는지의 기준은 여기 한 곳이다.
 
-    tools/list ──▶ 도구 정의에 위험도를 붙여 내보낸다 (MCP 표준 annotations + _meta["wga/risk"])
+    tools/list ──▶ 도구 정의에 위험도를 붙여 내보낸다 (MCP 표준 annotations + _meta["vigie/risk"])
                      └─▶ LLM Lambda가 읽고, 변경 도구면 실행하지 않고 승인을 기다린다
     tools/call ──▶ 변경 도구면 승인된 작업인지 다시 확인한 뒤에만 실행한다 (lambda_mcp.py)
 
@@ -18,7 +18,7 @@ READ = "read"
 ARTIFACT = "artifact"
 WRITE = "write"
 
-RISK_META_KEY = "wga/risk"
+RISK_META_KEY = "vigie/risk"
 
 TOOL_RISK: Dict[str, str] = {
     # AWS 공식 CloudWatch MCP 서버

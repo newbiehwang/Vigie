@@ -62,7 +62,7 @@ def load_config():
             'kb_id': ''
         },
         'db': {
-            'chat_history_table': os.environ.get('CHAT_HISTORY_TABLE', f'wga-chat-history-{ENV}')
+            'chat_history_table': os.environ.get('CHAT_HISTORY_TABLE', f'vigie-chat-history-{ENV}')
         },
         'anthropic': {
             'api_key': ''
@@ -71,7 +71,7 @@ def load_config():
 
     try:
         # SSM 파라미터 경로
-        ssm_path = f'/wga/{ENV}/'
+        ssm_path = f'/vigie/{ENV}/'
 
         # SSM에서 모든 파라미터 로드
         ssm = boto3.client('ssm', region_name=AWS_REGION)

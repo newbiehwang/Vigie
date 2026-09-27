@@ -2,7 +2,7 @@
 (한쪽만 바뀌면 설치 마법사가 엉뚱한 리소스를 확인하거나 배포 전 확인이 틀린 판단을 한다)"""
 import re
 
-from wga_installer.aws import (LAMBDA_FUNCTIONS, REQUIRED_TIMEOUT_MS, SECRET_PARAMS, dashboard_name, main_stacks,
+from vigie_installer.aws import (LAMBDA_FUNCTIONS, REQUIRED_TIMEOUT_MS, SECRET_PARAMS, dashboard_name, main_stacks,
                                parse_time)
 
 from .helpers import ROOT
@@ -24,8 +24,8 @@ def test_lambda_functions_exist_in_templates():
 
 
 def test_dashboard_name_matches_monitoring_template():
-    assert "DashboardName: !Sub 'wga-${Environment}-service'" in TEMPLATES["monitoring.yaml"]
-    assert dashboard_name("dev") == "wga-dev-service"
+    assert "DashboardName: !Sub 'vigie-${Environment}-service'" in TEMPLATES["monitoring.yaml"]
+    assert dashboard_name("dev") == "vigie-dev-service"
 
 
 def test_required_timeout_matches_llm_template():
@@ -48,7 +48,7 @@ def test_readme_quota_matches_required_value():
 
 def test_secret_params_match_readme():
     readme = (ROOT / "README.md").read_text()
-    secure = set(re.findall(r'put-parameter --name "/wga/\$\{Environment\}/([^"]+)"[^\n]*--type "SecureString"', readme))
+    secure = set(re.findall(r'put-parameter --name "/vigie/\$\{Environment\}/([^"]+)"[^\n]*--type "SecureString"', readme))
     assert {param.key for param in SECRET_PARAMS} == secure
 
 

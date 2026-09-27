@@ -9,7 +9,7 @@
   4. 새로 받은 목록이 저장된 것과 다르면(배포로 도구가 바뀜) 저장한 것을 바꾼다.
 저장한 것이 없으면(처음 배포) 예전처럼 연결을 기다린 뒤 모델을 부르고, 받은 목록을 저장한다.
 
-저장 위치: LLM Lambda가 이미 쓰는 진행 상황 테이블(wga-llm-progress-<env>, llm_progress.py)에 항목 하나.
+저장 위치: LLM Lambda가 이미 쓰는 진행 상황 테이블(vigie-llm-progress-<env>, llm_progress.py)에 항목 하나.
   {"requestId": "cache#mcp-tools", "mcpUrl": "...", "hash": "<sha256>", "tools": <gzip JSON>, "savedAt", "expiresAt"}
 - 새 테이블·권한 없이 PutItem·GetItem만 쓴다. 키가 요청 ID(UUID) 모양이 아니고 ownerId가 없어
   진행 상황 조회(GET /llm1/progress, read_progress)로는 읽을 수 없다.

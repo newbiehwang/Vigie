@@ -22,7 +22,7 @@ from .mcp_types import (
 
 # S3 클라이언트 초기화
 s3_client = boto3.client('s3')
-DIAGRAM_BUCKET = os.environ.get('DIAGRAM_BUCKET', f'wga-diagrambucket-{os.environ.get("ENV", "dev")}')
+DIAGRAM_BUCKET = os.environ.get('DIAGRAM_BUCKET', f'vigie-diagrambucket-{os.environ.get("ENV", "dev")}')
 
 
 def validate_syntax(code: str) -> Tuple[bool, Optional[str]]:

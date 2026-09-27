@@ -2,7 +2,7 @@
 import pytest
 
 from .helpers import ROOT
-from wga_installer.context import build_context, find_repo_root
+from vigie_installer.context import build_context, find_repo_root
 
 
 def context(fake, repo, *, region=None, profile=None, **environ):
@@ -23,8 +23,8 @@ def test_region_env_before_profile(fake, repo):
 
 
 def test_region_from_profile(fake, repo):
-    fake.add("aws", "configure get region --profile wga-dev", "us-west-2\n")
-    ctx = context(fake, repo, profile="wga-dev")
+    fake.add("aws", "configure get region --profile vigie-dev", "us-west-2\n")
+    ctx = context(fake, repo, profile="vigie-dev")
     assert (ctx.region, ctx.region_source) == ("us-west-2", "profile")
 
 
@@ -53,10 +53,10 @@ def test_command_env_sets_region_and_disables_pager(fake, repo):
 def test_profile_removes_credentials_from_environment(fake, repo):
     # 환경 변수의 키가 남아 있으면 AWS CLI가 프로필 대신 그 키를 써서 다른 계정에 배포할 수 있다
     fake.add("aws", "configure get region", exit=1)
-    ctx = context(fake, repo, profile="wga-dev", AWS_ACCESS_KEY_ID="AKIAOTHER", AWS_SECRET_ACCESS_KEY="x",
+    ctx = context(fake, repo, profile="vigie-dev", AWS_ACCESS_KEY_ID="AKIAOTHER", AWS_SECRET_ACCESS_KEY="x",
                   AWS_SESSION_TOKEN="y")
     env = ctx.command_env()
-    assert env["AWS_PROFILE"] == "wga-dev"
+    assert env["AWS_PROFILE"] == "vigie-dev"
     assert not {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"} & env.keys()
 
 
@@ -85,7 +85,7 @@ def test_explicit_repo_is_not_searched_upward(fake, repo):
 def test_real_repository_is_detected():
     assert find_repo_root(ROOT / "installer" / "core") == ROOT
     ctx = build_context(env="dev", region="ap-northeast-2", profile=None, repo=None, environ={}, cwd=ROOT)
-    assert ctx.repo_root == ROOT and ctx.ssm_prefix == "/wga/dev"
+    assert ctx.repo_root == ROOT and ctx.ssm_prefix == "/vigie/dev"
 
 
 def test_emails_come_from_dotenv_when_options_are_missing(tmp_path):

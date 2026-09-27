@@ -17,8 +17,8 @@ import yaml
 
 from conftest import ROOT, load_service_module
 
-AUDIT_TABLE = "wga-audit-test"
-AUDIT_LOG_GROUP = "/wga/test/audit"
+AUDIT_TABLE = "vigie-audit-test"
+AUDIT_LOG_GROUP = "/vigie/test/audit"
 ACCOUNT = "111122223333"
 ACCESS_KEY = "AK" + "IA" + "Z7QW4ERTY6UIOP2A"
 ORIGIN = "https://test.abc.amplifyapp.com"
@@ -69,8 +69,8 @@ class FakeResponse:
         return self._payload
 
 
-ALIAS_ARN = "arn:aws:logs:us-east-1:********3333:log-group:/aws/lambda/wga-llm-dev"
-REAL_ARN = f"arn:aws:logs:us-east-1:{ACCOUNT}:log-group:/aws/lambda/wga-llm-dev"
+ALIAS_ARN = "arn:aws:logs:us-east-1:********3333:log-group:/aws/lambda/vigie-llm-dev"
+REAL_ARN = f"arn:aws:logs:us-east-1:{ACCOUNT}:log-group:/aws/lambda/vigie-llm-dev"
 
 
 @pytest.fixture
@@ -102,7 +102,7 @@ def client_run(audit_env, monkeypatch):
     monkeypatch.setattr(mcp_anthropic_client.HTTP, "post", fake_post)
     client = mcp_anthropic_client.AnthropicMCPClient(
         mcp_url="https://example.invalid", api_key="k", model_id="claude-sonnet-5")
-    read = {"wga/risk": "read"}  # MCP tools/list가 붙이는 위험도 (없으면 변경 도구로 본다)
+    read = {"vigie/risk": "read"}  # MCP tools/list가 붙이는 위험도 (없으면 변경 도구로 본다)
     client.tools = [{"name": "describe_log_groups", "description": "", "inputSchema": {}, "_meta": read},
                     {"name": "analyze_log_group", "description": "", "inputSchema": {}, "_meta": read}]
     monkeypatch.setattr(client.mcp_client, "call_tool", fake_call_tool)
@@ -132,7 +132,7 @@ def test_each_tool_call_is_recorded_with_the_value_the_tool_received(client_run)
 def test_audit_records_are_also_written_to_cloudwatch_logs(client_run):
     records = log_records()
     assert [r["tool"] for r in records] == ["describe_log_groups", "analyze_log_group"]
-    assert all(r["wga_audit"] is True and r["userId"] == "alice" for r in records)
+    assert all(r["vigie_audit"] is True and r["userId"] == "alice" for r in records)
     assert all("expiresAt" not in r for r in records)
     assert ACCESS_KEY not in json.dumps(records)
     # 실행 환경마다 로그 스트림 하나

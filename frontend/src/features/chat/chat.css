@@ -282,7 +282,7 @@
 
 /* 도구 호출 목록: 왼쪽 세로줄, 본문보다 작고 옅게 */
 /* 답변을 만든 과정 (ProgressTrace.tsx): 사고 요약 · 도구 호출 · 기다리는 동안의 상태 줄.
-   Claude Code가 작업 과정을 보여 주는 모양을 따랐고, 색은 WGA 색(파랑)을 쓴다 */
+   Claude Code가 작업 과정을 보여 주는 모양을 따랐고, 색은 Vigie 색(파랑)을 쓴다 */
 .trace {
   margin: 2px 0 12px;
   font-size: 13px;

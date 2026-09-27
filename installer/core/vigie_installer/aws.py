@@ -1,4 +1,4 @@
-"""여러 단계가 함께 쓰는 AWS 조회 도우미와 WGA 리소스 이름
+"""여러 단계가 함께 쓰는 AWS 조회 도우미와 Vigie 리소스 이름
 
 리소스 이름은 deploy.sh와 cloudformation/*.yaml이 정한 것을 그대로 옮겨 적는다.
 이름이 어긋나면 설치 마법사가 엉뚱한 리소스를 확인하게 되므로,
@@ -29,7 +29,7 @@ QUOTA_REJECTED_STATUSES = ("DENIED", "NOT_APPROVED", "INVALID_REQUEST")
 @dataclass(frozen=True)
 class SecretParam:
     """SSM에 SecureString으로 저장하는 비밀 값 하나."""
-    key: str                 # /wga/<env>/ 뒤의 이름
+    key: str                 # /vigie/<env>/ 뒤의 이름
     title: str               # 화면에 보일 이름
     required: bool           # False면 비워 두어도 된다 (등록하지 않고 건너뜀)
     echo: bool = False       # True면 터미널에서 입력 내용을 보여 준다 (붙여 넣었는지 확인하기 어려운 긴 키)
@@ -45,36 +45,36 @@ SECRET_PARAMS = (
 
 def main_stacks(env: str) -> list[str]:
     """deploy.sh가 만드는 최상위 스택. deploy.sh의 배포 순서와 같다."""
-    return [f"wga-base-{env}", f"wga-frontend-{env}", f"wga-mcp-{env}", f"wga-{env}"]
+    return [f"vigie-base-{env}", f"vigie-frontend-{env}", f"vigie-mcp-{env}", f"vigie-{env}"]
 
 
 def oidc_stack(env: str) -> str:
     """GitHub Actions 배포용 OIDC Role 스택 (cloudformation/github-oidc.yaml, deploy.sh가 배포하지 않음)."""
-    return f"wga-github-oidc-{env}"
+    return f"vigie-github-oidc-{env}"
 
 
 def env_buckets(account_id: str, env: str) -> list[str]:
     """환경마다 하나씩 있는 S3 버킷 (cloudformation/base.yaml, 모두 DeletionPolicy: Retain)."""
     kinds = ("deployment", "frontend", "outputbucket", "athenaoutputbucket", "guarddutyexportbucket",
              "dockerbuildbucket", "diagrambucket")
-    return [f"wga-{kind}-{account_id}-{env}" for kind in kinds]
+    return [f"vigie-{kind}-{account_id}-{env}" for kind in kinds]
 
 
 def shared_bucket(account_id: str) -> str:
     """deploy.sh가 템플릿을 올리는 버킷. 모든 환경이 함께 쓴다 (deploy.sh의 CLOUDFORMATION_BUCKET)."""
-    return f"wga-cloudformation-{account_id}"
+    return f"vigie-cloudformation-{account_id}"
 
 
 def mcp_repository(env: str) -> str:
-    return f"wga-mcp-{env}"   # cloudformation/mcp.yaml의 MCPRepo
+    return f"vigie-mcp-{env}"   # cloudformation/mcp.yaml의 MCPRepo
 
 
 # 로그 그룹 /aws/lambda/<이름>-<env>를 가진 Lambda 함수들 (cloudformation의 FunctionName)
-LAMBDA_FUNCTIONS = ("wga-mcp", "wga-llm", "wga-slackbot", "wga-chat-history", "wga-athena-utility")
+LAMBDA_FUNCTIONS = ("vigie-mcp", "vigie-llm", "vigie-slackbot", "vigie-chat-history", "vigie-athena-utility")
 
 
 def dashboard_name(env: str) -> str:
-    return f"wga-{env}-service"   # cloudformation/monitoring.yaml의 DashboardName
+    return f"vigie-{env}-service"   # cloudformation/monitoring.yaml의 DashboardName
 
 
 # ---- 공통 호출 ----
@@ -120,7 +120,7 @@ def parse_time(value: Any) -> datetime | None:
 # 스택 이벤트를 몇 개까지 볼지. 오래된 스택은 이벤트가 수천 개라 전부 받으면 느리다.
 # 이번 작업의 이벤트는 가장 최근 것들이므로 이 정도면 충분하다.
 MAX_STACK_EVENTS = 200
-MAX_NESTED_DEPTH = 2   # 중첩 스택(wga-<env> 안의 llm, logs ...)을 몇 단계까지 따라 들어갈지
+MAX_NESTED_DEPTH = 2   # 중첩 스택(vigie-<env> 안의 llm, logs ...)을 몇 단계까지 따라 들어갈지
 
 
 @dataclass(frozen=True)

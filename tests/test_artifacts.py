@@ -15,7 +15,7 @@ import pytest
 from conftest import ROOT, load_service_module
 from test_approvals import ORIGIN, FakeResponse, env  # noqa: F401 (env는 fixture)
 
-BUCKET = "wga-diagrambucket-test"
+BUCKET = "vigie-diagrambucket-test"
 BAR = {"data": json.dumps([{"category": "EC2", "value": 320.5}, {"category": "S3", "value": 45}]),
        "title": "서비스별 비용"}
 
@@ -31,7 +31,7 @@ def mcp_result(body):
     return {"content": [{"type": "text", "text": json.dumps(body)}]}
 
 
-URL = "https://wga-diagrambucket-123456789012-test.s3.amazonaws.com/charts/2026/09/26/bar_ab12cd34.png?X-Amz-Sig=x"
+URL = "https://vigie-diagrambucket-123456789012-test.s3.amazonaws.com/charts/2026/09/26/bar_ab12cd34.png?X-Amz-Sig=x"
 SPEC = {"type": "bar", "options": {"data": [{"category": "EC2", "value": 1}]}}
 
 
@@ -62,9 +62,9 @@ def test_failures_and_unknown_shapes_pass_through(artifacts):
 def test_diagram_has_no_spec(artifacts):
     box = artifacts.Artifacts()
     box.take("generateArchitectureDiagram", mcp_result({"status": "success", "url": URL,
-                                                         "s3_key": "diagrams/2026/09/26/wga_1234abcd.png",
+                                                         "s3_key": "diagrams/2026/09/26/vigie_1234abcd.png",
                                                          "message": "Diagram generated"}))
-    assert box.public() == [{"ref": "artifact://diagrams/2026/09/26/wga_1234abcd.png", "url": URL,
+    assert box.public() == [{"ref": "artifact://diagrams/2026/09/26/vigie_1234abcd.png", "url": URL,
                              "kind": "diagram"}]
 
 
@@ -151,7 +151,7 @@ def test_chart_tool_returns_spec_only_when_small(env):  # noqa: F811
 def test_screen_never_opens_images_the_model_wrote():
     markdown = (ROOT / "frontend" / "src" / "utils" / "markdown.ts").read_text(encoding="utf-8")
     # 마크다운에서는 이미지를 열지 않는다: 모든 ![](주소)는 링크로만. 버킷 이름 모양으로 허용하지도 않는다
-    # (S3 버킷 이름은 누구나 만들 수 있어 wga-diagrambucket-공격자 같은 버킷으로 우회된다)
+    # (S3 버킷 이름은 누구나 만들 수 있어 vigie-diagrambucket-공격자 같은 버킷으로 우회된다)
     assert "<img" not in markdown and "markdown-image-link" in markdown
     # 결과물 이미지는 서버가 만든 목록(inference.artifacts)의 https 주소만 쓴다
     artifacts = (ROOT / "frontend" / "src" / "utils" / "artifacts.ts").read_text(encoding="utf-8")

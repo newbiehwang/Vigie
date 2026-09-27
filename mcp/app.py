@@ -1,4 +1,4 @@
-"""WGA MCP 서버 (Lambda Function URL, Streamable HTTP)
+"""Vigie MCP 서버 (Lambda Function URL, Streamable HTTP)
 
 도구는 두 곳에서 온다.
 1. AWS 공식 MCP 서버 (awslabs, lambda_mcp/official.py가 이 서버에 붙인다)
@@ -20,14 +20,14 @@
    - 아키텍처 다이어그램 (공식 diagram 서버는 PyPI에서 폐기되었다. 폐기 전 공식 서버를 옮겨 온 코드)
    - 차트 (AntV 차트 서비스, AWS와 무관)
    - 변경 도구 4개 (사람이 승인해야 실행된다)
-     로그 보존 기간, 알람 알림 켜기·끄기: 이 환경의 WGA 리소스만
+     로그 보존 기간, 알람 알림 켜기·끄기: 이 환경의 Vigie 리소스만
      EC2 인스턴스 중지·시작: 이 리전의 모든 인스턴스 (통제는 사람의 승인과 MCP의 승인 재확인이 한다)
      S3 퍼블릭 액세스 차단 켜기: 보안을 강화하는 방향만 (끄는 도구는 없다)
 
 변경 도구의 통제 (lambda_mcp/risk.py, lambda_mcp/approval.py)
 - tools/list가 도구마다 위험도를 붙인다. LLM Lambda는 변경 도구를 바로 실행하지 않고 승인 요청을 만든다.
 - 사용자가 승인하면 LLM Lambda가 작업 ID를 붙여 부르고, 이 서버가 승인 테이블을 직접 다시 확인한 뒤 한 번만 실행한다.
-- 도구 안에서도 이름으로 이 환경의 WGA 리소스인지 확인하고, IAM도 같은 범위(wga-*)로만 허용한다.
+- 도구 안에서도 이름으로 이 환경의 Vigie 리소스인지 확인하고, IAM도 같은 범위(vigie-*)로만 허용한다.
 """
 import os
 import re
@@ -49,7 +49,7 @@ from lambda_mcp.chart_utils import generate_chart_url, validate_chart_data
 
 
 # Get session table name from environment variable
-session_table = os.environ.get('MCP_SESSION_TABLE', f'wga-mcp-sessions-{os.environ.get("ENV", "dev")}')
+session_table = os.environ.get('MCP_SESSION_TABLE', f'vigie-mcp-sessions-{os.environ.get("ENV", "dev")}')
 aws_region = os.environ.get("AWS_REGION", "ap-northeast-2")
 
 cloudwatch_client = boto3.client('cloudwatch', region_name=aws_region)
@@ -560,8 +560,8 @@ def find_ec2_waste(stopped_days: Optional[int] = None) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------- 변경 도구 (승인 필요)
-# 범위: 이 환경(ENV)의 WGA 리소스만. 이름 규칙은 CloudFormation과 같다
-#   Lambda 로그 그룹 /aws/lambda/wga-<서비스>-<env>, 알람 wga-<env>-<이름>
+# 범위: 이 환경(ENV)의 Vigie 리소스만. 이름 규칙은 CloudFormation과 같다
+#   Lambda 로그 그룹 /aws/lambda/vigie-<서비스>-<env>, 알람 vigie-<env>-<이름>
 # 오류는 dict로 돌려주지 않고 예외로 올린다 (서버가 실패로 기록하고 승인 테이블에 failed를 남긴다)
 
 # CloudWatch Logs가 받는 보존 기간(일)
@@ -577,8 +577,8 @@ def _trail(event_source: str, event_name: str, response: Dict[str, Any]) -> Dict
 
 
 def _check_log_group(log_group_name: str) -> None:
-    if not (log_group_name.startswith("/aws/lambda/wga-") and log_group_name.endswith(f"-{environment}")):
-        raise ValueError(f"이 환경의 WGA Lambda 로그 그룹(/aws/lambda/wga-*-{environment})만 바꿀 수 있습니다: "
+    if not (log_group_name.startswith("/aws/lambda/vigie-") and log_group_name.endswith(f"-{environment}")):
+        raise ValueError(f"이 환경의 Vigie Lambda 로그 그룹(/aws/lambda/vigie-*-{environment})만 바꿀 수 있습니다: "
                          f"{log_group_name}")
 
 
@@ -597,11 +597,11 @@ def _retention_text(days) -> str:
 @mcp_server.tool()
 def set_log_retention(log_group_name: str, retention_days: int) -> Dict[str, Any]:
     """
-    Changes the retention period of a WGA Lambda log group in this environment. This modifies AWS resources, so it
+    Changes the retention period of a Vigie Lambda log group in this environment. This modifies AWS resources, so it
     runs only after the user approves it; calling it creates an approval request instead of running immediately.
 
     Args:
-        log_group_name: Log group name, e.g. /aws/lambda/wga-llm-dev (only /aws/lambda/wga-*-<env> is allowed).
+        log_group_name: Log group name, e.g. /aws/lambda/vigie-llm-dev (only /aws/lambda/vigie-*-<env> is allowed).
         retention_days: New retention in days. One of 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653.
 
     Returns:
@@ -640,10 +640,10 @@ def preview_log_retention(log_group_name: str, retention_days: int) -> Dict[str,
 
 
 def _check_alarm(alarm_name: str) -> None:
-    if not alarm_name.startswith(f"wga-{environment}-"):
-        raise ValueError(f"이 환경의 WGA 알람(wga-{environment}-*)만 바꿀 수 있습니다: {alarm_name}")
+    if not alarm_name.startswith(f"vigie-{environment}-"):
+        raise ValueError(f"이 환경의 Vigie 알람(vigie-{environment}-*)만 바꿀 수 있습니다: {alarm_name}")
     # 거버넌스 알람(인젝션 의심 등)은 끌 수 없다: 인젝션으로 속은 요청이 감시 장치부터 끄는 것을 막는다 (IAM도 Deny)
-    if alarm_name.startswith(f"wga-{environment}-governance-"):
+    if alarm_name.startswith(f"vigie-{environment}-governance-"):
         raise ValueError(f"거버넌스 알람은 바꿀 수 없습니다: {alarm_name}")
 
 
@@ -662,12 +662,12 @@ def _actions_text(enabled: bool) -> str:
 @mcp_server.tool()
 def set_alarm_actions(alarm_name: str, enabled: bool) -> Dict[str, Any]:
     """
-    Turns notifications (alarm actions) of a WGA CloudWatch alarm in this environment on or off, e.g. to silence an
+    Turns notifications (alarm actions) of a Vigie CloudWatch alarm in this environment on or off, e.g. to silence an
     alarm during maintenance. This modifies AWS resources, so it runs only after the user approves it; calling it
     creates an approval request instead of running immediately.
 
     Args:
-        alarm_name: Alarm name (only wga-<env>-* is allowed).
+        alarm_name: Alarm name (only vigie-<env>-* is allowed).
         enabled: true to turn notifications on, false to turn them off.
 
     Returns:

@@ -2,8 +2,8 @@
 
     도구 반복(mcp_anthropic_client._report) ──┬──▶ 진행 상황 (llm_progress.py, 화면용·1시간)
                                               └──▶ 감사 로그 (여기)
-                                                     ├─▶ DynamoDB wga-audit-<env>   (화면에서 조회, 90일 뒤 TTL)
-                                                     └─▶ CloudWatch Logs /wga/<env>/audit (1년 보관, Logs Insights로 분석)
+                                                     ├─▶ DynamoDB vigie-audit-<env>   (화면에서 조회, 90일 뒤 TTL)
+                                                     └─▶ CloudWatch Logs /vigie/<env>/audit (1년 보관, Logs Insights로 분석)
 
 기록 단위
 - 도구 호출 한 번 = 항목 하나 (kind "tool"): 도구, 입력, 성공·실패, 오류, 걸린 시간, 결과 크기
@@ -301,7 +301,7 @@ class AuditLog:
             print(f"감사 로그 저장 실패 (DynamoDB, 계속 진행): {error}")
         try:
             if self._sink is not None and logged:
-                self._sink.write({"wga_audit": True, **{k: v for k, v in item.items() if k != "expiresAt"},
+                self._sink.write({"vigie_audit": True, **{k: v for k, v in item.items() if k != "expiresAt"},
                                   **(log_extra or {})})
         except Exception as error:
             print(f"감사 로그 저장 실패 (CloudWatch Logs, 계속 진행): {error}")

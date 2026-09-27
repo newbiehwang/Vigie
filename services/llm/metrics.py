@@ -1,7 +1,7 @@
 """거버넌스 지표 (CloudWatch EMF: 로그 한 줄로 사용자 지표를 발행한다)
 
     print({"_aws": {...지표 정의...}, "Environment": "dev", "ToolCalls": 3, ...})
-      └─ CloudWatch Logs가 이 줄을 읽어 WGA/Governance 네임스페이스의 지표로 만든다 (PutMetricData 호출 없이)
+      └─ CloudWatch Logs가 이 줄을 읽어 Vigie/Governance 네임스페이스의 지표로 만든다 (PutMetricData 호출 없이)
 
 Lambda 로그 형식이 JSON이어도 된다: Lambda는 logging 라이브러리로 쓴 로그만 JSON으로 감싸고,
 print로 쓴 JSON 줄은 다시 감싸지 않는다 (EMF가 그대로 남는다).
@@ -18,7 +18,7 @@ import os
 import time
 from typing import Dict
 
-NAMESPACE = "WGA/Governance"
+NAMESPACE = "Vigie/Governance"
 METRIC_NAMES = ["ToolCalls", "ToolErrors", "InjectionSuspected", "RedactedValues",
                 "ApprovalRequested", "ApprovalApproved", "ApprovalDenied", "ActionFailed"]
 

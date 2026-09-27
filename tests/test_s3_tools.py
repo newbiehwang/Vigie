@@ -13,7 +13,7 @@ import yaml
 from conftest import ROOT
 from test_approvals import env  # noqa: F401 (fixture)
 
-SECURE, OPEN = "wga-secure-test", "legacy-open-bucket"
+SECURE, OPEN = "vigie-secure-test", "legacy-open-bucket"
 PUBLIC_POLICY = {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": "*", "Action": "s3:GetObject",
                                                          "Resource": f"arn:aws:s3:::{OPEN}/*"}]}
 
@@ -49,7 +49,7 @@ def call(env, name, args=None):  # noqa: F811
 def test_s3_tools_are_registered_as_read(s3_env):
     tools = {t["name"]: t for t in json.loads(s3_env["mcp"]._rpc("tools/list")["body"])["result"]["tools"]}
     for name in ("listS3Buckets", "checkS3BucketSecurity", "getS3BucketSize", "listS3Objects"):
-        assert tools[name]["_meta"]["wga/risk"] == "read"
+        assert tools[name]["_meta"]["vigie/risk"] == "read"
     # 기본값이 있는 인자는 필수가 아니다 (등록 코드가 기본값을 읽는다)
     assert tools["checkS3BucketSecurity"]["inputSchema"]["required"] == []
     assert tools["listS3Objects"]["inputSchema"]["required"] == ["bucket_name"]
@@ -172,8 +172,8 @@ def test_iam_denies_reading_objects_outside_the_diagram_bucket():
     statements = template["Resources"]["McpLambdaExecutionRole"]["Properties"]["Policies"][0]["PolicyDocument"][
         "Statement"]
     deny = next(s for s in statements if s["Effect"] == "Deny" and "s3:GetObject" in s["Action"])
-    assert deny["NotResource"].startswith("arn:aws:s3:::wga-diagrambucket-")
+    assert deny["NotResource"].startswith("arn:aws:s3:::vigie-diagrambucket-")
     # 다이어그램 버킷 말고는 객체를 읽거나 쓰는 Allow가 없다
     for statement in statements:
         if statement["Effect"] == "Allow" and {"s3:GetObject", "s3:PutObject"} & set(statement["Action"]):
-            assert "wga-diagrambucket-" in statement["Resource"]
+            assert "vigie-diagrambucket-" in statement["Resource"]

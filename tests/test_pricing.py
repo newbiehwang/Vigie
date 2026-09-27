@@ -56,7 +56,7 @@ def pricing(env, monkeypatch):  # noqa: F811
 def test_only_price_lookup_tools_are_attached(pricing):
     _, tools, _ = pricing
     assert INCLUDED <= set(tools) and not (EXCLUDED & set(tools))
-    assert all(tools[name]["_meta"]["wga/risk"] == "read" for name in INCLUDED)
+    assert all(tools[name]["_meta"]["vigie/risk"] == "read" for name in INCLUDED)
 
 
 def test_file_reading_tools_cannot_be_called(pricing):

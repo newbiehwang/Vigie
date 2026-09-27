@@ -1,6 +1,6 @@
-"""WGA 설치 마법사의 단계 엔진 (표준 라이브러리만 사용)
+"""Vigie 설치 마법사의 단계 엔진 (표준 라이브러리만 사용)
 
-다른 프로그램은 이 패키지를 `python -m wga_installer <명령> --json`으로 실행하고,
+다른 프로그램은 이 패키지를 `python -m vigie_installer <명령> --json`으로 실행하고,
 stdout으로 나오는 JSON Lines 이벤트를 읽어 화면에 반영한다. 터미널에서 직접 실행하면
 같은 이벤트가 사람이 읽기 좋은 텍스트로 출력된다.
 
@@ -25,7 +25,7 @@ if sys.version_info < MIN_PYTHON:
 
     _message = "Python {}.{} 이상이 필요합니다. 현재 {}.{} ({})".format(
         MIN_PYTHON[0], MIN_PYTHON[1], sys.version_info[0], sys.version_info[1], sys.executable)
-    _hint = "brew install python 으로 설치한 뒤 installer/core/wga-installer 로 실행하세요"
+    _hint = "brew install python 으로 설치한 뒤 installer/core/vigie-installer 로 실행하세요"
     if "--json" in sys.argv:
         # --json으로 실행한 쪽은 stdout의 JSON Lines만 읽으므로 같은 형식의 error 이벤트로 알린다
         print(json.dumps({"type": "error", "step": "python", "message": _message, "hint": _hint},

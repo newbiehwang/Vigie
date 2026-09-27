@@ -6,7 +6,7 @@ import pytest
 
 from conftest import load_service_module
 
-SESSION_TABLE = "wga-mcp-sessions-test"
+SESSION_TABLE = "vigie-mcp-sessions-test"
 
 
 @pytest.fixture
@@ -25,13 +25,13 @@ def test_dashboards_list_and_summary(app):
     body = {"widgets": [{"type": "metric", "x": 0, "y": 0, "width": 12, "height": 6,
                          "properties": {"title": "Lambda Errors", "region": "us-east-1",
                                         "metrics": [["AWS/Lambda", "Errors"]]}}]}
-    boto3.client("cloudwatch").put_dashboard(DashboardName="wga-test-service", DashboardBody=json.dumps(body))
+    boto3.client("cloudwatch").put_dashboard(DashboardName="vigie-test-service", DashboardBody=json.dumps(body))
 
     listed = app.list_cloudwatch_dashboards()
     assert listed["status"] == "success"
-    assert [d["DashboardName"] for d in listed["dashboards"]] == ["wga-test-service"]
+    assert [d["DashboardName"] for d in listed["dashboards"]] == ["vigie-test-service"]
 
-    summary = app.get_dashboard_summary("wga-test-service")
+    summary = app.get_dashboard_summary("vigie-test-service")
     assert summary["widgets_count"] == 1
     assert summary["widgets_summary"][0]["properties"]["title"] == "Lambda Errors"
 
@@ -104,15 +104,15 @@ def test_tools_list_merges_official_and_own_tools(app, session):
 
 def test_official_cloudwatch_tool_reads_alarms(app, session):
     cw = boto3.client("cloudwatch")
-    cw.put_metric_alarm(AlarmName="wga-llm-errors", MetricName="Errors", Namespace="AWS/Lambda", Statistic="Sum",
+    cw.put_metric_alarm(AlarmName="vigie-llm-errors", MetricName="Errors", Namespace="AWS/Lambda", Statistic="Sum",
                         Period=60, EvaluationPeriods=1, Threshold=1, ComparisonOperator="GreaterThanThreshold")
-    cw.set_alarm_state(AlarmName="wga-llm-errors", StateValue="ALARM", StateReason="test")
+    cw.set_alarm_state(AlarmName="vigie-llm-errors", StateValue="ALARM", StateReason="test")
 
     result = call(app, session, "get_active_alarms", {})
 
     assert result["isError"] is False
     assert result["content"][0]["type"] == "text"
-    assert "wga-llm-errors" in result["content"][0]["text"]
+    assert "vigie-llm-errors" in result["content"][0]["text"]
 
 
 def test_official_tool_error_is_a_result_not_an_rpc_error(app, session):

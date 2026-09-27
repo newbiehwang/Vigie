@@ -73,8 +73,8 @@ def test_values_followed_by_korean_are_masked(redaction):
 
 def test_password_in_connection_url_is_masked(redaction):
     redactor = redaction.Redactor()
-    assert (redactor.text("DB_URL=postgres://wga:p4ss-w0rd@db.internal:5432/app")
-            == "DB_URL=postgres://wga:[REDACTED:url_password]@db.internal:5432/app")
+    assert (redactor.text("DB_URL=postgres://vigie:p4ss-w0rd@db.internal:5432/app")
+            == "DB_URL=postgres://vigie:[REDACTED:url_password]@db.internal:5432/app")
     # 포트만 있는 주소는 그대로
     assert redactor.text("https://example.com:8443/path") == "https://example.com:8443/path"
 
@@ -83,8 +83,8 @@ def test_password_in_connection_url_is_masked(redaction):
 
 def test_own_account_id_is_masked_anywhere(redaction):
     redactor = redaction.Redactor([ACCOUNT])
-    bucket = f"s3://wga-diagrambucket-{ACCOUNT}-dev/a.png"
-    assert redactor.text(bucket) == "s3://wga-diagrambucket-********3333-dev/a.png"
+    bucket = f"s3://vigie-diagrambucket-{ACCOUNT}-dev/a.png"
+    assert redactor.text(bucket) == "s3://vigie-diagrambucket-********3333-dev/a.png"
 
 
 def test_other_account_ids_are_masked_only_in_known_places(redaction):
@@ -113,7 +113,7 @@ def test_account_id_inside_json_encoded_tool_result_is_masked(redaction):
     "timestamp 1727000000000",  # 밀리초 시각 (13자리)
     "RoleId AROAZ7QW4ERTY6UIOP2AB",  # 역할 고유 ID는 비밀이 아니다
     "AKIA 형식을 설명하는 문서",
-    "/aws/lambda/wga-llm-dev 로그 그룹에서 오류 3건",
+    "/aws/lambda/vigie-llm-dev 로그 그룹에서 오류 3건",
     "비용 $12.34, 호출 1,234,567회",
 ])
 def test_ordinary_values_are_not_masked(redaction, text):
@@ -178,7 +178,7 @@ class FakeResponse:
 
 
 THINKING = {"type": "thinking", "thinking": "로그 그룹을 찾는다.", "signature": "sig-1"}
-ALIAS_ARN = "arn:aws:logs:us-east-1:********3333:log-group:/aws/lambda/wga-llm-dev"
+ALIAS_ARN = "arn:aws:logs:us-east-1:********3333:log-group:/aws/lambda/vigie-llm-dev"
 
 
 @pytest.fixture
@@ -206,7 +206,7 @@ def client_run(aws, monkeypatch):
         calls.append((name, args))
         if name == "describe_log_groups":
             return {"content": [{"type": "text", "text": json.dumps({"logGroups": [{
-                "arn": f"arn:aws:logs:us-east-1:{ACCOUNT}:log-group:/aws/lambda/wga-llm-dev",
+                "arn": f"arn:aws:logs:us-east-1:{ACCOUNT}:log-group:/aws/lambda/vigie-llm-dev",
                 "env": f"AWS_ACCESS_KEY_ID={ACCESS_KEY}"}]})}]}
         return {"isError": True, "content": [{"type": "text", "text": f"AccessDenied for {ACCESS_KEY}"}]}
 
@@ -214,7 +214,7 @@ def client_run(aws, monkeypatch):
     client = mcp_anthropic_client.AnthropicMCPClient(
         mcp_url="https://example.invalid", api_key="k", model_id="claude-sonnet-5",
         thinking={"type": "adaptive", "display": "summarized"})
-    read = {"wga/risk": "read"}  # MCP tools/list가 붙이는 위험도 (없으면 변경 도구로 본다)
+    read = {"vigie/risk": "read"}  # MCP tools/list가 붙이는 위험도 (없으면 변경 도구로 본다)
     client.tools = [{"name": "describe_log_groups", "description": "", "inputSchema": {}, "_meta": read},
                     {"name": "analyze_log_group", "description": "", "inputSchema": {}, "_meta": read}]
     monkeypatch.setattr(client.mcp_client, "call_tool", fake_call_tool)
@@ -248,7 +248,7 @@ def test_thinking_blocks_in_history_are_sent_unchanged(client_run):
 def test_tool_gets_the_original_value_behind_an_alias(client_run):
     _, _, calls, _ = client_run
     assert calls[1] == ("analyze_log_group",
-                        {"log_group_arn": f"arn:aws:logs:us-east-1:{ACCOUNT}:log-group:/aws/lambda/wga-llm-dev"})
+                        {"log_group_arn": f"arn:aws:logs:us-east-1:{ACCOUNT}:log-group:/aws/lambda/vigie-llm-dev"})
 
 
 def test_progress_does_not_keep_sensitive_values(client_run):

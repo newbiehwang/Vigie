@@ -18,7 +18,7 @@ import pytest
 from conftest import ROOT
 from test_approvals import ORIGIN, FakeResponse, env  # noqa: F401 (env는 fixture)
 
-BUCKET = "wga-diagrambucket-test"  # diagram_utils의 기본값 (ENV=test)
+BUCKET = "vigie-diagrambucket-test"  # diagram_utils의 기본값 (ENV=test)
 
 J = json.dumps
 CHARTS = {
@@ -81,7 +81,7 @@ def png_size(data: bytes):
 
 def test_all_chart_tools_are_covered(env):  # noqa: F811
     tools = json.loads(env["mcp"]._rpc("tools/list")["body"])["result"]["tools"]
-    artifact_charts = {t["name"] for t in tools if t["_meta"]["wga/risk"] == "artifact"} - {
+    artifact_charts = {t["name"] for t in tools if t["_meta"]["vigie/risk"] == "artifact"} - {
         "generateArchitectureDiagram"}
     assert artifact_charts == set(CHARTS)
 

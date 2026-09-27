@@ -5,6 +5,6 @@ interface ImportMetaEnv {
     readonly AWS_REGION?: string;
     readonly USER_POOL_ID?: string;
     readonly COGNITO_CLIENT_ID?: string;
-    readonly COGNITO_DOMAIN?: string; // Cognito 도메인 앞부분 (wga-auth-<env>-<계정ID>)
+    readonly COGNITO_DOMAIN?: string; // Cognito 도메인 앞부분 (vigie-auth-<env>-<계정ID>)
     readonly VITE_API_DEST?: string;
 }

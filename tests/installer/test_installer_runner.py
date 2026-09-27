@@ -6,8 +6,8 @@ import stat
 
 import pytest
 
-from wga_installer.events import JsonEmitter, Redactor, TextEmitter
-from wga_installer.runner import (DECLINED, DRY_RUN, EXECUTED, RC_NOT_FOUND, RC_TIMEOUT, Interaction,
+from vigie_installer.events import JsonEmitter, Redactor, TextEmitter
+from vigie_installer.runner import (DECLINED, DRY_RUN, EXECUTED, RC_NOT_FOUND, RC_TIMEOUT, Interaction,
                                   Runner, secret_file)
 
 
@@ -29,7 +29,7 @@ def approve(id_, approved=True):
     return json.dumps({"type": "confirm_response", "id": id_, "approved": approved}) + "\n"
 
 
-PUT = ["aws", "ssm", "put-parameter", "--name", "/wga/dev/X"]
+PUT = ["aws", "ssm", "put-parameter", "--name", "/vigie/dev/X"]
 
 
 # ---- 읽기 전용 명령 ----
@@ -82,7 +82,7 @@ def test_change_in_dry_run_shows_command_without_running(fake):
     assert fake.calls("aws") == []
     event = output_events(out)[0]
     assert event == {"type": "dry_run", "id": "put_ssm", "reason": "SSM에 값을 저장합니다",
-                     "command": "aws ssm put-parameter --name /wga/dev/X"}
+                     "command": "aws ssm put-parameter --name /vigie/dev/X"}
 
 
 def test_change_runs_after_approval(fake):
@@ -282,7 +282,7 @@ class TtyInput(io.StringIO):
 
 def test_secret_on_terminal_is_hidden_by_default(monkeypatch):
     asked = []
-    monkeypatch.setattr("wga_installer.runner.getpass.getpass", lambda prompt, stream: asked.append(prompt) or "v")
+    monkeypatch.setattr("vigie_installer.runner.getpass.getpass", lambda prompt, stream: asked.append(prompt) or "v")
     out = io.StringIO()
     interaction = Interaction(TextEmitter(Redactor(), out), json_mode=False, stdin=TtyInput("typed\n"),
                               prompt_stream=out)
@@ -292,7 +292,7 @@ def test_secret_on_terminal_is_hidden_by_default(monkeypatch):
 
 def test_secret_with_echo_reads_a_visible_line(monkeypatch):
     # 붙여 넣은 긴 키가 들어갔는지 보이게 입력받는다 (getpass를 쓰지 않는다)
-    monkeypatch.setattr("wga_installer.runner.getpass.getpass",
+    monkeypatch.setattr("vigie_installer.runner.getpass.getpass",
                         lambda *a, **k: pytest.fail("echo=True인데 getpass를 불렀습니다"))
     out = io.StringIO()
     redactor = Redactor()

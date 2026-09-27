@@ -1,4 +1,4 @@
-"""teardown: 한 환경의 WGA 리소스를 모두 지운다 (계획서 4.6절). 되돌릴 수 없다.
+"""teardown: 한 환경의 Vigie 리소스를 모두 지운다 (계획서 4.6절). 되돌릴 수 없다.
 
 안전장치
 - prod는 --allow-prod 없이는 거부한다.
@@ -12,17 +12,17 @@
 
 지우는 순서
     1. 저장소 변수 AWS_DEPLOY_ROLE_ARN_<ENV>  정리 도중 main push가 배포를 다시 시작하지 않도록 가장 먼저
-    2. 스택  wga-<env> → wga-mcp-<env> → wga-frontend-<env> → wga-base-<env> → wga-github-oidc-<env>
+    2. 스택  vigie-<env> → vigie-mcp-<env> → vigie-frontend-<env> → vigie-base-<env> → vigie-github-oidc-<env>
        (MCP 스택이 ECR 이미지 때문에 삭제에 실패하면 ECR 저장소를 강제 삭제하고 한 번 더 시도)
-    3. ECR 저장소 wga-mcp-<env> (스택 삭제 뒤에도 남아 있으면)
+    3. ECR 저장소 vigie-mcp-<env> (스택 삭제 뒤에도 남아 있으면)
     4. S3 버킷  DeletionPolicy: Retain이라 스택을 지워도 남는다. 버전 관리가 켜져 있으므로
        모든 버전과 삭제 마커를 지운 뒤 버킷을 지운다.
-    5. 로그 그룹 /aws/lambda/wga-*-<env>
+    5. 로그 그룹 /aws/lambda/vigie-*-<env>
     6. setup이 만든 SSM 파라미터 3개
     7. GitHub Environment <env>
 
 여러 환경이 함께 쓰는 자원은 다른 환경이 남아 있으면 지우지 않는다.
-- wga-cloudformation-<계정ID> 버킷: deploy.sh가 모든 환경의 템플릿을 여기에 올린다.
+- vigie-cloudformation-<계정ID> 버킷: deploy.sh가 모든 환경의 템플릿을 여기에 올린다.
 - GitHub OIDC 공급자: 계정에 하나뿐이다. 이 환경의 OIDC 스택이 공급자를 가지고 있고 다른 환경의 OIDC 스택이
   남아 있으면, 이 스택을 지우는 순간 다른 환경의 자동 배포가 끊기므로 OIDC 스택을 남긴다.
 """
@@ -64,7 +64,7 @@ class Plan:
 
 
 def run(ctx: Context, runner: Runner, emitter: Emitter) -> int:
-    emitter.step_started(STEP, f"WGA 정리 ({ctx.env}, {ctx.region}) — 되돌릴 수 없습니다")
+    emitter.step_started(STEP, f"Vigie 정리 ({ctx.env}, {ctx.region}) — 되돌릴 수 없습니다")
     if ctx.env == "prod" and not ctx.allow_prod:
         emitter.error(STEP, "prod 환경은 --allow-prod 없이 지울 수 없습니다",
                       hint="정말 지우려면 --env prod --allow-prod로 다시 실행하세요")
@@ -98,7 +98,7 @@ def run(ctx: Context, runner: Runner, emitter: Emitter) -> int:
             return 1
 
     emitter.step_finished(STEP, STEP_OK, "정리 확인 끝 (지운 것 없음)" if runner.dry_run
-                          else f"{ctx.env} 환경의 WGA 리소스를 모두 지웠습니다")
+                          else f"{ctx.env} 환경의 Vigie 리소스를 모두 지웠습니다")
     return 0
 
 
@@ -160,7 +160,7 @@ def _inventory(ctx: Context, runner: Runner, emitter: Emitter) -> Plan | None:
     _report(emitter, "target_buckets", "S3 버킷 (모든 버전 포함)", CHECK_INFO,
             ", ".join(plan.buckets) if plan.buckets else "없음")
 
-    data, result = aws_json(runner, "logs", "describe-log-groups", "--log-group-name-prefix", "/aws/lambda/wga-")
+    data, result = aws_json(runner, "logs", "describe-log-groups", "--log-group-name-prefix", "/aws/lambda/vigie-")
     if data is None:
         emitter.error(STEP, "로그 그룹을 조회하지 못했습니다", raw=error_text(result))
         return None
@@ -261,7 +261,7 @@ def _delete_stacks(ctx: Context, runner: Runner, emitter: Emitter, plan: Plan) -
     commands: list[list[str] | str] = []
     for stack in plan.stacks:
         commands.append(["aws", "cloudformation", "delete-stack", "--stack-name", stack])
-    if f"wga-mcp-{ctx.env}" in plan.stacks:
+    if f"vigie-mcp-{ctx.env}" in plan.stacks:
         commands.append(format_command(force_ecr) + "   # MCP 스택이 ECR 이미지 때문에 삭제에 실패할 때만, 이후 재시도")
     if not _announce(runner, emitter, "delete_stacks",
                      f"스택 {len(plan.stacks)}개를 순서대로 지웁니다 (중첩 스택 포함, 수십 분 걸릴 수 있음)", commands):
@@ -273,7 +273,7 @@ def _delete_stacks(ctx: Context, runner: Runner, emitter: Emitter, plan: Plan) -
         if _delete_stack(runner, stack):
             continue
         failures = stack_failures(runner, [stack], started - CLOCK_SKEW)
-        if stack == f"wga-mcp-{ctx.env}" and any(f.resource_type == "AWS::ECR::Repository" for f in failures):
+        if stack == f"vigie-mcp-{ctx.env}" and any(f.resource_type == "AWS::ECR::Repository" for f in failures):
             emitter.log(f"ECR 저장소 {repo_name}에 이미지가 남아 스택 삭제가 실패했습니다. 저장소를 지우고 다시 시도합니다",
                         stream="info")
             result = runner.run_approved(force_ecr, timeout=120)

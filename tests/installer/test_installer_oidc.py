@@ -4,12 +4,12 @@ from datetime import datetime, timezone
 
 import pytest
 
-from wga_installer.steps import oidc
+from vigie_installer.steps import oidc
 
 from .helpers import ROOT, responses, run_step
 
 REPO = "octo/WGA_production"
-ROLE_ARN = "arn:aws:iam::123456789012:role/wga-github-deploy-dev"
+ROLE_ARN = "arn:aws:iam::123456789012:role/vigie-github-deploy-dev"
 PROVIDER = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
 TEMPLATE_TEXT = (ROOT / "cloudformation" / "github-oidc.yaml").read_text()
 NOW = datetime.now(timezone.utc).isoformat()
@@ -31,7 +31,7 @@ def repo_dir(repo):
 
 
 def stack(env="dev", provider="", status="CREATE_COMPLETE", repo=REPO):
-    return {"StackName": f"wga-github-oidc-{env}", "StackStatus": status,
+    return {"StackName": f"vigie-github-oidc-{env}", "StackStatus": status,
             "Parameters": [{"ParameterKey": "Environment", "ParameterValue": env},
                            {"ParameterKey": "GitHubRepository", "ParameterValue": repo},
                            {"ParameterKey": "ExistingOidcProviderArn", "ParameterValue": provider}],
@@ -60,7 +60,7 @@ def github(fake, *, admin=True, environment=None, policies=None, variables=None,
 def aws(fake, *, before=None, after=None, providers=(), owns_provider=False, same_template=True):
     """aws가 보는 계정 상태. before: 처음 조회한 스택(None이면 없음), after: 배포 뒤 조회되는 스택."""
     if before is None:
-        fake.add("aws", "describe-stacks", stderr="Stack with id wga-github-oidc-dev does not exist\n", exit=254,
+        fake.add("aws", "describe-stacks", stderr="Stack with id vigie-github-oidc-dev does not exist\n", exit=254,
                  times=1)
     else:
         fake.add("aws", "describe-stacks", json.dumps({"Stacks": [before]}), times=1)
@@ -69,7 +69,7 @@ def aws(fake, *, before=None, after=None, providers=(), owns_provider=False, sam
         fake.add("aws", "describe-stack-resource", json.dumps({"StackResourceDetail": {"LogicalResourceId": "x"}}))
     else:
         fake.add("aws", "describe-stack-resource",
-                 stderr="Resource GitHubOidcProvider does not exist for stack wga-github-oidc-dev\n", exit=254)
+                 stderr="Resource GitHubOidcProvider does not exist for stack vigie-github-oidc-dev\n", exit=254)
     fake.add("aws", "list-open-id-connect-providers",
              json.dumps({"OpenIDConnectProviderList": [{"Arn": arn} for arn in providers]}))
     fake.add("aws", "get-template", json.dumps({"TemplateBody": TEMPLATE_TEXT if same_template else "old"}))
@@ -107,7 +107,7 @@ def test_fresh_setup(fake, repo_dir):
     calls = mutating(fake)
     deploy = calls[0][1]
     assert "--parameter-overrides Environment=dev GitHubRepository=octo/WGA_production ExistingOidcProviderArn=" in deploy
-    assert deploy.endswith("--tags Project=WGA Environment=dev")
+    assert deploy.endswith("--tags Project=Vigie Environment=dev")
     assert calls[1:] == [
         ("gh", f"api -X PUT repos/{REPO}/environments/dev --input {calls[1][1].split('--input ')[1]}"),
         ("gh", f"api -X POST repos/{REPO}/environments/dev/deployment-branch-policies -f name=main -f type=branch"),
@@ -276,9 +276,9 @@ def test_block_test_passes_when_environment_rule_blocks(fake, repo_dir):
                           stdin=responses(("confirm", "block_test")))
     calls = [c[1] for c in mutating(fake)]
     assert code == 0, evts
-    assert calls[0].startswith(f"api -X POST repos/{REPO}/git/refs -f ref=refs/heads/wga-installer-block-test-")
-    assert calls[1].startswith("workflow run deploy.yml --ref wga-installer-block-test-")
-    assert calls[-1].startswith(f"api -X DELETE repos/{REPO}/git/refs/heads/wga-installer-block-test-")
+    assert calls[0].startswith(f"api -X POST repos/{REPO}/git/refs -f ref=refs/heads/vigie-installer-block-test-")
+    assert calls[1].startswith("workflow run deploy.yml --ref vigie-installer-block-test-")
+    assert calls[-1].startswith(f"api -X DELETE repos/{REPO}/git/refs/heads/vigie-installer-block-test-")
     assert not any("run cancel" in c for c in calls)
 
 
@@ -323,6 +323,6 @@ def test_test_run_reports_failed_job(fake, repo_dir):
 
 def test_job_names_match_deploy_workflow():
     workflow = (ROOT / ".github" / "workflows" / "deploy.yml").read_text()
-    from wga_installer.github import JOB_NAMES, role_variable
+    from vigie_installer.github import JOB_NAMES, role_variable
     for env, name in JOB_NAMES.items():
         assert f"name: {name}" in workflow and f"vars.{role_variable(env)}" in workflow

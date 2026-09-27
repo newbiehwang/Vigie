@@ -19,11 +19,11 @@ import yaml
 
 from conftest import ROOT, load_service_module
 
-PENDING_TABLE = "wga-pending-actions-test"
-AUDIT_TABLE = "wga-audit-test"
-SESSION_TABLE = "wga-mcp-sessions-test"
-LOG_GROUP = "/aws/lambda/wga-llm-test"  # conftest의 ENV=test
-ALARM = "wga-test-api-5xx"
+PENDING_TABLE = "vigie-pending-actions-test"
+AUDIT_TABLE = "vigie-audit-test"
+SESSION_TABLE = "vigie-mcp-sessions-test"
+LOG_GROUP = "/aws/lambda/vigie-llm-test"  # conftest의 ENV=test
+ALARM = "vigie-test-api-5xx"
 ORIGIN = "https://test.abc.amplifyapp.com"
 REQUEST_ID = "0f8fad5b-d9cb-469f-a165-70867728950e"
 
@@ -137,10 +137,10 @@ def test_every_listed_tool_has_a_known_risk(env):
     assert names <= set(TOOL_RISK), f"위험도가 없는 도구: {sorted(names - set(TOOL_RISK))}"
     by_name = {tool["name"]: tool for tool in tools}
     assert by_name["describe_log_groups"]["annotations"]["readOnlyHint"] is True
-    assert by_name["describe_log_groups"]["_meta"]["wga/risk"] == "read"
-    assert by_name["generateLineChart"]["_meta"]["wga/risk"] == "artifact"
+    assert by_name["describe_log_groups"]["_meta"]["vigie/risk"] == "read"
+    assert by_name["generateLineChart"]["_meta"]["vigie/risk"] == "artifact"
     for name in ("setLogRetention", "setAlarmActions"):
-        assert by_name[name]["_meta"]["wga/risk"] == "write"
+        assert by_name[name]["_meta"]["vigie/risk"] == "write"
         assert by_name[name]["annotations"] == {"readOnlyHint": False, "destructiveHint": True,
                                                 "openWorldHint": True}
 
@@ -184,14 +184,14 @@ def test_mcp_refuses_actions_that_are_not_approved_as_is(env, case, expected):
                          expires_in=-1 if case == "expired" else 600)
     args = {"log_group_name": LOG_GROUP, "retention_days": 1 if case == "other_args" else 14}
     action_id = "5b9f2c1e-0000-4000-8000-000000000000" if case == "missing" else action["actionId"]
-    result = env["mcp"].call_tool("setLogRetention", args, meta={"wga/actionId": action_id})
+    result = env["mcp"].call_tool("setLogRetention", args, meta={"vigie/actionId": action_id})
     assert result["isError"] is True and expected in result["content"][0]["text"]
     assert retention() == 30
 
 
 def test_approved_action_runs_exactly_once(env):
     action = make_action(env, status="approved")
-    meta = {"wga/actionId": action["actionId"]}
+    meta = {"vigie/actionId": action["actionId"]}
     args = {"log_group_name": LOG_GROUP, "retention_days": 14}
 
     first = env["mcp"].call_tool("setLogRetention", args, meta=meta)
@@ -211,7 +211,7 @@ def test_tool_rejects_resources_outside_this_environment(env):
     boto3.client("logs").create_log_group(logGroupName=other)
     action = make_action(env, status="approved", args={"log_group_name": other, "retention_days": 1})
     result = env["mcp"].call_tool("setLogRetention", {"log_group_name": other, "retention_days": 1},
-                                  meta={"wga/actionId": action["actionId"]})
+                                  meta={"vigie/actionId": action["actionId"]})
     assert result["isError"] is True
     assert env["pending"].get_item(Key={"actionId": action["actionId"]})["Item"]["status"] == "failed"
     assert "retentionInDays" not in boto3.client("logs").describe_log_groups(
@@ -220,7 +220,7 @@ def test_tool_rejects_resources_outside_this_environment(env):
 
 def test_preview_shows_the_change_without_running_it(env):
     preview = env["mcp"].call_tool("setLogRetention", {"log_group_name": LOG_GROUP, "retention_days": 7},
-                                   meta={"wga/preview": True})
+                                   meta={"vigie/preview": True})
     data = json.loads(preview["content"][0]["text"])
     assert data["before"] == "30일" and data["after"] == "7일" and "지워질 수 있습니다" in data["summary"]
     # 카드에 따로 보일 대상과 영향 (요약에는 영향을 괄호로 붙인다)
@@ -228,23 +228,23 @@ def test_preview_shows_the_change_without_running_it(env):
     assert data["summary"].endswith("(지난 로그 일부가 지워질 수 있습니다)")
     assert retention() == 30
     longer = env["mcp"].call_tool("setLogRetention", {"log_group_name": LOG_GROUP, "retention_days": 60},
-                                  meta={"wga/preview": True})
+                                  meta={"vigie/preview": True})
     assert "warning" not in json.loads(longer["content"][0]["text"])  # 늘리면 지워지는 로그가 없다
 
     alarm = env["mcp"].call_tool("setAlarmActions", {"alarm_name": ALARM, "enabled": False},
-                                 meta={"wga/preview": True})
+                                 meta={"vigie/preview": True})
     assert json.loads(alarm["content"][0]["text"])["after"] == "알림 꺼짐" and alarm_actions_enabled()
 
     bad = env["mcp"].call_tool("setAlarmActions", {"alarm_name": "billing-prod-alarm", "enabled": False},
-                               meta={"wga/preview": True})
-    assert bad["isError"] is True and "wga-test-" in bad["content"][0]["text"]
+                               meta={"vigie/preview": True})
+    assert bad["isError"] is True and "vigie-test-" in bad["content"][0]["text"]
 
 
 def test_alarm_actions_tool(env):
     action = make_action(env, status="approved", tool="setAlarmActions",
                          args={"alarm_name": ALARM, "enabled": False})
     result = env["mcp"].call_tool("setAlarmActions", {"alarm_name": ALARM, "enabled": False},
-                                  meta={"wga/actionId": action["actionId"]})
+                                  meta={"vigie/actionId": action["actionId"]})
     assert not result.get("isError") and alarm_actions_enabled() is False
 
 
@@ -303,7 +303,7 @@ def test_model_calling_a_write_tool_creates_an_approval_request(env, monkeypatch
     assert answer == "승인이 필요합니다." and retention() == 30  # 바뀌지 않았다
     # MCP에는 미리 보기만 요청했다
     assert [(name, meta) for name, _, meta in env["mcp"].calls if name == "setLogRetention"] == [
-        ("setLogRetention", {"wga/preview": True})]
+        ("setLogRetention", {"vigie/preview": True})]
     # 도구 결과는 MCP 결과(content 목록)를 JSON으로 바꿔 데이터 영역(<tool_result_data>)에 넣어 보낸다
     wrapped = tool_result["content"]
     assert wrapped.startswith('<tool_result_data tool="setLogRetention">')
@@ -324,7 +324,7 @@ def test_model_calling_a_write_tool_creates_an_approval_request(env, monkeypatch
 def test_out_of_scope_request_is_refused_before_asking_for_approval(env, monkeypatch):
     _, tool_result, client = run_loop(env, monkeypatch, tool_input={"log_group_name": "/aws/lambda/other",
                                                                      "retention_days": 1})
-    assert "wga-" in tool_result["content"]
+    assert "vigie-" in tool_result["content"]
     assert client.approvals.created == [] and env["pending"].scan()["Items"] == []
 
 
@@ -359,7 +359,7 @@ def test_approver_can_approve_own_request_in_dev_and_it_runs(env):
     assert retention() == 14
     assert audit_events("alice") == ["approved", "executed"]
     # MCP에는 작업 ID를 붙여 불렀다
-    assert env["mcp"].calls[-1][2] == {"wga/actionId": action["actionId"]}
+    assert env["mcp"].calls[-1][2] == {"vigie/actionId": action["actionId"]}
 
 
 def test_admins_can_decide_too(env):
@@ -548,14 +548,14 @@ def statements(role):
     return template["Resources"][role]["Properties"]["Policies"][0]["PolicyDocument"]["Statement"]
 
 
-def test_only_the_mcp_role_can_change_resources_and_only_wga_ones():
+def test_only_the_mcp_role_can_change_resources_and_only_vigie_ones():
     write_actions = {"logs:PutRetentionPolicy", "cloudwatch:EnableAlarmActions", "cloudwatch:DisableAlarmActions"}
     llm_actions = {a for s in statements("LlmLambdaExecutionRole") for a in s["Action"]}
     assert not (write_actions & llm_actions)  # LLM Lambda는 AWS를 바꿀 수 없다
     for statement in statements("McpLambdaExecutionRole"):
         if write_actions & set(statement["Action"]):
             resources = statement["Resource"] if isinstance(statement["Resource"], list) else [statement["Resource"]]
-            assert all("wga-" in r and "${Environment}" in r for r in resources), resources
+            assert all("vigie-" in r and "${Environment}" in r for r in resources), resources
 
 
 def test_approvers_group_and_pending_table_exist():

@@ -19,7 +19,7 @@ from test_approvals import AUDIT_TABLE, ORIGIN, create_tables, statements
 def pool(aws, monkeypatch):
     """관리자 alice, 승인자 bob, 일반 사용자 carol이 있는 User Pool."""
     cognito = boto3.client("cognito-idp")
-    pool_id = cognito.create_user_pool(PoolName="wga-user-pool-test", UsernameAttributes=["email"])["UserPool"]["Id"]
+    pool_id = cognito.create_user_pool(PoolName="vigie-user-pool-test", UsernameAttributes=["email"])["UserPool"]["Id"]
     for group in ("admins", "approvers"):
         cognito.create_group(UserPoolId=pool_id, GroupName=group)
     users = {}

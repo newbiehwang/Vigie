@@ -43,7 +43,7 @@ def test_ec2_tools_are_registered_as_read(ec2_env):
     env, _ = ec2_env
     tools = {t["name"]: t for t in json.loads(env["mcp"]._rpc("tools/list")["body"])["result"]["tools"]}
     for name in ("listEc2Instances", "getEc2CpuRanking", "getEc2StatusChecks", "findEc2Waste"):
-        assert tools[name]["_meta"]["wga/risk"] == "read" and tools[name]["inputSchema"]["required"] == []
+        assert tools[name]["_meta"]["vigie/risk"] == "read" and tools[name]["inputSchema"]["required"] == []
 
 
 def test_list_instances_by_state_without_user_data(ec2_env):

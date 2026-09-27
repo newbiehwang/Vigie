@@ -1,4 +1,4 @@
-"""deploy: 저장소의 deploy.sh를 실행해 WGA를 배포한다 (계획서 4.3절)
+"""deploy: 저장소의 deploy.sh를 실행해 Vigie를 배포한다 (계획서 4.3절)
 
 흐름
 1. 사전 확인 (읽기 전용): 저장소, 필수 SSM 파라미터, API Gateway 통합 타임아웃 할당량.
@@ -83,7 +83,7 @@ class ProgressParser:
 
 
 def run(ctx: Context, runner: Runner, emitter: Emitter) -> int:
-    emitter.step_started(STEP, f"WGA 배포 ({ctx.env}, {ctx.region})")
+    emitter.step_started(STEP, f"Vigie 배포 ({ctx.env}, {ctx.region})")
     if not _preflight(ctx, runner, emitter):
         emitter.step_finished(STEP, STEP_FAILED, "배포 전 확인에서 멈췄습니다 (배포하지 않음)")
         return 1
@@ -105,7 +105,7 @@ def run(ctx: Context, runner: Runner, emitter: Emitter) -> int:
     parser = ProgressParser(emitter)
     started_at = datetime.now(timezone.utc)
     result = runner.change(deploy_command(ctx), id_="deploy",
-                           reason=f"WGA를 {ctx.env} 환경에 배포합니다 (AWS 리소스가 생성·변경되고 비용이 발생합니다)",
+                           reason=f"Vigie를 {ctx.env} 환경에 배포합니다 (AWS 리소스가 생성·변경되고 비용이 발생합니다)",
                            cwd=str(ctx.repo_root), extra_env=extra_env, stream=True, on_line=parser.feed)
 
     if result.outcome == DRY_RUN:
@@ -116,7 +116,7 @@ def run(ctx: Context, runner: Runner, emitter: Emitter) -> int:
         return 0
     if result.interrupted:
         emitter.error(STEP, "배포를 취소했습니다",
-                      hint="스택이 업데이트 중인 상태로 남아 있을 수 있습니다. CloudFormation 콘솔에서 wga-로 시작하는 "
+                      hint="스택이 업데이트 중인 상태로 남아 있을 수 있습니다. CloudFormation 콘솔에서 vigie-로 시작하는 "
                            "스택이 *_IN_PROGRESS가 아닌지 확인한 뒤 deploy를 다시 실행하세요")
         emitter.step_finished(STEP, STEP_FAILED, "취소했습니다")
         return RC_INTERRUPTED
@@ -151,7 +151,7 @@ def _preflight(ctx: Context, runner: Runner, emitter: Emitter) -> bool:
     """배포를 시작해도 되는지 확인한다. 모두 읽기 전용이라 dry-run에서도 실행한다."""
     ok = True
     if ctx.repo_root is None:
-        emitter.error(STEP, "WGA 저장소를 찾지 못했습니다", hint="--repo <저장소 경로>로 지정하세요")
+        emitter.error(STEP, "Vigie 저장소를 찾지 못했습니다", hint="--repo <저장소 경로>로 지정하세요")
         return False
 
     required = [f"{ctx.ssm_prefix}/{param.key}" for param in SECRET_PARAMS if param.required]

@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'WGA Frontend Infrastructure CloudFormation Template'
+Description: 'Vigie Frontend Infrastructure CloudFormation Template'
 
 Parameters:
   Environment:
@@ -62,10 +62,10 @@ Resources:
   AmplifyApp:
     Type: AWS::Amplify::App
     Properties:
-      Name: !Sub 'wga-frontend-${Environment}'
+      Name: !Sub 'vigie-frontend-${Environment}'
       Repository: ''
       Platform: WEB
-      Description: !Sub 'Amplify App for WGA Frontend - ${Environment}'
+      Description: !Sub 'Amplify App for Vigie Frontend - ${Environment}'
       BuildSpec: |
         version: 1
         frontend:
@@ -119,7 +119,7 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/AmplifyAppId'
+      Name: !Sub '/vigie/${Environment}/AmplifyAppId'
       Type: String
       Value: !GetAtt AmplifyApp.AppId
       Description: Amplify App ID
@@ -128,7 +128,7 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/AmplifyDefaultDomain'
+      Name: !Sub '/vigie/${Environment}/AmplifyDefaultDomain'
       Type: String
       Value: !GetAtt AmplifyApp.DefaultDomain
       Description: Default domain of the Amplify App
@@ -137,7 +137,7 @@ Resources:
     Type: AWS::SSM::Parameter
     DeletionPolicy: Delete
     Properties:
-      Name: !Sub '/wga/${Environment}/AmplifyDefaultDomainWithEnv'
+      Name: !Sub '/vigie/${Environment}/AmplifyDefaultDomainWithEnv'
       Type: String
       Value: !Sub '${Environment}.${AmplifyApp.DefaultDomain}'
       Description: Default domain of the Amplify App with Environment prefix

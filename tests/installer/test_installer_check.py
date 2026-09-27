@@ -32,7 +32,7 @@ def test_healthy_mac_passes(fake, repo):
             "homebrew", "repo", "aws_credentials", "root_account", "aws_permissions", "aws_deploy_permissions",
             "region", "github_auth"} == checks.keys()
     assert {c["status"] for c in checks.values()} <= {"ok", "info"}
-    assert checks["aws_credentials"]["detail"] == "계정 123456789012 · arn:aws:iam::123456789012:user/wga-installer"
+    assert checks["aws_credentials"]["detail"] == "계정 123456789012 · arn:aws:iam::123456789012:user/vigie-installer"
     assert checks["region"]["detail"] == "ap-northeast-2 (기본값)"
     assert checks["github_auth"]["detail"] == "octocat(으)로 로그인됨"
     assert checks["system"]["detail"] == "macOS 14.5 · Apple Silicon (arm64)"
@@ -64,14 +64,14 @@ def test_aws_commands_get_region_and_no_pager(fake, repo):
 
 
 def test_profile_is_passed_to_aws(fake, repo):
-    fake.add("aws", "configure get region --profile wga-dev", "ap-northeast-2\n")
+    fake.add("aws", "configure get region --profile vigie-dev", "ap-northeast-2\n")
     healthy_mac(fake)
-    result = run_cli(fake, "check", "--json", "--repo", str(repo), "--profile", "wga-dev",
+    result = run_cli(fake, "check", "--json", "--repo", str(repo), "--profile", "vigie-dev",
                      env=fake.env(AWS_ACCESS_KEY_ID="AKIAOTHER"))
     sts = [c for c in fake.calls("aws") if "sts" in c["args"]][0]
-    assert sts["env"]["AWS_PROFILE"] == "wga-dev" and "AWS_ACCESS_KEY_ID" not in sts["env"]
+    assert sts["env"]["AWS_PROFILE"] == "vigie-dev" and "AWS_ACCESS_KEY_ID" not in sts["env"]
     checks = checks_by_id(result.stdout)
-    assert checks["aws_credentials"]["title"] == "AWS 자격 증명 (프로필 wga-dev)"
+    assert checks["aws_credentials"]["title"] == "AWS 자격 증명 (프로필 vigie-dev)"
     assert checks["region"]["detail"] == "ap-northeast-2 (AWS CLI 프로필 설정)"
 
 
@@ -283,7 +283,7 @@ def test_unexpected_error_becomes_error_event(fake, repo):
 # --- 권한 점검 -------------------------------------------------------------------------------------
 
 DENIED = ("An error occurred (AccessDenied) when calling the DescribeStacks operation: User: "
-          "arn:aws:iam::123456789012:user/wga-installer is not authorized to perform: cloudformation:DescribeStacks\n")
+          "arn:aws:iam::123456789012:user/vigie-installer is not authorized to perform: cloudformation:DescribeStacks\n")
 
 
 def deny_all_reads(fake):
@@ -305,7 +305,7 @@ def test_user_without_policy_fails_at_check(fake, repo):
     perm = checks["aws_permissions"]
     assert perm["status"] == "fail"
     assert perm["detail"] == "권한이 없습니다: CloudFormation, SSM Parameter Store, Service Quotas, S3"
-    assert "사용자 → wga-installer → 권한 탭" in perm["hint"] and "AdministratorAccess" in perm["hint"]
+    assert "사용자 → vigie-installer → 권한 탭" in perm["hint"] and "AdministratorAccess" in perm["hint"]
     # 조회가 막혔으면 쓰기 권한은 따로 묻지 않는다 (결과가 뻔하고 항목만 늘어난다)
     assert "aws_deploy_permissions" not in checks
     assert not [c for c in fake.calls("aws") if "simulate-principal-policy" in c["args"]]
@@ -332,11 +332,11 @@ def test_unknown_read_error_is_only_a_warning(fake, repo):
 
 
 def test_permission_checks_use_profile_and_region(fake, repo):
-    fake.add("aws", "configure get region --profile wga-installer", "ap-northeast-2\n")
+    fake.add("aws", "configure get region --profile vigie-installer", "ap-northeast-2\n")
     healthy_mac(fake)
-    run_cli(fake, "check", "--json", "--repo", str(repo), "--profile", "wga-installer")
+    run_cli(fake, "check", "--json", "--repo", str(repo), "--profile", "vigie-installer")
     probe = [c for c in fake.calls("aws") if "describe-parameters" in c["args"]][0]
-    assert probe["env"]["AWS_PROFILE"] == "wga-installer" and probe["env"]["AWS_REGION"] == "ap-northeast-2"
+    assert probe["env"]["AWS_PROFILE"] == "vigie-installer" and probe["env"]["AWS_REGION"] == "ap-northeast-2"
 
 
 def test_deploy_permissions_are_simulated_for_the_caller(fake, repo):
@@ -349,13 +349,13 @@ def test_deploy_permissions_are_simulated_for_the_caller(fake, repo):
     sims = [c["args"] for c in fake.calls("aws") if "simulate-principal-policy" in c["args"]]
     assert len(sims) == 2
     for args in sims:
-        assert args[args.index("--policy-source-arn") + 1] == "arn:aws:iam::123456789012:user/wga-installer"
+        assert args[args.index("--policy-source-arn") + 1] == "arn:aws:iam::123456789012:user/vigie-installer"
     general, iam = sims
     assert "cloudformation:CreateStack" in general and "iam:CreateRole" not in general
     assert "--resource-arns" not in general
-    # IAM 작업은 템플릿이 쓰는 wga-* Role 이름으로 묻는다 (wga-*로 좁힌 정책도 통과하도록)
+    # IAM 작업은 템플릿이 쓰는 vigie-* Role 이름으로 묻는다 (vigie-*로 좁힌 정책도 통과하도록)
     assert "iam:CreateRole" in iam and "iam:PassRole" in iam
-    assert iam[iam.index("--resource-arns") + 1] == "arn:aws:iam::123456789012:role/wga-permission-check"
+    assert iam[iam.index("--resource-arns") + 1] == "arn:aws:iam::123456789012:role/vigie-permission-check"
 
 
 def test_read_only_policy_fails_deploy_permissions(fake, repo):
@@ -397,7 +397,7 @@ def test_simulator_not_allowed_is_only_a_warning(fake, repo):
 
 def test_assumed_role_skips_simulation(fake, repo):
     healthy_mac(fake, identity={"Account": "123456789012", "UserId": "AROAEXAMPLE:me",
-                                "Arn": "arn:aws:sts::123456789012:assumed-role/wga-github-deploy-dev/me"})
+                                "Arn": "arn:aws:sts::123456789012:assumed-role/vigie-github-deploy-dev/me"})
     checks = checks_by_id(check_json(fake, repo).stdout)
     assert checks["aws_permissions"]["status"] == "ok"
     assert checks["aws_deploy_permissions"]["status"] == "info"
@@ -416,7 +416,7 @@ def test_invalid_credentials_skip_permission_checks(fake, repo):
 
 # 실제로 만난 메시지 (교육·회사 등 다른 조직이 만든 구성원 계정). 계정 번호는 예시로 바꿨다
 SCP_DENIED = ("An error occurred (AccessDeniedException) when calling the DescribeParameters operation: User: "
-              "arn:aws:iam::123456789012:user/wga-installer is not authorized to perform: ssm:DescribeParameters "
+              "arn:aws:iam::123456789012:user/vigie-installer is not authorized to perform: ssm:DescribeParameters "
               "on resource: arn:aws:ssm:ap-northeast-2:123456789012:* with an explicit deny in a service control "
               "policy: arn:aws:organizations::999988887777:policy/o-example111/service_control_policy/p-example1\n")
 MEMBER_ORG = json.dumps({"Organization": {"Id": "o-example111", "MasterAccountId": "999988887777",
@@ -457,12 +457,12 @@ def test_scp_hint_without_organization_details(fake, repo):
 def test_permissions_boundary_denial(fake, repo):
     fake.add("aws", "ssm describe-parameters", exit=254,
              stderr="An error occurred (AccessDeniedException) when calling the DescribeParameters operation: User: "
-                    "arn:aws:iam::123456789012:user/wga-installer is not authorized to perform: ssm:DescribeParameters "
+                    "arn:aws:iam::123456789012:user/vigie-installer is not authorized to perform: ssm:DescribeParameters "
                     "with an explicit deny in a permissions boundary\n")
     healthy_mac(fake)
     perm = checks_by_id(check_json(fake, repo).stdout)["aws_permissions"]
     assert perm["detail"] == "권한이 없습니다: SSM Parameter Store (권한 경계가 거부)"
-    assert "사용자 → wga-installer → 권한 탭 → 권한 경계" in perm["hint"]
+    assert "사용자 → vigie-installer → 권한 탭 → 권한 경계" in perm["hint"]
 
 
 def test_management_account_is_reported(fake, repo):

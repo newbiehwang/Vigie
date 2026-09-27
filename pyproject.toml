@@ -1,6 +1,6 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["tests", "installer/core"]   # installer/core: 설치 마법사 패키지(wga_installer)
+pythonpath = ["tests", "installer/core"]   # installer/core: 설치 마법사 패키지(vigie_installer)
 addopts = "-q"
 
 [tool.ruff]

@@ -57,7 +57,7 @@ class Context:
 
     @property
     def ssm_prefix(self) -> str:
-        return f"/wga/{self.env}"
+        return f"/vigie/{self.env}"
 
     def command_env(self) -> dict[str, str]:
         """aws·gh·deploy.sh에 넘길 환경 변수."""
@@ -77,7 +77,7 @@ class Context:
 
 
 def is_repo_root(path: Path) -> bool:
-    """WGA 저장소 루트인지: deploy.sh와 cloudformation/ 폴더가 함께 있어야 한다."""
+    """Vigie 저장소 루트인지: deploy.sh와 cloudformation/ 폴더가 함께 있어야 한다."""
     return (path / "deploy.sh").is_file() and (path / "cloudformation").is_dir()
 
 
