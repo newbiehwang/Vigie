@@ -299,7 +299,7 @@ const actorEntry = (name: string): DemoEntry => {
                 '|:--|:--|:--|:--|:--|',
                 ...mine.map((e) => `| ${kst(e.at)} | \`${e.name}\` (${e.source}) | ${e.ip} | ${agentName(e.agent)} | ${e.error} |`),
                 '',
-                `- 요청 리전이 모두 \`us-east-1\`입니다. 이 계정은 \`${FROTHLY.region}\`을 쓰므로, 도구의 기본 리전으로 보입니다.`,
+                `- 요청 리전이 모두 \`${unique(mine.map((e) => e.region)).join(', ')}\`입니다. 이 계정은 \`${FROTHLY.region}\`을 쓰므로, 도구의 기본 리전으로 보입니다.`,
                 `- ${disabled ? `${when(disabled.at)}에 \`${disabled.actor}\` 계정이 이 키를 비활성화했습니다. **삭제는 아직** 안 했습니다.` : '키는 아직 활성입니다.'}`,
                 '- 키를 삭제하고, 키가 어디에 적혀 있었는지(코드 저장소, 서버 설정 파일) 찾아보세요.',
                 '',
@@ -945,7 +945,7 @@ const GUARDS: Guard[] = [
                 lines(
                     `이 데모는 Frothly 계정 한 곳의 \`${FROTHLY.region}\` 기록만 담고 있어서, 다른 리전이나 계정은 볼 수 없습니다.`,
                     '',
-                    '실제 Vigie는 설치한 계정을 조회합니다. 콘솔 로그인처럼 전역 서비스의 기록은 리전과 관계없이 보입니다(이 데모의 로그인 기록이 `us-east-1`로 찍힌 까닭입니다).',
+                    `실제 Vigie는 설치한 계정을 조회합니다. 콘솔 로그인처럼 전역 서비스의 기록은 리전과 관계없이 보입니다(이 데모의 로그인 기록이 \`${logins()[0].region}\`로 찍힌 까닭입니다).`,
                 ),
             ),
     },
