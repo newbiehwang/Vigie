@@ -1619,7 +1619,8 @@ const route = (
 };
 
 // ---------------------------------------------------------------- 홈 대시보드 (GET /dashboard, types/dashboard.ts)
-// 실제로는 서버가 주기적으로 모아 둔 값을 읽는다 (아직 서버 집계는 없다). mock은 오늘 날짜에 맞춰 그럴듯한 값을 만든다.
+// 실제로는 수집 Lambda가 구역마다 모아 둔 값을 서버(services/llm/dashboard_view.py)가 합쳐 준다.
+// mock은 오늘 날짜에 맞춰 그럴듯한 값을 서버와 같은 모양으로 만든다 (리소스별 비용·절약액은 서버처럼 주지 않는다).
 // 이 mock 안의 다른 상태와 이어진다: 대화에서 승인을 기다리는 요청 수, 승인해 실행한 변경(최근 변경),
 // 알람 알림을 끄면 치울 것에 '알림 꺼진 알람'이 생기고, 보존 기간을 줄이면 '보존 기간이 긴 로그'가 없어진다
 
@@ -1677,17 +1678,15 @@ const dashboardData = (): DashboardData => {
   const HOUR = 3600;
   const longRetention = mockResources.retention === null || mockResources.retention > 14; // 14일이면 충분한 개발 로그
   const resources: DashboardResource[] = [
-    { id: "wga-llm-dev", kind: "Lambda", status: "fail", detail: "오류율 4.2% · 시간 초과 늘어남", errors24h: 31, costMonth: 118.4, changedAt: nowS - 26 * HOUR },
+    { id: "wga-llm-dev", kind: "Lambda", status: "fail", detail: "오류율 4.2% · 시간 초과 늘어남", errors24h: 31, changedAt: nowS - 26 * HOUR },
     { id: MOCK_ALARM, kind: "Alarm", status: mockResources.alarmActions ? "fail" : "warn", detail: mockResources.alarmActions ? "ALARM · 12분째" : "알림 꺼짐 (점검 중)" },
-    { id: "i-0428ab91c3d5e7f60", label: "wga-batch", kind: "EC2", status: "warn", detail: "CPU 평균 1.8% (14일) · 놀고 있음", costMonth: 61.2 },
-    { id: "wga-reports-dev", kind: "S3", status: "warn", detail: "퍼블릭 액세스 차단 일부 꺼짐", costMonth: 4.1 },
-    { id: MOCK_LOG_GROUP, kind: "Logs", status: longRetention ? "warn" : "ok", detail: `보존 기간 ${retentionText(mockResources.retention)}` },
-    { id: "wga-mcp-dev", kind: "Lambda", status: "ok", detail: "오류 없음", errors24h: 0, costMonth: 22.7 },
-    { id: "wga-chat-history-dev", kind: "Lambda", status: "ok", detail: "오류 2건 (재시도로 성공)", errors24h: 2, costMonth: 3.9 },
-    { id: "i-0b17c2d9e4a5f6071", label: "wga-web", kind: "EC2", status: "ok", detail: "상태 검사 2/2 통과", costMonth: 58.9 },
-    { id: "wga-artifacts-dev", kind: "S3", status: "ok", detail: "차단 4개 모두 켜짐", costMonth: 6.3 },
-    { id: "/aws/lambda/wga-mcp-dev", kind: "Logs", status: "ok", detail: "보존 기간 14일" },
-    { id: "wga-slackbot-dev", kind: "Lambda", status: "none", detail: "지난 24시간 호출 없음", errors24h: 0, costMonth: 0.2 },
+    { id: "i-0428ab91c3d5e7f60", label: "wga-batch", kind: "EC2", status: "warn", detail: "CPU 평균 1.8% (14일) · 놀고 있음" },
+    { id: "wga-reports-dev", kind: "S3", status: "warn", detail: "퍼블릭 액세스 차단 일부 꺼짐" },
+    { id: "wga-mcp-dev", kind: "Lambda", status: "ok", detail: "오류 없음", errors24h: 0 },
+    { id: "wga-chat-history-dev", kind: "Lambda", status: "ok", detail: "오류 2건 (재시도로 성공)", errors24h: 2 },
+    { id: "i-0b17c2d9e4a5f6071", label: "wga-web", kind: "EC2", status: "ok", detail: "상태 검사 2/2 통과" },
+    { id: "wga-artifacts-dev", kind: "S3", status: "ok", detail: "차단 4개 모두 켜짐" },
+    { id: "wga-slackbot-dev", kind: "Lambda", status: "none", detail: "지난 24시간 호출 없음", errors24h: 0 },
   ];
 
   // 최근 변경: 이 mock에서 승인해 실행한 것 + CloudTrail에만 있는 것
@@ -1708,18 +1707,31 @@ const dashboardData = (): DashboardData => {
   const changes = [...appChanges, ...cloudChanges].sort((a, b) => b.at - a.at);
 
   const findings: DashboardFinding[] = [
-    { kind: "idle-ec2", status: "warn", title: "놀고 있는 EC2 1대", detail: "wga-batch · 14일 동안 CPU 평균 1.8%", savingsMonthly: 61.2, question: "놀고 있는 EC2 인스턴스 찾아줘" },
+    { kind: "idle-ec2", status: "warn", title: "놀고 있는 EC2 1대", detail: "wga-batch · 14일 동안 CPU 평균 1.8%", question: "놀고 있는 EC2 인스턴스 찾아줘" },
     { kind: "public-s3", status: "fail", title: "공개될 수 있는 S3 버킷 1개", detail: "wga-reports-dev · 퍼블릭 액세스 차단 2개 꺼짐", question: "wga-reports-dev 버킷 보안 점검해줘" },
     ...(longRetention
-      ? [{ kind: "log-retention" as const, status: "warn" as const, title: "보존 기간이 긴 로그 그룹 1개", detail: `${MOCK_LOG_GROUP} · ${retentionText(mockResources.retention)} 보관, 14일이면 충분`, savingsMonthly: 7.8, question: `${MOCK_LOG_GROUP} 로그 보존 기간 14일로 줄여줘` }]
+      ? [{ kind: "log-retention" as const, status: "warn" as const, title: "보존 기간이 긴 로그 그룹 1개", detail: `${MOCK_LOG_GROUP} · ${retentionText(mockResources.retention)} 보관, 14일이면 충분`, question: `${MOCK_LOG_GROUP} 로그 보존 기간 14일로 줄여줘` }]
       : []),
     ...(!mockResources.alarmActions
       ? [{ kind: "alarm-muted" as const, status: "warn" as const, title: "알림이 꺼진 알람 1개", detail: `${MOCK_ALARM} · 울려도 메일이 가지 않음`, question: `${MOCK_ALARM} 알람 알림 다시 켜야 해?` }]
       : []),
   ];
 
+  // 상태별 개수 (서버는 잘리기 전 모든 리소스로 센다) · 구역마다 모은 때 (서버의 sections)
+  const resourceCounts = { fail: 0, warn: 0, ok: 0, none: 0 };
+  resources.forEach((r) => (resourceCounts[r.status] += 1));
+  const collected = (secondsAgo: number) => ({ ok: true, collectedAt: nowS - secondsAgo, lastSuccessAt: nowS - secondsAgo });
+
   return {
-    generatedAt: nowS - 3 * 60, // 3분 전에 모았다
+    generatedAt: nowS - 20,
+    sections: {
+      alarms: collected(20), // 이벤트로 바로
+      resources: collected(20),
+      changes: collected(40),
+      errors: collected(150), // 5분마다
+      usage: collected(1700), // 1시간마다
+      cost: collected(5 * 3600), // 하루 1번
+    },
     env: "dev",
     region: "ap-northeast-2",
     alarms: { total: 24, firing },
@@ -1736,6 +1748,8 @@ const dashboardData = (): DashboardData => {
       soonestExpiresAt: pendingActions.length ? Math.min(...pendingActions.map((a) => a.expiresAt)) : undefined,
     },
     resources,
+    resourceCounts,
+    resourceTotal: resources.length,
     changes,
     findings,
   };

@@ -10,8 +10,10 @@
 //   [리소스 상태 (분포 막대 + 정렬되는 표)              ] [최근 변경 (시간 줄)     ]
 //   [치울 것 (카드 여러 개, 누르면 대화로)                                          ]
 // - 카드·줄을 누르면 그 내용을 질문으로 새 대화를 시작한다 (onAsk). 대시보드가 문제를 보이고, 원인은 대화가 찾는다
-// - 값은 서버가 모아 둔 것이라 '몇 분 전에 모음'을 함께 적는다. ↻는 모아 둔 값을 다시 읽을 뿐 AWS를 부르지 않는다
-// - 서버 집계(GET /dashboard)는 아직 없다. mock에서만 값이 나오고, 실제 서버에서는 불러오지 못했다는 안내가 보인다
+// - 값은 수집 Lambda가 구역마다 모아 둔 것이다 (services/dashboard). 카드마다 얼마나 자주 모으는지와, 모으지 못했으면
+//   '모으지 못함 · 마지막 성공 N분 전'을 작게 적는다 (Freshness). 한 번도 모으지 못한 칸은 '아직 모으지 않았습니다'
+// - 화면이 보이는 동안 POLL_MS마다 다시 읽는다 (AWS 이벤트로 바뀐 알람·상태·변경이 곧 보인다). 탭이 가려지면 멈춘다.
+//   다시 읽기는 모아 둔 값(DynamoDB)만 읽을 뿐 AWS를 부르지 않는다. ↻도 같다
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDashboard } from '@/api/dashboard';
@@ -19,7 +21,7 @@ import { LoadingCard, useMinimumVisible } from '@/components/LoadingCard';
 import { RefreshButton } from '@/components/RefreshButton';
 import { useToast } from '@/components/Toast';
 import { Composer } from '@/features/chat/Composer';
-import type { DashboardData, DashboardResource, HealthStatus } from '@/types/dashboard';
+import type { DashboardData, DashboardResource, HealthStatus, SectionName, SectionState } from '@/types/dashboard';
 import { getErrorText } from '@/utils/formatters';
 import { DailyCostChart, ServiceBars, Sparkbars, STATUS_LABEL, STATUS_ORDER, StatusBar, usd } from './DashboardCharts';
 import { EXAMPLE_QUESTIONS } from './examples';
@@ -75,6 +77,59 @@ const AskArrow = () => (
     </svg>
 );
 
+const POLL_MS = 30_000;
+
+// 구역마다 모으는 때 (services/dashboard/lambda_function.py의 Scheduler·이벤트)
+const CADENCE: Record<SectionName, string> = {
+    alarms: '실시간',
+    resources: '실시간',
+    changes: '실시간',
+    errors: '5분마다',
+    usage: '1시간마다',
+    cost: '하루 1번',
+};
+
+// 얼마나 새 값인가: '5분마다 · 2분 전' / 실패하면 '모으지 못함 · 마지막 성공 3시간 전' (빨강, 마우스를 올리면 까닭)
+function Freshness({ data, section }: { data: DashboardData; section: SectionName }) {
+    const state: SectionState | undefined = data.sections?.[section];
+    if (!state) return <span className="dash-fresh is-missing">아직 모으지 않음</span>;
+    if (!state.ok) {
+        return (
+            <span className="dash-fresh is-stale" title={state.error ?? undefined}>
+                모으지 못함{state.lastSuccessAt ? ` · 마지막 성공 ${ago(state.lastSuccessAt)}` : ''}
+            </span>
+        );
+    }
+    return (
+        <span className="dash-fresh" title={state.collectedAt ? `${ago(state.collectedAt)}에 모음` : undefined}>
+            {CADENCE[section]}
+        </span>
+    );
+}
+
+// 한 번도 모으지 못한 칸
+function NotYet({ section }: { section: SectionName }) {
+    return (
+        <p className="dash-card-note dash-notyet">
+            아직 모으지 않았습니다. {CADENCE[section] === '실시간' ? '곧' : CADENCE[section]} 모읍니다.
+        </p>
+    );
+}
+
+// 한 번도 모으지 못한 숫자 카드 (누를 것이 없다)
+function EmptyKpi({ label, data, section }: { label: string; data: DashboardData; section: SectionName }) {
+    return (
+        <div className="dash-kpi is-empty">
+            <span className="dash-kpi-label">
+                {label}
+                <Freshness data={data} section={section} />
+            </span>
+            <span className="dash-kpi-value">–</span>
+            <span className="dash-kpi-sub">{CADENCE[section]} 모읍니다</span>
+        </div>
+    );
+}
+
 type SortKey = 'status' | 'name' | 'errors' | 'cost';
 const SORT_LABEL: Record<SortKey, string> = { status: '상태', name: '리소스', errors: '오류 (24시간)', cost: '이번 달 비용' };
 
@@ -87,29 +142,60 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
     const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'status', desc: false });
     const showLoading = useMinimumVisible(loading && !data);
 
-    const load = useCallback(async () => {
-        setLoading(true);
-        try {
-            setData(await getDashboard());
-            setError(null);
-        } catch (err) {
-            const text = getErrorText(err);
-            setError(text);
-            showToast('error', '운영 현황을 불러오지 못했습니다.');
-        } finally {
-            setLoading(false);
-        }
-    }, [showToast]);
+    // quiet: 주기적으로 다시 읽을 때. 기다림 표시와 실패 알림을 띄우지 않는다 (앞 화면을 그대로 둔다)
+    const load = useCallback(
+        async (quiet = false) => {
+            if (!quiet) setLoading(true);
+            try {
+                setData(await getDashboard());
+                setError(null);
+            } catch (err) {
+                if (quiet) return;
+                setError(getErrorText(err));
+                showToast('error', '운영 현황을 불러오지 못했습니다.');
+            } finally {
+                if (!quiet) setLoading(false);
+            }
+        },
+        [showToast],
+    );
 
     useEffect(() => {
         load();
     }, [load]);
 
+    // 화면이 보이는 동안만 POLL_MS마다. 다시 보이면 바로 한 번 읽는다
+    useEffect(() => {
+        let timer: number | undefined;
+        const start = () => {
+            window.clearInterval(timer);
+            timer = window.setInterval(() => load(true), POLL_MS);
+        };
+        const onVisibility = () => {
+            if (document.hidden) {
+                window.clearInterval(timer);
+            } else {
+                load(true);
+                start();
+            }
+        };
+        if (!document.hidden) start();
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => {
+            window.clearInterval(timer);
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
+    }, [load]);
+
+    // 상태별 개수: 서버가 잘리기 전 모든 리소스로 센 값 (없으면 받은 줄로 센다)
     const counts = useMemo(() => {
+        if (data?.resourceCounts) return data.resourceCounts;
         const result: Record<HealthStatus, number> = { fail: 0, warn: 0, ok: 0, none: 0 };
         data?.resources.forEach((resource) => (result[resource.status] += 1));
         return result;
     }, [data]);
+    // 리소스별 비용은 실제 서버가 주지 않는다 (유료 설정이 필요하다). 값이 하나도 없으면 열을 뺀다
+    const hasCost = Boolean(data?.resources.some((resource) => resource.costMonth !== undefined));
 
     const resources = useMemo(() => {
         if (!data) return [];
@@ -139,11 +225,11 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                     {data ? (
                         <p className="dash-meta">
                             <span className="dash-env">{data.env}</span>
-                            {data.region} · {ago(data.generatedAt)}에 모음
+                            {data.region} · {data.generatedAt ? `${ago(data.generatedAt)}에 모음` : '아직 모으지 않음'}
                         </p>
                     ) : null}
                 </div>
-                <RefreshButton onClick={load} loading={loading} />
+                <RefreshButton onClick={() => load()} loading={loading} />
             </header>
 
             <div className="dash-ask">
@@ -163,7 +249,7 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                     <div className="dash-empty">
                         <p className="dash-empty-title">운영 현황을 불러오지 못했습니다.</p>
                         <p className="dash-empty-text">{error}</p>
-                        <button type="button" className="plan-reload-button" onClick={load}>
+                        <button type="button" className="plan-reload-button" onClick={() => load()}>
                             다시 불러오기
                         </button>
                     </div>
@@ -175,75 +261,98 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
 
                         {/* 숫자 카드 4개 */}
                         <div className="dash-kpis">
-                            <button
-                                type="button"
-                                className={`dash-kpi${data.alarms.firing.length ? ' is-fail' : ''}`}
-                                onClick={() =>
-                                    onAsk(
-                                        data.alarms.firing.length
-                                            ? `${data.alarms.firing[0].name} 알람 왜 울렸어?`
-                                            : '지금 CloudWatch 알람 상태 알려줘',
-                                    )
-                                }
-                            >
-                                <span className="dash-kpi-label">
-                                    울리는 알람 <AskArrow />
-                                </span>
-                                <span className="dash-kpi-value">
-                                    {data.alarms.firing.length}
-                                    <span className="dash-kpi-unit"> / {data.alarms.total}개</span>
-                                </span>
-                                <span className="dash-kpi-sub">
-                                    {data.alarms.firing.length
-                                        ? `${data.alarms.firing[0].name} · ${lasting(data.alarms.firing[0].since)}`
-                                        : '모든 알람이 정상입니다'}
-                                </span>
-                            </button>
+                            {data.alarms ? (
+                                <button
+                                    type="button"
+                                    className={`dash-kpi${data.alarms.firing.length ? ' is-fail' : ''}`}
+                                    onClick={() =>
+                                        onAsk(
+                                            data.alarms?.firing.length
+                                                ? `${data.alarms.firing[0].name} 알람 왜 울렸어?`
+                                                : '지금 CloudWatch 알람 상태 알려줘',
+                                        )
+                                    }
+                                >
+                                    <span className="dash-kpi-label">
+                                        울리는 알람 <AskArrow />
+                                        <Freshness data={data} section="alarms" />
+                                    </span>
+                                    <span className="dash-kpi-value">
+                                        {data.alarms.firing.length}
+                                        <span className="dash-kpi-unit"> / {data.alarms.total}개</span>
+                                    </span>
+                                    <span className="dash-kpi-sub">
+                                        {data.alarms.firing.length
+                                            ? `${data.alarms.firing[0].name} · ${lasting(data.alarms.firing[0].since)}`
+                                            : '모든 알람이 정상입니다'}
+                                    </span>
+                                </button>
+                            ) : (
+                                <EmptyKpi label="울리는 알람" data={data} section="alarms" />
+                            )}
 
-                            <button type="button" className="dash-kpi" onClick={() => onAsk('지난 24시간 Lambda 오류 원인 분석해줘')}>
-                                <span className="dash-kpi-label">
-                                    Lambda 오류 · 24시간 <AskArrow />
-                                </span>
-                                <span className="dash-kpi-value">
-                                    {data.errors.total24h}
-                                    <span className="dash-kpi-unit">건</span>
-                                </span>
-                                <Delta now={data.errors.total24h} before={data.errors.previous24h} suffix="그 전 24시간" />
-                                <Sparkbars values={data.errors.hourly} label="지난 24시간 시간별 오류 수" />
-                            </button>
+                            {data.errors ? (
+                                <button type="button" className="dash-kpi" onClick={() => onAsk('지난 24시간 Lambda 오류 원인 분석해줘')}>
+                                    <span className="dash-kpi-label">
+                                        Lambda 오류 · 24시간 <AskArrow />
+                                        <Freshness data={data} section="errors" />
+                                    </span>
+                                    <span className="dash-kpi-value">
+                                        {data.errors.total24h}
+                                        <span className="dash-kpi-unit">건</span>
+                                    </span>
+                                    <Delta now={data.errors.total24h} before={data.errors.previous24h} suffix="그 전 24시간" />
+                                    <Sparkbars values={data.errors.hourly} label="지난 24시간 시간별 오류 수" />
+                                </button>
+                            ) : (
+                                <EmptyKpi label="Lambda 오류 · 24시간" data={data} section="errors" />
+                            )}
 
-                            <button type="button" className="dash-kpi" onClick={() => onAsk('이번 달 비용이 왜 늘었어? 서비스별로 알려줘')}>
-                                <span className="dash-kpi-label">
-                                    이번 달 비용 <AskArrow />
-                                </span>
-                                <span className="dash-kpi-value">{usd(data.cost.monthToDate, 0)}</span>
-                                <Delta now={data.cost.monthToDate} before={data.cost.lastMonthSamePeriod} suffix="지난달 이맘때" />
-                                <span className="dash-kpi-sub">월말 예상 {usd(data.cost.forecast, 0)}</span>
-                            </button>
+                            {data.cost ? (
+                                <button type="button" className="dash-kpi" onClick={() => onAsk('이번 달 비용이 왜 늘었어? 서비스별로 알려줘')}>
+                                    <span className="dash-kpi-label">
+                                        이번 달 비용 <AskArrow />
+                                        <Freshness data={data} section="cost" />
+                                    </span>
+                                    <span className="dash-kpi-value">{usd(data.cost.monthToDate, 0)}</span>
+                                    <Delta now={data.cost.monthToDate} before={data.cost.lastMonthSamePeriod} suffix="지난달 이맘때" />
+                                    <span className="dash-kpi-sub">월말 예상 {usd(data.cost.forecast, 0)}</span>
+                                </button>
+                            ) : (
+                                <EmptyKpi label="이번 달 비용" data={data} section="cost" />
+                            )}
 
                             <button
                                 type="button"
                                 className={`dash-kpi${data.approvals.pending ? ' is-warn' : ''}`}
                                 onClick={() => navigate('/chat')}
                             >
-                                <span className="dash-kpi-label">승인 대기</span>
+                                <span className="dash-kpi-label">
+                                    승인 대기
+                                    <span className="dash-fresh">실시간</span>
+                                </span>
                                 <span className="dash-kpi-value">
                                     {data.approvals.pending}
                                     <span className="dash-kpi-unit">건</span>
                                 </span>
                                 <span className="dash-kpi-sub">
-                                    {data.approvals.pending && data.approvals.soonestExpiresAt
-                                        ? `가장 빠른 만료 ${until(data.approvals.soonestExpiresAt)}`
-                                        : '기다리는 변경이 없습니다'}
+                                    {data.approvals.unavailable
+                                        ? '승인 요청을 읽지 못했습니다'
+                                        : data.approvals.pending && data.approvals.soonestExpiresAt
+                                          ? `가장 빠른 만료 ${until(data.approvals.soonestExpiresAt)}`
+                                          : '기다리는 변경이 없습니다'}
                                 </span>
                             </button>
                         </div>
 
                         {/* 비용 */}
+                        {data.cost ? (
                         <div className="dash-row">
                             <section className="dash-card dash-card--wide" aria-labelledby="dash-daily-title">
                                 <header className="dash-card-head">
-                                    <h3 id="dash-daily-title">일별 비용</h3>
+                                    <h3 id="dash-daily-title">
+                                        일별 비용 <Freshness data={data} section="cost" />
+                                    </h3>
                                     <ul className="dash-key" aria-label="범례">
                                         <li>
                                             <span className="dash-key-bar" aria-hidden="true" />
@@ -270,19 +379,33 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                 <ServiceBars items={data.cost.byService} />
                             </section>
                         </div>
+                        ) : (
+                            <section className="dash-card" aria-label="비용">
+                                <header className="dash-card-head">
+                                    <h3>
+                                        일별 비용 <Freshness data={data} section="cost" />
+                                    </h3>
+                                </header>
+                                <NotYet section="cost" />
+                            </section>
+                        )}
 
                         {/* 리소스 · 변경 */}
                         <div className="dash-row">
                             <section className="dash-card dash-card--wide" aria-labelledby="dash-resource-title">
                                 <header className="dash-card-head">
-                                    <h3 id="dash-resource-title">리소스 상태</h3>
+                                    <h3 id="dash-resource-title">
+                                        리소스 상태 <Freshness data={data} section="resources" />
+                                    </h3>
+                                    {data.sections?.usage ? null : <span className="dash-card-aside">오류·CPU는 1시간마다</span>}
                                 </header>
+                                {!data.sections?.resources && !resources.length ? <NotYet section="resources" /> : null}
                                 <StatusBar counts={counts} />
                                 <div className="dash-table-wrap">
                                     <table className="dash-table">
                                         <thead>
                                             <tr>
-                                                {(['name', 'status', 'errors', 'cost'] as SortKey[]).map((key) => (
+                                                {(['name', 'status', 'errors', ...(hasCost ? ['cost'] : [])] as SortKey[]).map((key) => (
                                                     <th
                                                         key={key}
                                                         className={`is-${key}`}
@@ -325,17 +448,28 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                                         <StatusBadge status={resource.status} />
                                                     </td>
                                                     <td className="is-errors">{resource.errors24h ?? '–'}</td>
-                                                    <td className="is-cost">{resource.costMonth !== undefined ? usd(resource.costMonth) : '–'}</td>
+                                                    {hasCost ? (
+                                                        <td className="is-cost">
+                                                            {resource.costMonth !== undefined ? usd(resource.costMonth) : '–'}
+                                                        </td>
+                                                    ) : null}
                                                 </tr>
                                             ))}
                                         </tbody>
                                     </table>
                                 </div>
+                                {data.resourceTotal && data.resourceTotal > resources.length ? (
+                                    <p className="dash-card-note dash-table-more">
+                                        문제·주의를 먼저 {resources.length}개 보입니다. 모두 {data.resourceTotal}개입니다.
+                                    </p>
+                                ) : null}
                             </section>
 
                             <section className="dash-card" aria-labelledby="dash-change-title">
                                 <header className="dash-card-head">
-                                    <h3 id="dash-change-title">최근 변경</h3>
+                                    <h3 id="dash-change-title">
+                                        최근 변경 <Freshness data={data} section="changes" />
+                                    </h3>
                                     <span className="dash-card-aside">24시간</span>
                                 </header>
                                 {data.changes.length ? (
@@ -416,7 +550,7 @@ const daysInMonthOf = (date?: string) => {
 // 울리는 알람, 승인을 기다리는 변경, 문제 상태의 리소스(알람 말고)를 한 곳에. 없으면 초록 한 줄
 function Attention({ data, onAsk, onOpenChat }: { data: DashboardData; onAsk: (q: string) => void; onOpenChat: () => void }) {
     const items: { key: string; status: HealthStatus; title: string; sub?: string; action: string; run: () => void }[] = [
-        ...data.alarms.firing.map((alarm) => ({
+        ...(data.alarms?.firing ?? []).map((alarm) => ({
             key: `alarm-${alarm.name}`,
             status: 'fail' as const,
             title: `${alarm.name} 알람이 ${lasting(alarm.since)} 울리는 중`,

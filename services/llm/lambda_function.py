@@ -1,7 +1,7 @@
 # llm/lambda_function.py
 import requests
 from llm_service import (current_model, parse_body, handle_llm1_with_mcp, handle_progress, handle_audit,
-                         handle_action)
+                         handle_action, handle_dashboard)
 from common.config import get_config
 from common.utils import cors_response
 
@@ -43,6 +43,11 @@ def lambda_handler(event, context):
             # 감사 로그 (누가 어떤 도구를 불렀나). 관리자 여부는 ID 토큰의 cognito:groups로 판단한다
             claims = (event.get("requestContext") or {}).get("authorizer", {}).get("claims") or {}
             return handle_audit(event.get("queryStringParameters") or {}, claims.get("sub"), claims, origin)
+
+        elif path == "/dashboard" and http_method == "GET":
+            # 홈 대시보드 (모아 둔 운영 현황 + 승인 대기). 로그인한 사용자 누구나
+            claims = (event.get("requestContext") or {}).get("authorizer", {}).get("claims") or {}
+            return handle_dashboard(claims, origin)
 
         elif path.startswith("/actions/"):
             # 변경 작업 승인: GET /actions/{id}, POST /actions/{id}/approve, POST /actions/{id}/deny
