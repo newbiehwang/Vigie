@@ -169,7 +169,8 @@ export async function login(): Promise<void> {
         );
     }
     try {
-        await signInWithRedirect();
+        // lang=ko: Cognito 로그인 화면(managed login)을 한국어로 연다. Cognito가 쿠키에 기억해 다음 화면(가입·비밀번호 찾기)도 한국어다
+        await signInWithRedirect({ options: { lang: 'ko' } });
     } catch (error) {
         // 다른 탭에서 이미 로그인했으면 그대로 쓴다 (앱이 세션을 다시 읽는다)
         if ((error as { name?: string })?.name === 'UserAlreadyAuthenticatedException') return;
