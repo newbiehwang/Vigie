@@ -8,12 +8,13 @@
 //   [자연어로 조회] [승인 뒤 실행] [감사 로그] [민감정보 가리기]
 // - 바탕은 Cognito 로그인 페이지·전환 화면과 같은 번짐 이미지 (assets/brand/login-background.svg)
 // - 로그인 버튼을 누르면 App이 전환 화면(LoginSplash의 AutoLogin)을 거쳐 Cognito로 보낸다
-// - 대화 미리 보기는 그림일 뿐이다 (실제 답변이 아니다. 화면 읽기 프로그램에는 숨긴다)
-// - 처음 그릴 때 글 → 버튼 → 미리 보기 → 기능 카드 차례로 떠오른다 (움직임 줄이기 설정이면 없음)
+// - 오른쪽 대화 예시는 질문과 답변을 되풀이하는 그림이다 (LandingChatDemo.tsx)
+// - 처음 그릴 때 왼쪽 글만 태그·제목 → 소개 → 버튼 차례로 서서히 나타난다. 기능 카드는 움직이지 않는다
+//   (움직임 줄이기 설정이면 효과 없음)
 import type { CSSProperties, ReactNode } from 'react';
 import background from '@/assets/brand/login-background.svg';
 import vigieLogo from '@/assets/brand/vigie-logo.svg';
-import vigieMark from '@/assets/brand/vigie-mark.svg';
+import { LandingChatDemo } from './LandingChatDemo';
 
 const enter = (order: number) => ({ '--enter': order }) as CSSProperties;
 
@@ -43,53 +44,6 @@ const FEATURES: { title: string; text: string; icon: ReactNode }[] = [
     },
 ];
 
-function ChatPreview() {
-    return (
-        <div className="landing-preview" aria-hidden="true">
-            <div className="landing-preview-bar">
-                <i />
-                <i />
-                <i />
-            </div>
-            <div className="landing-preview-body">
-                <p className="landing-bubble">지난주 Lambda 오류 알려줘</p>
-                <div className="landing-answer">
-                    <img className="landing-avatar" src={vigieMark} alt="" />
-                    <div className="landing-answer-body">
-                        <p className="landing-trace">
-                            <b>●</b> 로그 그룹 조회 <span>/aws/lambda · 5</span>
-                        </p>
-                        <p>
-                            지난 7일 동안 <strong>vigie-llm-dev</strong> 함수의 오류는 3건입니다.
-                        </p>
-                        <table className="landing-table">
-                            <tbody>
-                                <tr>
-                                    <td>9월 22일</td>
-                                    <td>2</td>
-                                    <td>API 시간 초과</td>
-                                </tr>
-                                <tr>
-                                    <td>9월 24일</td>
-                                    <td>1</td>
-                                    <td>잘못된 세션 ID</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        <div className="landing-approval">
-                            <span className="landing-approval-badge">승인 필요</span>
-                            <span className="landing-approval-title">로그 보존 기간 변경</span>
-                            <span className="landing-approval-change">
-                                <del>30일</del> → <b>14일</b>
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
 export function LandingPage({ errorMessage, onLogin }: { errorMessage?: string; onLogin: () => void }) {
     return (
         <main className="landing" style={{ backgroundImage: `url(${background})` }}>
@@ -99,23 +53,26 @@ export function LandingPage({ errorMessage, onLogin }: { errorMessage?: string; 
 
             <section className="landing-hero">
                 <div className="landing-copy">
-                    <ul className="landing-tags landing-enter" style={enter(0)} aria-label="주제">
-                        {TAGS.map((tag) => (
-                            <li key={tag}>#{tag}</li>
-                        ))}
-                    </ul>
-                    <h1 className="landing-title landing-enter" style={enter(1)}>
-                        AWS 운영,
-                        <br />
-                        물어보면 답합니다
-                    </h1>
-                    <p className="landing-lead landing-enter" style={enter(2)}>
+                    {/* 태그와 제목은 함께, 그다음 소개, 그다음 버튼 차례로 서서히 나타난다 */}
+                    <div className="landing-heading landing-enter" style={enter(0)}>
+                        <ul className="landing-tags" aria-label="주제">
+                            {TAGS.map((tag) => (
+                                <li key={tag}>#{tag}</li>
+                            ))}
+                        </ul>
+                        <h1 className="landing-title">
+                            AWS 운영,
+                            <br />
+                            물어보면 답합니다
+                        </h1>
+                    </div>
+                    <p className="landing-lead landing-enter" style={enter(1)}>
                         자연어로 물으면 Vigie가 AWS 계정의 로그·지표·비용·보안 이벤트를 조회해 답합니다. AWS를 바꾸는
                         작업은 사람이 승인해야 실행됩니다.
                     </p>
 
                     {errorMessage ? (
-                        <div className="login-error-alert landing-enter" role="alert" style={enter(3)}>
+                        <div className="login-error-alert landing-enter" role="alert" style={enter(2)}>
                             <div className="login-error-icon" aria-hidden="true">
                                 !
                             </div>
@@ -126,7 +83,7 @@ export function LandingPage({ errorMessage, onLogin }: { errorMessage?: string; 
                         </div>
                     ) : null}
 
-                    <div className="landing-actions landing-enter" style={enter(3)}>
+                    <div className="landing-actions landing-enter" style={enter(2)}>
                         {/* AWS 계정이 아니라 Vigie 계정(Cognito)으로 로그인·가입하므로 'AWS에서 로그인'이 아니라 '시작하기' */}
                         <button type="button" className="login-submit landing-cta" onClick={onLogin}>
                             시작하기
@@ -134,14 +91,14 @@ export function LandingPage({ errorMessage, onLogin }: { errorMessage?: string; 
                     </div>
                 </div>
 
-                <div className="landing-enter landing-preview-wrap" style={enter(4)}>
-                    <ChatPreview />
+                <div className="landing-preview-wrap">
+                    <LandingChatDemo />
                 </div>
             </section>
 
             <ul className="landing-features">
-                {FEATURES.map((feature, index) => (
-                    <li key={feature.title} className="landing-feature landing-enter" style={enter(5 + index)}>
+                {FEATURES.map((feature) => (
+                    <li key={feature.title} className="landing-feature">
                         <svg className="landing-feature-icon" viewBox="0 0 24 24" aria-hidden="true">
                             {feature.icon}
                         </svg>
