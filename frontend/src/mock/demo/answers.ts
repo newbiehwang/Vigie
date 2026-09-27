@@ -27,6 +27,7 @@ import {
     asgLaunches,
     demoCost,
     demoAlarms,
+    demoResources,
     epochOf,
     events,
     idleInstance,
@@ -97,7 +98,10 @@ export type Topic =
     | 's3Objects'
     | 'costBreakdown'
     | 'errorLogs'
-    | 'eip';
+    | 'eip'
+    // 홈 화면의 물어보기
+    | 'alarmCause'
+    | 'resourceCheck';
 
 interface DemoAnswer {
     id: Topic;
@@ -801,6 +805,230 @@ const briefingEntry = ({ admin, state }: DemoContext): DemoEntry => {
     };
 };
 
+// ---------------------------------------------------------------- 홈 화면 '지금 확인할 것'의 물어보기
+// 홈 대시보드(features/home/Dashboard.tsx)는 울리는 알람과 문제 상태의 리소스마다 이런 질문을 보낸다:
+//   "<알람 이름> 알람 왜 울렸어?"  ·  "<리소스 이름> 상태 점검해줘"
+// 알람의 조건과 울린 횟수는 지표(모든 사용자)로, 누가 무엇을 바꿨는지는 CloudTrail(관리자 전용)로 답한다
+
+const SG_EVENTS = ['AuthorizeSecurityGroupIngress', 'UpdateSecurityGroupRuleDescriptionsIngress', 'RevokeSecurityGroupIngress'];
+
+// 알람 한 개가 왜 울렸나
+const alarmCauseEntry = ({ admin, text }: DemoContext): DemoEntry => {
+    const firing = demoAlarms().firing;
+    const sgAlarm = firing.find((a) => a.name.includes('security-group'));
+    const mfaAlarm = firing.find((a) => a.name.includes('signin-without-mfa'));
+    const askedSg = /security-group|보안\s*그룹/i.test(text);
+    const askedMfa = /signin|mfa|로그인/i.test(text);
+    const named = text.match(/[a-z0-9]+(?:-[a-z0-9]+)+(?=\s*알람)/i)?.[0];
+    // 지금 울리지 않는 알람을 물으면 그렇다고 답한다 (예: Vigie 자신의 알람)
+    if (named && !firing.some((a) => a.name === named))
+        return {
+            tools: [ok('get_active_alarms', { max_items: 50 })],
+            thinking: [`${named} 알람이 지금 울리는지 확인한다.`, '울리는 알람 목록에 없다.'],
+            answer: lines(
+                `\`${named}\` 알람은 **지금 울리지 않습니다** (OK).`,
+                '',
+                `지금 울리는 알람은 ${firing.map((a) => `\`${a.name}\``).join(', ')}입니다.`,
+            ),
+        };
+    const targets = [askedSg || !askedMfa ? sgAlarm : undefined, askedMfa || !askedSg ? mfaAlarm : undefined].filter(
+        (a): a is NonNullable<typeof a> => Boolean(a),
+    );
+    const sgEvents = events(SG_EVENTS);
+    const open = memcachedOpen();
+    const closed = memcachedClosed();
+    const noMfa = logins().filter((e) => e.mfa === false);
+    const parts = targets.map((alarm) => {
+        if (alarm === sgAlarm)
+            return lines(
+                targets.length > 1 ? `### \`${alarm.name}\`` : undefined,
+                `**${kstClock(alarm.since)}에 보안 그룹 규칙이 바뀌어서 울렸습니다.** CloudTrail에서 보안 그룹을 바꾸는 호출을 세는 지표가 5분에 1건 이상이면 울리는 알람이고, 그 시간대에 변경이 ${sgEvents.length}건 있었습니다.`,
+                '',
+                admin
+                    ? lines(
+                          '| 시각 | 누가 | 무엇 |',
+                          '|:--|:--|:--|',
+                          ...sgEvents.map(
+                              (e) =>
+                                  `| ${kst(e.at)} | ${e.actor} | ${
+                                      e.name === 'AuthorizeSecurityGroupIngress'
+                                          ? `\`${e.target}\`에 **UDP 11211을 0.0.0.0/0 · ::/0에 개방**`
+                                          : e.name === 'RevokeSecurityGroupIngress'
+                                            ? 'UDP 11211 개방 규칙 제거'
+                                            : '규칙 설명 바꾸기'
+                                  } |`,
+                          ),
+                          '',
+                          `- 연 규칙은 **${closed ? minutesBetween(open.at, closed.at) : '?'}분 뒤 닫혔습니다.** 지금 열려 있지는 않지만, memcached 포트를 전 세계에 연 까닭은 확인해야 합니다 (증폭 DDoS에 악용될 수 있습니다).`,
+                          `- 바꾼 \`${open.actor}\` 계정은 MFA 없이 로그인했습니다. 옆의 MFA 알람도 같은 로그인 때문에 울렸습니다.`,
+                      )
+                    : `- 어떤 규칙을 누가 바꿨는지는 CloudTrail 조회라 **관리자만** 볼 수 있습니다. 관리자에게 이 알람을 전해 주세요.`,
+            );
+        return lines(
+            targets.length > 1 ? `### \`${alarm.name}\`` : undefined,
+            `**MFA 없이 콘솔에 로그인한 기록 때문에 울렸습니다.** CloudTrail의 MFA 없는 콘솔 로그인을 세는 지표가 5분에 1건 이상이면 울리고, 이 기간에 ${noMfa.length}번 있었습니다. 마지막은 ${kstClock(alarm.since)}입니다.`,
+            '',
+            admin
+                ? lines(
+                      '| 시각 | 사용자 | 출발 IP |',
+                      '|:--|:--|:--|',
+                      ...noMfa.map((e) => `| ${kst(e.at)} | ${e.actor} | ${e.ip} |`),
+                      '',
+                      `- 모두 \`${unique(noMfa.map((e) => e.actor)).join('`, `')}\` 한 사용자이고, 출발 IP가 ${unique(noMfa.map((e) => e.ip)).length}곳입니다.`,
+                      '- 이 사용자는 콘솔에서 버킷 ACL·보안 그룹·인스턴스를 바꿨습니다. MFA를 설정하고, 변경 권한에 MFA 조건을 거세요.',
+                  )
+                : '- 누가 어디서 로그인했는지는 CloudTrail 조회라 **관리자만** 볼 수 있습니다.',
+        );
+    });
+    return {
+        search: admin ? { query: 'lookup_events', found: ['lookup_events'] } : undefined,
+        tools: [
+            ...targets.map((a) => ok('get_alarm_history', { alarm_name: a.name, history_item_type: 'StateUpdate' })),
+            ...targets.map((a) => ok('get_metric_data', { namespace: 'CloudTrailMetrics', metric_name: a.metric.split(' ')[0], statistic: 'Sum', period: 300 })),
+            ...(admin
+                ? targets.map((a) =>
+                      a === sgAlarm
+                          ? ok('lookup_events', { lookup_attributes: [{ AttributeKey: 'ResourceName', AttributeValue: open.target }] })
+                          : ok('lookup_events', { lookup_attributes: [{ AttributeKey: 'EventName', AttributeValue: 'ConsoleLogin' }] }),
+                  )
+                : []),
+        ],
+        thinking: [
+            admin
+                ? '알람이 언제 ALARM이 됐는지 알람 기록에서 보고, 조건이 된 지표를 가져온 뒤, 그 시간대의 CloudTrail 기록으로 무엇이 바뀌었는지 찾는다.'
+                : '알람이 언제 ALARM이 됐는지와 조건이 된 지표를 가져온다. 무엇을 누가 바꿨는지는 CloudTrail(관리자 전용)이라 보지 않는다.',
+            `${targets.length > 1 ? '둘 다 ' : ''}CloudTrail 지표 필터 알람이다. 실제로 일어난 일 때문에 울렸다. 지금 상태와 할 일을 함께 적는다.`,
+        ],
+        answer: lines(
+            ...parts.flatMap((part, i) => (i ? ['', part] : [part])),
+            '',
+            '알람은 새 데이터로 다시 평가될 때까지 ALARM에 머뭅니다. 원인을 확인했다면 다음 평가를 기다리면 OK로 돌아갑니다.',
+            '',
+            admin ? nextHint('누가 했어?', '어떻게 대응해야 해?', '사고 경위를 시간 순으로') : nextHint('지금 울리는 알람 알려줘', '오늘 현황 요약해 줘'),
+        ),
+    };
+};
+
+// 리소스 한 개 점검. 대시보드의 리소스 이름(또는 표시 이름)으로 찾는다
+const DEMO_RESOURCES = demoResources();
+const LAMBDA_METRICS: Record<string, { errors: string; invocations: string; duration: string }> = {
+    RDSAuditLogs: { errors: LAMBDA_ERROR_KEYS.RDSAuditLogs, invocations: 'rdsAuditLogsInvocations', duration: 'rdsAuditLogsDuration' },
+    VPCFlowLogs: { errors: LAMBDA_ERROR_KEYS.VPCFlowLogs, invocations: 'vpcFlowLogsInvocations', duration: 'vpcFlowLogsDuration' },
+};
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const RESOURCE_NAMES = unique(DEMO_RESOURCES.flatMap((r) => [r.id, r.label].filter((name): name is string => Boolean(name))));
+const RESOURCE_CHECK = new RegExp(`(${RESOURCE_NAMES.map(escapeRegExp).join('|')}).*(점검|상태|확인|괜찮|어때|문제|봐\\s*줘)`, 'i');
+const resourceIn = (text: string) =>
+    DEMO_RESOURCES.find((r) => [r.id, r.label].some((name) => name && text.toLowerCase().includes(name.toLowerCase())));
+
+// Lambda 함수 점검: 호출·오류·실행 시간 지표로
+const lambdaCheck = (name: string): DemoEntry => {
+    const keys = LAMBDA_METRICS[name];
+    const errors = metric(keys.errors).sum;
+    const invocations = metricSum(keys.invocations);
+    const total = metricSum(keys.errors);
+    const lastIndex = errors.map((v, i) => (v > 0 ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
+    const recent = Math.round(errors.slice(-6).reduce((a, b) => a + b, 0)); // 최근 30분 (5분 × 6)
+    const noLogGroup = name === 'RDSAuditLogs'; // Lambda 오류 원인 답(errorLogsEntry)과 같은 사실
+    return {
+        tools: [
+            ok('get_metric_data', { namespace: 'AWS/Lambda', metric_name: 'Invocations', dimensions: { FunctionName: name }, statistic: 'Sum', period: 300 }),
+            ok('get_metric_data', { namespace: 'AWS/Lambda', metric_name: 'Errors', dimensions: { FunctionName: name }, statistic: 'Sum', period: 300 }),
+            ok('get_metric_data', { namespace: 'AWS/Lambda', metric_name: 'Duration', dimensions: { FunctionName: name }, statistic: 'Maximum', period: 300 }),
+            ok('describe_log_groups', { log_group_name_prefix: `/aws/lambda/${name}` }),
+        ],
+        thinking: [
+            `${name} 함수의 호출 수, 오류 수, 실행 시간을 최근 3시간 5분 단위로 가져오고, 로그 그룹이 있는지 본다.`,
+            `호출 ${invocations}번 중 ${total}번 실패했다. ${recent ? '최근 30분에도 실패가 있다.' : '최근 30분에는 실패가 없다.'}${noLogGroup ? ' 로그 그룹이 없어 오류 메시지는 볼 수 없다.' : ''}`,
+        ],
+        answer: lines(
+            recent
+                ? `**\`${name}\`는 지금도 실패하고 있습니다.** 최근 30분에 ${recent}번 실패했습니다.`
+                : `**\`${name}\`의 실패는 지금은 멈췄습니다.** 마지막 실패는 ${lastIndex >= 0 ? slotClock(keys.errors, lastIndex) : '-'}입니다.`,
+            '',
+            '| 항목 (최근 3시간) | 값 |',
+            '|:--|:--|',
+            `| 호출 | ${invocations.toLocaleString()}번 |`,
+            `| 실패 | ${total}번 (**${round((total / Math.max(invocations, 1)) * 100)}%**) |`,
+            `| 실패가 몰린 때 | ${kstClock(epochOf(peakOffset(keys.errors)))} 전후 |`,
+            `| 실행 시간 | 평균 ${Math.round(metricAverage(keys.duration))}ms · 최대 ${Math.round(metricMax(keys.duration))}ms |`,
+            noLogGroup ? `| 로그 그룹 | **없음** (\`/aws/lambda/${name}\`) |` : undefined,
+            '',
+            recent ? undefined : '홈 화면에 빨간색으로 보이는 것은 최근 24시간 안에 오류가 있었기 때문입니다. 새 실패가 없으면 하루 뒤 초록으로 돌아갑니다.',
+            recent ? undefined : '',
+            '**진단**',
+            '- 실행 시간이 1초 안쪽이라 시간 초과가 아니라, 함수 안에서 바로 실패하는 오류입니다.',
+            `- 다른 로그 수집 함수(${Object.keys(LAMBDA_METRICS).filter((n) => n !== name).join(', ')})도 같은 때 실패했습니다. 함수 코드보다 공통으로 쓰는 것(로그를 보내는 대상, 실행 역할의 권한)을 먼저 보세요.`,
+            noLogGroup
+                ? '- 로그 그룹이 없어 오류 메시지를 볼 수 없습니다. 실행 역할에 `logs:CreateLogGroup`·`logs:PutLogEvents` 권한이 있는지부터 확인하세요.'
+                : undefined,
+            name === 'RDSAuditLogs' ? '- RDS 감사 로그를 옮기는 함수라, 실패한 동안의 감사 로그가 빠졌을 수 있습니다.' : undefined,
+            '',
+            nextHint('원인은?', '차트로 그려 줘'),
+        ),
+    };
+};
+
+// 조사용 인스턴스 점검
+const forensicCheck = ({ state, admin }: DemoContext): DemoEntry => {
+    const idle = idleInstance();
+    const sg = FROTHLY.securityGroups.find((g) => g.instances.includes(idle.id));
+    return {
+        tools: [
+            ok('listEc2Instances', {}),
+            ok('getEc2StatusChecks', { instance_ids: [idle.id] }),
+            ok('getEc2CpuRanking', { hours: 3 }),
+            ...(admin && sg ? [ok('get_vpc_network', { vpc_id: 'vpc-05cb3dfad78e47394', region: FROTHLY.region })] : []),
+        ],
+        search: admin && sg ? { query: 'get_vpc_network', found: ['get_vpc_network'] } : undefined,
+        thinking: [`${idle.name} 인스턴스의 상태, 상태 검사, CPU를 본다.`, state.forensicStopped ? '이미 중지되어 있다.' : '정상이지만 거의 쓰지 않는다.'],
+        answer: state.forensicStopped
+            ? lines(`\`${idle.name}\` (\`${idle.id}\`)는 **중지되어 있습니다.** 대화에서 승인해 멈췄습니다. EBS 볼륨 요금은 계속 나갑니다.`)
+            : lines(
+                  `\`${idle.name}\` (\`${idle.id}\`, ${idle.type})는 **정상이지만 거의 쓰지 않습니다.**`,
+                  '',
+                  '| 항목 | 값 |',
+                  '|:--|:--|',
+                  '| 상태 | 실행 중 · 상태 검사 통과 |',
+                  `| CPU (최근 3시간) | 평균 ${metricAverage('forensicCpu')}% · 최대 ${metricMax('forensicCpu')}% |`,
+                  `| 세부 모니터링 | ${idle.monitoring ? '켜짐' : '꺼짐 (지표가 5분 간격)'} |`,
+                  admin && sg ? `| 보안 그룹 | \`${sg.name}\` · **SSH(22)가 전 세계에 열림** |` : undefined,
+                  '',
+                  '- 조사용으로 띄운 인스턴스입니다. 조사가 끝났다면 멈춰 비용을 줄이세요 ("Bud\'s Forensic AMI 멈춰 줘").',
+                  admin && sg ? '- 켜 둘 거라면 SSH를 사무실 IP로 좁히세요. 조사 자료가 든 인스턴스가 밖에 열려 있습니다.' : undefined,
+              ),
+    };
+};
+
+const resourceCheckEntry = (ctx: DemoContext): DemoEntry => {
+    const resource = resourceIn(ctx.text);
+    const byTopic = (id: Topic) => {
+        const answer = answerOf(id);
+        return answer.adminOnly && !ctx.admin ? adminOnlyRefusal() : answer.build(ctx);
+    };
+    if (!resource) return fallback();
+    if (resource.kind === 'Alarm') return alarmCauseEntry({ ...ctx, text: `${resource.id} 알람` });
+    if (LAMBDA_METRICS[resource.id]) return lambdaCheck(resource.id);
+    if (resource.id === FORENSIC_INSTANCE) return forensicCheck(ctx);
+    if (resource.id === 'WebServers') return byTopic('health');
+    if (resource.id === PUBLIC_BUCKET) return byTopic('s3');
+    if (resource.kind === 'S3' && !ctx.admin) return adminOnlyRefusal(); // 버킷 보안 점검은 관리자 전용
+    // 그 밖 (Vigie 자신의 함수, 이상 없는 버킷): 대시보드의 상태를 그대로 설명한다
+    return {
+        tools: [
+            resource.kind === 'S3'
+                ? ok('checkS3BucketSecurity', { bucket_name: resource.id })
+                : ok('get_metric_data', { namespace: 'AWS/Lambda', metric_name: 'Errors', dimensions: { FunctionName: resource.id }, statistic: 'Sum' }),
+        ],
+        search: resource.kind === 'S3' ? { query: 'checkS3BucketSecurity', found: ['checkS3BucketSecurity'] } : undefined,
+        thinking: [`${resource.id}의 상태를 확인한다.`],
+        answer: lines(
+            `\`${resource.id}\`는 **${resource.status === 'ok' ? '이상 없습니다' : resource.status === 'none' ? '최근 쓰이지 않았습니다' : '확인이 필요합니다'}.** ${resource.detail}.`,
+            resource.status === 'none' ? '\n호출이 없으면 오류도 지표도 없습니다. 쓰지 않는 함수라면 정리해도 됩니다.' : undefined,
+        ),
+    };
+};
+
 // ---------------------------------------------------------------- 가드: 거절하거나 할 수 없다고 답하는 요청
 interface Guard {
     match: RegExp;
@@ -958,6 +1186,18 @@ const GUARDS: Guard[] = [
 
 // ---------------------------------------------------------------- 답변
 const DEMO_ANSWERS: DemoAnswer[] = [
+    {
+        // 홈 화면: "<알람 이름> 알람 왜 울렸어?" (알람을 콕 집어 까닭을 물을 때. 알람 목록은 아래 alarms)
+        id: 'alarmCause',
+        match: /[a-z0-9]+(-[a-z0-9]+)+\s*알람.*(왜|원인|까닭|이유|무슨)|(알람|경보).*(왜|원인|까닭|이유)\s*(울|났|생겼)/i,
+        build: alarmCauseEntry,
+    },
+    {
+        // 홈 화면: "<리소스 이름> 상태 점검해줘" (대시보드의 리소스 이름이 들어 있을 때)
+        id: 'resourceCheck',
+        match: RESOURCE_CHECK,
+        build: resourceCheckEntry,
+    },
     {
         // 보안 감사: 루트 로그인
         id: 'login',
@@ -1219,7 +1459,7 @@ const DEMO_ANSWERS: DemoAnswer[] = [
     {
         // RDS
         id: 'rds',
-        match: /RDS|데이터베이스|\bDB\b|디비/i,
+        match: /RDS(?!AuditLogs)|데이터베이스|\bDB\b|디비/i, // RDSAuditLogs는 Lambda 함수 이름
         build: rdsEntry,
     },
     {
@@ -1615,7 +1855,16 @@ const FOLLOW_UPS: Partial<Record<Topic, FollowUp[]>> = {
         { match: /EIP|탄력적|IP/i, to: 'eip' },
         { match: /얼마|예상|월말/, to: 'forecast' },
     ],
-    alarms: [{ match: /왜|원인|누가|무엇\s*때문|무슨\s*일/, to: 'timeline' }],
+    alarms: [
+        { match: /왜|원인|무엇\s*때문|무슨\s*일|까닭|이유/, to: 'alarmCause' },
+        { match: WHO, to: 'who' },
+    ],
+    alarmCause: [
+        { match: WHO, to: 'who' },
+        { match: REMEDY, to: 'remediation' },
+        { match: /다른\s*알람|나머지|전체/, to: 'alarms' },
+    ],
+    resourceCheck: [{ match: /원인|왜|로그/, to: 'errorLogs' }],
     errors: [{ match: /원인|왜|로그|어디서|자세히/, to: 'errorLogs' }],
     rds: [{ match: /Lambda|감사\s*로그|오류/i, to: 'errorLogs' }],
     briefing: [
@@ -1652,6 +1901,8 @@ const MORE: Partial<Record<Topic, (ctx: DemoContext) => Topic>> = {
     forecast: () => 'costBreakdown',
     cost: () => 'costBreakdown',
     alarms: ({ admin }) => (admin ? 'timeline' : 'errors'),
+    alarmCause: ({ admin }) => (admin ? 'timeline' : 'briefing'),
+    resourceCheck: () => 'errorLogs',
     config: ({ admin }) => (admin ? 's3' : 'briefing'),
     briefing: ({ admin }) => (admin ? 'security' : 'errors'),
     postmortem: () => 'remediation',
@@ -1751,7 +2002,7 @@ const CHARTS: { topics: Topic[]; build: () => DemoEntry }[] = [
         }),
     },
     {
-        topics: ['errors', 'errorLogs', 'rds', 'memory'],
+        topics: ['errors', 'errorLogs', 'rds', 'memory', 'resourceCheck'],
         build: () => ({
             tools: [
                 ok('get_metric_data', { namespace: 'AWS/Lambda', metric_name: 'Errors', statistic: 'Sum', group_by: 'FunctionName' }),
