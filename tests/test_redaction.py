@@ -198,7 +198,7 @@ def client_run(aws, monkeypatch):
         {"content": [{"type": "text", "text": f"{ALIAS_ARN} 로그 그룹에 오류가 없습니다."}], "usage": {}},
     ]
 
-    def fake_post(url, headers=None, json=None):
+    def fake_post(url, headers=None, json=None, **kwargs):
         sent.append(copy.deepcopy(json))
         return FakeResponse(replies[len(sent) - 1])
 
@@ -210,7 +210,7 @@ def client_run(aws, monkeypatch):
                 "env": f"AWS_ACCESS_KEY_ID={ACCESS_KEY}"}]})}]}
         return {"isError": True, "content": [{"type": "text", "text": f"AccessDenied for {ACCESS_KEY}"}]}
 
-    monkeypatch.setattr(mcp_anthropic_client.requests, "post", fake_post)
+    monkeypatch.setattr(mcp_anthropic_client.HTTP, "post", fake_post)
     client = mcp_anthropic_client.AnthropicMCPClient(
         mcp_url="https://example.invalid", api_key="k", model_id="claude-sonnet-5",
         thinking={"type": "adaptive", "display": "summarized"})
@@ -279,7 +279,7 @@ def test_llm1_answer_and_inference_are_redacted(aws, monkeypatch):
     llm = load_service_module("services/llm", "llm_service")
     monkeypatch.setattr(llm, "ACCOUNT_ID", ACCOUNT)
     fake = FakeClient()
-    monkeypatch.setattr(llm, "get_client", lambda: fake)
+    monkeypatch.setattr(llm, "get_client", lambda *_: fake)
 
     response = llm.handle_llm1_with_mcp({"text": "알람 알려줘"}, "https://test.abc.amplifyapp.com", caller_id="alice")
     result = json.loads(response["body"])

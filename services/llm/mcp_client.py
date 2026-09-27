@@ -7,6 +7,19 @@ from urllib.parse import urlparse
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 
+# MCP 서버 연결을 컨테이너 안에서 다시 쓴다 (도구를 부를 때마다 TLS 연결을 새로 맺지 않게).
+# 제한 시간: 연결 10초, 응답 180초 (MCP Lambda의 제한 시간과 같다)
+HTTP = requests.Session()
+HTTP_TIMEOUT = (10, 180)
+_credentials = None  # Lambda 실행 Role 자격 증명 (컨테이너마다 한 번 읽는다. 만료가 가까우면 botocore가 새로 받는다)
+
+
+def _aws_credentials():
+    global _credentials
+    if _credentials is None:
+        _credentials = boto3.Session().get_credentials()
+    return _credentials
+
 
 class MCPClient:
     """MCP(Model Context Protocol) Streamable HTTP 클라이언트 구현"""
@@ -42,12 +55,12 @@ class MCPClient:
         headers = dict(self.headers)
 
         if self.use_sigv4:
-            credentials = boto3.Session().get_credentials()
+            credentials = _aws_credentials()
             aws_request = AWSRequest(method=method, url=self.mcp_url, data=body, headers=headers)
             SigV4Auth(credentials, 'lambda', self.region).add_auth(aws_request)
             headers = dict(aws_request.headers)
 
-        return requests.request(method, self.mcp_url, headers=headers, data=body)
+        return HTTP.request(method, self.mcp_url, headers=headers, data=body, timeout=HTTP_TIMEOUT)
 
     def initialize(self) -> str:
         """
