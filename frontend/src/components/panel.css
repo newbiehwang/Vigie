@@ -995,23 +995,30 @@
 
 /* ---------------------------------------------------------------- 검색창 (components/SearchBox.tsx: 감사 로그·사용자 관리) */
 
+/* 검색창 (components/SearchBox.tsx: 감사 로그·사용자 관리). 모양은 홈의 한 줄 입력칸(.composer.is-compact)과 같다:
+   같은 테두리·모서리(14px)·아래로 번지는 옅은 그림자, 누르면 파란 테두리와 안쪽 선, 같은 글꼴·자리 글 색.
+   높이는 검색창 그대로(38px)이고, 돋보기와 '/' 안내는 둔다 (예시 넣기·보내기 버튼은 없다) */
 .search-box {
   display: flex;
   align-items: center;
   gap: 8px;
   height: 38px;
   margin-bottom: 10px;
-  padding: 0 10px 0 12px;
-  border: 1px solid var(--color-line);
-  border-radius: 10px;
+  padding: 0 10px 0 14px;
+  border: 1px solid #d9e0e8;
+  border-radius: 14px;
   background: #fff;
   color: #8a94a0;
+  box-shadow: 0 1px 2px rgba(35, 47, 62, 0.05), 0 8px 22px rgba(35, 47, 62, 0.06);
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
 .search-box:focus-within {
-  border-color: rgba(0, 123, 255, 0.45);
-  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+  border-color: rgba(0, 123, 255, 0.56);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 123, 255, 0.14),
+    0 1px 2px rgba(35, 47, 62, 0.05),
+    0 8px 22px rgba(35, 47, 62, 0.06);
 }
 
 .search-box input {
@@ -1021,9 +1028,13 @@
   border: 0;
   outline: none;
   background: transparent;
-  font: inherit;
-  font-size: 13px;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
   color: #1f2933;
+}
+
+.search-box input::placeholder {
+  color: #a0aab5;
 }
 
 .search-box kbd {
