@@ -535,6 +535,13 @@ cd frontend && npm run build:demo   # frontend/dist-demo/ (Cognito 설정 값은
 
 `dist-demo/`를 정적 호스팅(Amplify Hosting의 수동 배포, GitHub Pages, S3 정적 웹 사이트 등)에 올립니다. 화면 주소(`/chat` 등)를 새로 고쳐도 열리도록 `index.html`을 `404.html`로도 복사해 둡니다(GitHub Pages용). 다른 호스팅은 없는 경로를 `index.html`로 돌려주는 규칙을 둡니다.
 
+**Vercel에 올리기** (`frontend/vercel.json`에 설정이 있습니다)
+1. Vercel에서 이 GitHub 저장소를 가져오고(Import), **Root Directory**를 `frontend`로 정합니다. 나머지(빌드 명령 `npm run build:demo`, 결과 폴더 `dist-demo`)는 `vercel.json`이 정합니다.
+2. 환경 변수는 넣지 않습니다. 데모는 백엔드·Cognito·Claude를 쓰지 않습니다.
+3. 이후 main에 머지하면 자동으로 다시 배포되고, PR마다 미리보기 주소가 생깁니다.
+
+`vercel.json`은 없는 경로(`/chat`, `/audit` 등)를 `index.html`로 돌려 새로 고쳐도 화면이 열리게 하고, 이름에 해시가 붙은 `assets/` 파일은 오래 캐시합니다. AWS 계정과 따로 두므로, AWS 무료 플랜이 끝나도 데모 링크는 그대로입니다.
+
 데모의 홈 대시보드와 답변은 공개된 실제(가상 회사) AWS 운영 기록으로 만듭니다. 시각은 지금에 맞춰 옮깁니다.
 
 | 데이터 | 라이선스 | 쓰는 곳 |

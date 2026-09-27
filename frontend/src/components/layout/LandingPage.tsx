@@ -129,7 +129,7 @@ export function LandingPage({
                     <a href="https://github.com/FinOps-Open-Cost-and-Usage-Spec/FOCUS-Sample-Data" target="_blank" rel="noreferrer">
                         FinOps Foundation FOCUS 샘플
                     </a>{' '}
-                    (CC BY 4.0, 서비스별 비용 비중만 사용). 시각은 지금에 맞춰 옮겼습니다.
+                    (CC BY 4.0, 서비스별 비용 비중만 사용).
                 </p>
             ) : null}
         </main>
