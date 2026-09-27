@@ -18,6 +18,7 @@ import { ROLE_LABELS } from '@/auth/authClient';
 import { LoadingCard, useMinimumVisible } from '@/components/LoadingCard';
 import { RefreshButton } from '@/components/RefreshButton';
 import { SearchBox } from '@/components/SearchBox';
+import { SortButton, sortedBy, useSort } from '@/components/SortHeader';
 import { ToastHost, useToast } from '@/components/Toast';
 import { ResetButton } from '@/features/audit/FilterMenu';
 import type { ManagedUser, UserRole } from '@/types/users';
@@ -30,6 +31,21 @@ import './users.css';
 const MAX_PAGES = 20; // 50명씩 20쪽 = 1,000명까지 받는다 (더 있으면 알린다)
 
 const ROLES: UserRole[] = ['member', 'decider', 'admin'];
+
+// 목록 정렬: 이메일 · 권한(관리자 → 결정자 → 일반) · 가입일(기본, 최근 것부터) · 계정(사용 중 → 정지)
+type UserSortKey = 'email' | 'role' | 'createdAt' | 'account';
+const USER_SORT_LABEL: Record<UserSortKey, string> = { email: '이메일', role: '권한', createdAt: '가입일', account: '계정' };
+const ROLE_RANK: Record<UserRole, number> = { admin: 0, decider: 1, member: 2 };
+const userSortValue = (user: ManagedUser, key: UserSortKey): string | number =>
+    key === 'email'
+        ? user.email ?? user.username
+        : key === 'role'
+          ? ROLE_RANK[user.role] ?? 3
+          : key === 'createdAt'
+            ? user.createdAt ?? ''
+            : user.enabled
+              ? 0
+              : 1;
 
 // 한 번 더 눌러야 실행되는 버튼 (4초 안에). 되돌릴 수 있지만 그 사람의 일이 바로 막히는 동작에 쓴다
 function ConfirmButton({
@@ -161,6 +177,8 @@ export function UsersPage() {
     // 거르는 순서: 검색어 → 거르기. 필터 창의 건수는 검색어까지 적용한 사용자에서 센다 (감사 로그와 같다)
     const searched = useMemo(() => users.filter((user) => matchesSearch(user, query)), [users, query]);
     const filtered = useMemo(() => searched.filter((user) => matchesSelection(user, selection)), [searched, selection]);
+    const [sort, toggleSort] = useSort<UserSortKey>({ key: 'createdAt', desc: true }, (key) => key === 'createdAt');
+    const listed = useMemo(() => sortedBy(filtered, sort, userSortValue), [filtered, sort]);
     const conditions = Boolean(query.trim()) || selectedCount(selection) > 0;
     const resetFilters = () => {
         setQuery('');
@@ -242,11 +260,20 @@ export function UsersPage() {
 
             <div className="plan-panel-body">
                 <div className="plan-table users-table">
-                    <div className="plan-table-header users-row-grid" aria-hidden="true">
-                        <span>이메일</span>
-                        <span>권한</span>
-                        <span>가입일</span>
-                        <span className="users-col-account">계정</span>
+                    {/* 머리글을 누르면 그 열로 정렬한다 (다시 누르면 방향을 뒤집는다) */}
+                    <div className="plan-table-header users-row-grid">
+                        {(['email', 'role', 'createdAt', 'account'] as UserSortKey[]).map((key) => (
+                            <span key={key} className={key === 'account' ? 'users-col-account' : undefined}>
+                                <SortButton
+                                    column={key}
+                                    label={USER_SORT_LABEL[key]}
+                                    sort={sort}
+                                    onSort={toggleSort}
+                                    align={key === 'account' ? 'end' : 'start'}
+                                    announce
+                                />
+                            </span>
+                        ))}
                     </div>
 
                     {/* 불러오는 동안 목록은 비워 두고, 카드는 흰 박스 전체의 가운데에 띄운다 (아래 plan-panel-loading) */}
@@ -271,7 +298,7 @@ export function UsersPage() {
                         <ul className="plan-table-body users-table-body" aria-label="사용자 목록">
                             {/* 불러온 뒤 줄이 위에서부터 차례로 떠오른다 (--row: 순서, 14번째부터는 같이. users.css의 users-row-in).
                                 불러오는 동안 목록을 비우므로 새로 고칠 때마다 다시 보인다. 새로 초대한 사용자도 떠오르며 들어온다 */}
-                            {filtered.map((user, index) => {
+                            {listed.map((user, index) => {
                                 const rowBusy = busy === user.username;
                                 return (
                                     <li

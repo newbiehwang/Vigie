@@ -25,6 +25,7 @@ import { getDashboard } from '@/api/dashboard';
 import { useAuthStore } from '@/auth/authStore';
 import { LoadingCard, useMinimumVisible } from '@/components/LoadingCard';
 import { RefreshButton } from '@/components/RefreshButton';
+import { SortTh, sortedBy, useSort } from '@/components/SortHeader';
 import { useToast } from '@/components/Toast';
 import { Composer } from '@/features/chat/Composer';
 import type { DashboardData, DashboardResource, HealthStatus, SectionName, SectionState } from '@/types/dashboard';
@@ -154,6 +155,12 @@ function EmptyKpi({ label, data, section, order }: { label: string; data: Dashbo
 
 type SortKey = 'status' | 'name' | 'errors' | 'cost';
 const SORT_LABEL: Record<SortKey, string> = { status: '상태', name: '리소스', errors: '오류', cost: '이번 달 비용' };
+// 처음 누르면: 상태·이름은 오름차순(문제 먼저·가나다), 오류·비용은 큰 것부터
+const SORT_FIRST_DESC = (key: SortKey) => key === 'errors' || key === 'cost';
+const sortValue = (r: DashboardResource, key: SortKey): number | string =>
+    key === 'status' ? STATUS_ORDER.indexOf(r.status) : key === 'name' ? r.label ?? r.id : key === 'errors' ? r.errors24h ?? -1 : r.costMonth ?? -1;
+// 리소스 표는 한 번에 이만큼의 줄만 보이고, 나머지는 표 안에서 스크롤해 본다 (dashboard.css의 .dash-table-wrap)
+const VISIBLE_RESOURCE_ROWS = 10;
 
 export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
     const navigate = useNavigate();
@@ -164,7 +171,7 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'status', desc: false });
+    const [sort, toggleSort] = useSort<SortKey>({ key: 'status', desc: false }, SORT_FIRST_DESC);
     const showLoading = useMinimumVisible(loading && !data);
 
     // quiet: 주기적으로 다시 읽을 때. 기다림 표시와 실패 알림을 띄우지 않는다 (앞 화면을 그대로 둔다)
@@ -222,25 +229,7 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
     // 리소스별 비용은 실제 서버가 주지 않는다 (유료 설정이 필요하다). 값이 하나도 없으면 열을 뺀다
     const hasCost = Boolean(data?.resources.some((resource) => resource.costMonth !== undefined));
 
-    const resources = useMemo(() => {
-        if (!data) return [];
-        const value = (r: DashboardResource): number | string => {
-            if (sort.key === 'status') return STATUS_ORDER.indexOf(r.status);
-            if (sort.key === 'name') return r.label ?? r.id;
-            if (sort.key === 'errors') return r.errors24h ?? -1;
-            return r.costMonth ?? -1;
-        };
-        return [...data.resources].sort((a, b) => {
-            const x = value(a);
-            const y = value(b);
-            const cmp = typeof x === 'string' ? x.localeCompare(String(y), 'ko') : x - (y as number);
-            return sort.desc ? -cmp : cmp;
-        });
-    }, [data, sort]);
-
-    const toggleSort = (key: SortKey) =>
-        // 처음 누르면: 상태·이름은 오름차순(문제 먼저·가나다), 오류·비용은 큰 것부터
-        setSort((prev) => (prev.key === key ? { key, desc: !prev.desc } : { key, desc: key === 'errors' || key === 'cost' }));
+    const resources = useMemo(() => (data ? sortedBy(data.resources, sort, sortValue) : []), [data, sort]);
 
     return (
         <div className="dash">
@@ -418,23 +407,26 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                 </header>
                                 {!data.sections?.resources && !resources.length ? <NotYet /> : null}
                                 <StatusBar counts={counts} />
-                                <div className="dash-table-wrap">
+                                {/* 10줄까지 보이고 나머지는 표 안에서 스크롤. 머리 줄은 스크롤해도 위에 붙어 있다 */}
+                                <div
+                                    className={`dash-table-wrap${resources.length > VISIBLE_RESOURCE_ROWS ? ' is-scrolling' : ''}`}
+                                    style={{ '--visible-rows': VISIBLE_RESOURCE_ROWS } as CSSProperties}
+                                    tabIndex={resources.length > VISIBLE_RESOURCE_ROWS ? 0 : undefined}
+                                    aria-label={resources.length > VISIBLE_RESOURCE_ROWS ? '리소스 목록 (스크롤)' : undefined}
+                                >
                                     <table className="dash-table">
                                         <thead>
                                             <tr>
                                                 {(['name', 'status', 'errors', ...(hasCost ? ['cost'] : [])] as SortKey[]).map((key) => (
-                                                    <th
+                                                    <SortTh
                                                         key={key}
                                                         className={`is-${key}`}
-                                                        aria-sort={sort.key === key ? (sort.desc ? 'descending' : 'ascending') : undefined}
-                                                    >
-                                                        <button type="button" onClick={() => toggleSort(key)}>
-                                                            {SORT_LABEL[key]}
-                                                            <span className={`dash-sort${sort.key === key ? ' is-active' : ''}`} aria-hidden="true">
-                                                                {sort.key === key && sort.desc ? '▼' : '▲'}
-                                                            </span>
-                                                        </button>
-                                                    </th>
+                                                        column={key}
+                                                        label={SORT_LABEL[key]}
+                                                        sort={sort}
+                                                        onSort={toggleSort}
+                                                        align={key === 'errors' || key === 'cost' ? 'end' : 'start'}
+                                                    />
                                                 ))}
                                             </tr>
                                         </thead>
@@ -445,8 +437,13 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                                         <div className="dash-name-cell">
                                                             <span className="dash-kind">{resource.kind}</span>
                                                             <span className="dash-resource">
-                                                                <span className="dash-resource-name">{resource.label ?? resource.id}</span>
-                                                                <span className="dash-resource-detail">
+                                                                <span className="dash-resource-name" title={resource.label ?? resource.id}>
+                                                                    {resource.label ?? resource.id}
+                                                                </span>
+                                                                <span
+                                                                    className="dash-resource-detail"
+                                                                    title={`${resource.label ? `${resource.id} · ` : ''}${resource.detail}`}
+                                                                >
                                                                     {resource.label ? `${resource.id} · ` : ''}
                                                                     {resource.detail}
                                                                 </span>

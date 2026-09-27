@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { LoadingCard, useMinimumVisible } from '@/components/LoadingCard';
 import { RefreshButton } from '@/components/RefreshButton';
+import { SortButton, sortedBy, useSort } from '@/components/SortHeader';
 import { ToastHost, useToast } from '@/components/Toast';
 import type { AuditRecord } from '@/types/audit';
 import { formatKoreanDateTimeSeconds } from '@/utils/formatters';
@@ -24,10 +25,12 @@ import { AuditDetailModal } from './AuditDetailModal';
 import {
     activeCount,
     keyOf,
+    kindTextOf,
     matches,
     matchesQuery,
     parseQuery,
     requesterOf,
+    resultRankOf,
     summaryOf,
     timeOf,
     type GroupBy,
@@ -47,6 +50,12 @@ import {
 } from './timeWindow';
 import { MAX_RECORDS, useAuditRecords } from './useAuditRecords';
 import './audit.css';
+
+// 목록 정렬: 시각(기본, 최근 것부터) · 요청자 · 도구 · 결과. 요약은 긴 글이라 정렬하지 않는다
+type AuditSortKey = 'time' | 'user' | 'tool' | 'result';
+const AUDIT_SORT_LABEL: Record<AuditSortKey, string> = { time: '시각', user: '요청자', tool: '도구', result: '결과' };
+const auditSortValue = (record: AuditRecord, key: AuditSortKey): string | number =>
+    key === 'time' ? timeOf(record) : key === 'user' ? requesterOf(record) : key === 'tool' ? kindTextOf(record) : resultRankOf(record);
 
 const RENDER_STEP = 100; // 목록은 이만큼씩 그린다 (2,000행을 한 번에 그리지 않게). 끝에 닿으면 다음 묶음
 
@@ -162,6 +171,9 @@ export function AuditPage() {
     const parsed = useMemo(() => parseQuery(query), [query]);
     const searched = useMemo(() => inWindow.filter((record) => matchesQuery(record, parsed)), [inWindow, parsed]);
     const filtered = useMemo(() => searched.filter((record) => matches(record, selection)), [searched, selection]);
+    // 목록에 보이는 차례 (건수·그래프는 차례와 상관없이 filtered로 센다). 팝업창의 ↑/↓도 이 차례를 따른다
+    const [sort, toggleSort] = useSort<AuditSortKey>({ key: 'time', desc: true }, (key) => key === 'time');
+    const listed = useMemo(() => sortedBy(filtered, sort, auditSortValue), [filtered, sort]);
     const conditions = activeCount(selection) + (query.trim() ? 1 : 0);
     // 처음 화면(기간 전체, 거르기·검색어 없음, 그룹 기준 결과)과 다른가: '필터 초기화'를 켠다
     const customized =
@@ -171,9 +183,9 @@ export function AuditPage() {
         groupBy !== 'result';
 
     // 조건이나 기록이 바뀌면 목록을 처음 묶음부터 그린다
-    useEffect(() => setLimit(RENDER_STEP), [filtered]);
+    useEffect(() => setLimit(RENDER_STEP), [listed]);
 
-    const openIndex = openKey ? filtered.findIndex((record) => keyOf(record) === openKey) : -1;
+    const openIndex = openKey ? listed.findIndex((record) => keyOf(record) === openKey) : -1;
     // 보고 있던 기록이 거르기로 목록에서 빠지면 팝업창을 닫는다
     useEffect(() => {
         if (openKey && openIndex < 0) setOpenKey(null);
@@ -187,7 +199,7 @@ export function AuditPage() {
 
     // 팝업창에서 ↑/↓: 거른 목록의 앞뒤 기록으로 옮기고, 뒤의 목록도 그 행이 보이게 스크롤한다
     const move = (step: -1 | 1) => {
-        const next = filtered[openIndex + step];
+        const next = listed[openIndex + step];
         if (!next) return;
         const key = keyOf(next);
         setLimit((prev) => Math.max(prev, openIndex + step + 1 + RENDER_STEP / 2));
@@ -275,12 +287,17 @@ export function AuditPage() {
                     )}
 
                     <div className={`plan-table audit-table${listLoading ? ' is-loading' : ''}`}>
-                        <div className="plan-table-header audit-table-header" aria-hidden="true">
-                            <span className="audit-col-time">시각</span>
-                            <span className="audit-col-user">요청자</span>
-                            <span className="audit-col-tool">도구</span>
+                        {/* 머리글을 누르면 그 열로 정렬한다 (다시 누르면 방향을 뒤집는다) */}
+                        <div className="plan-table-header audit-table-header">
+                            {(['time', 'user', 'tool'] as AuditSortKey[]).map((key) => (
+                                <span key={key} className={`audit-col-${key}`}>
+                                    <SortButton column={key} label={AUDIT_SORT_LABEL[key]} sort={sort} onSort={toggleSort} announce />
+                                </span>
+                            ))}
                             <span className="audit-col-summary">요약</span>
-                            <span className="audit-col-status">결과</span>
+                            <span className="audit-col-status">
+                                <SortButton column="result" label={AUDIT_SORT_LABEL.result} sort={sort} onSort={toggleSort} announce />
+                            </span>
                         </div>
 
                         {/* 처음 불러올 때는 목록을 비워 두고, 카드는 흰 박스 전체의 가운데에 띄운다 (아래 plan-panel-loading) */}
@@ -305,7 +322,7 @@ export function AuditPage() {
                             </div>
                         ) : (
                             <ul ref={listBody} className="audit-table-body" aria-label="감사 기록">
-                                {filtered.slice(0, limit).map((record) => {
+                                {listed.slice(0, limit).map((record) => {
                                     const key = keyOf(record);
                                     return (
                                         <AuditRow
@@ -316,7 +333,7 @@ export function AuditPage() {
                                         />
                                     );
                                 })}
-                                {limit < filtered.length ? <EndSentinel onReach={showMore} /> : null}
+                                {limit < listed.length ? <EndSentinel onReach={showMore} /> : null}
                             </ul>
                         )}
                     </div>
@@ -331,7 +348,7 @@ export function AuditPage() {
 
             {openKey && openIndex >= 0 ? (
                 <AuditDetailModal
-                    record={filtered[openIndex]}
+                    record={listed[openIndex]}
                     onMove={move}
                     onClose={closeDetail}
                 />
