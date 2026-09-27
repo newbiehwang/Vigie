@@ -9,7 +9,8 @@ const ENV_DIR = path.resolve(__dirname, '..');
 
 export default defineConfig(({ mode }) => {
     // VITE_ 접두사가 없는 값(AWS_REGION 등)도 읽도록 ''. 읽기만 하고 번들에는 아래 define의 값만 들어간다
-    const env = loadEnv(mode, ENV_DIR, '');
+    // mock 모드(데모)는 Cognito를 쓰지 않으므로 배포 환경의 값을 번들에 넣지 않는다 (공개 데모 사이트에 남지 않게)
+    const env = mode === 'mock' ? ({} as Record<string, string>) : loadEnv(mode, ENV_DIR, '');
 
     return {
         plugins: [react()],

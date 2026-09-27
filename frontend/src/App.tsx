@@ -1,10 +1,11 @@
 // 앱 틀: 로그인하지 않았으면 안내 화면(LandingPage). 로그인 버튼을 누르면 전환 화면(LoginSplash)을 거쳐
 // Cognito 로그인 페이지로 가고, 실패하면 안내 화면에 오류를 보인다.
+// 데모(mock 모드, IS_DEMO)는 '체험하기'를 누르면 전환 화면 없이 바로 홈으로 들어간다 (Cognito가 없다)
 // 로그인했으면 위쪽 내비게이션 + 화면(홈 / 대화 / 감사 로그·사용자 관리는 관리자만)
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { setUnauthorizedHandler } from './api/http';
-import { isAdmin, isReturningFromLogin, onLoginResult } from './auth/authClient';
+import { IS_DEMO, isAdmin, isReturningFromLogin, login, onLoginResult } from './auth/authClient';
 import { useAuthStore } from './auth/authStore';
 import { LandingPage } from './components/layout/LandingPage';
 import { AutoLogin, LoginSplash } from './components/layout/LoginSplash';
@@ -76,8 +77,14 @@ export default function App() {
         ) : (
             <LandingPage
                 errorMessage={loginError}
+                demo={IS_DEMO}
                 onLogin={() => {
                     setLoginError('');
+                    if (IS_DEMO) {
+                        // 데모: 로그인 화면이 없으므로 바로 들어간다
+                        login().then(finishLogin, (error) => failLogin(String(error)));
+                        return;
+                    }
                     setStartingLogin(true);
                 }}
             />

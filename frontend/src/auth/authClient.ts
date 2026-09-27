@@ -7,7 +7,7 @@
 // 돌아올 주소는 지금 열린 앱 주소 + /redirect로 정한다. User Pool Client의 CallbackURLs에 배포 주소와
 // http://localhost:5173/redirect가 모두 등록되어 있어(cloudformation/base.yaml) 배포·로컬 어디서나 맞다.
 //
-// mock 모드(npm run dev:mock)에서는 Cognito 없이 로그인 버튼을 누르면 바로 로그인된다.
+// mock 모드(npm run dev:mock, 시연용 정적 배포 npm run build:demo)에서는 Cognito 없이 '체험하기'를 누르면 바로 들어간다.
 import { Amplify } from 'aws-amplify';
 import { fetchAuthSession, signInWithRedirect, signOut } from 'aws-amplify/auth';
 // /redirect로 돌아왔을 때 code를 토큰으로 바꾸는 처리를 켠다 (Amplify.configure 때 동작)
@@ -39,6 +39,8 @@ function groupsOf(value: unknown): string[] {
 }
 
 const MOCK = import.meta.env.MODE === 'mock';
+// 시연(데모) 화면인가: mock 모드가 곧 데모다. 안내 화면의 버튼이 '체험하기'가 되고, 누르면 전환 화면 없이 바로 들어간다
+export const IS_DEMO = MOCK;
 // mock 사용자는 관리자다. 주소에 ?mock-role=member를 붙여 열면 일반 사용자로 화면을 확인한다 (mock 모드에서만)
 const MOCK_MEMBER = MOCK && new URLSearchParams(window.location.search).get('mock-role') === 'member';
 const MOCK_USER: AuthUser = {
@@ -47,8 +49,26 @@ const MOCK_USER: AuthUser = {
     groups: MOCK_MEMBER ? [] : [ADMIN_GROUP, 'approvers'],
 };
 export const mockIsAdmin = () => isAdmin(MOCK_USER); // mock API가 GET /audit에 403을 흉내 낼 때 쓴다
-// mock 모드는 로그인된 상태로 시작한다 (화면만 고칠 때 바로 보이게). ?mock-auth=signed-out을 붙여 열면 안내 화면부터 본다
-let mockSignedIn = !(MOCK && new URLSearchParams(window.location.search).get('mock-auth') === 'signed-out');
+// mock 모드(데모)는 안내 화면에서 시작한다. '체험하기'를 누르면 들어가고, 새로 고쳐도 그 탭에서는 들어간 채로 둔다
+// (sessionStorage. 로그아웃하면 지운다). 화면만 고칠 때는 ?mock-auth=signed-in을 붙여 열면 바로 들어간다
+const DEMO_SESSION_KEY = 'vigie-demo-signed-in';
+function readDemoSession(): boolean {
+    try {
+        return window.sessionStorage.getItem(DEMO_SESSION_KEY) === '1';
+    } catch {
+        return false; // 저장소를 쓸 수 없는 브라우저(개인 정보 보호 모드 등)는 매번 안내 화면부터
+    }
+}
+function writeDemoSession(signedIn: boolean) {
+    try {
+        if (signedIn) window.sessionStorage.setItem(DEMO_SESSION_KEY, '1');
+        else window.sessionStorage.removeItem(DEMO_SESSION_KEY);
+    } catch {
+        // 저장하지 못해도 이번 화면에서는 들어간 상태다
+    }
+}
+let mockSignedIn =
+    MOCK && (new URLSearchParams(window.location.search).get('mock-auth') === 'signed-in' || readDemoSession());
 
 const USER_POOL_ID = import.meta.env.USER_POOL_ID;
 const CLIENT_ID = import.meta.env.COGNITO_CLIENT_ID;
@@ -162,6 +182,7 @@ export async function idToken(): Promise<string | null> {
 export async function login(): Promise<void> {
     if (MOCK) {
         mockSignedIn = true;
+        writeDemoSession(true);
         return;
     }
     if (!configured) {
@@ -184,6 +205,7 @@ export async function login(): Promise<void> {
 export async function logout(): Promise<void> {
     if (MOCK) {
         mockSignedIn = false;
+        writeDemoSession(false);
         return;
     }
     await signOut();

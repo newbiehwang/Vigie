@@ -8,6 +8,8 @@
 //   [자연어로 조회] [승인 뒤 실행] [감사 로그] [민감정보 가리기]
 // - 바탕은 Cognito 로그인 페이지·전환 화면과 같은 번짐 이미지 (assets/brand/login-background.svg)
 // - 로그인 버튼을 누르면 App이 전환 화면(LoginSplash의 AutoLogin)을 거쳐 Cognito로 보낸다
+// - 데모(demo, mock 모드)는 버튼이 '체험하기'이고, 누르면 로그인 없이 예시 데이터로 바로 들어간다.
+//   맨 아래에 데모 데이터의 출처를 적는다 (FOCUS 샘플은 CC BY 4.0이라 출처를 밝혀야 한다, mock/demo/frothly.ts)
 // - 오른쪽 대화 예시는 질문과 답변을 되풀이하는 그림이다 (LandingChatDemo.tsx)
 // - 처음 그릴 때 왼쪽 글만 태그·제목 → 소개 → 버튼 차례로 서서히 나타난다. 기능 카드는 움직이지 않는다
 //   (움직임 줄이기 설정이면 효과 없음)
@@ -44,7 +46,15 @@ const FEATURES: { title: string; text: string; icon: ReactNode }[] = [
     },
 ];
 
-export function LandingPage({ errorMessage, onLogin }: { errorMessage?: string; onLogin: () => void }) {
+export function LandingPage({
+    errorMessage,
+    demo = false,
+    onLogin,
+}: {
+    errorMessage?: string;
+    demo?: boolean;
+    onLogin: () => void;
+}) {
     return (
         <main className="landing" style={{ backgroundImage: `url(${background})` }}>
             <header className="landing-nav">
@@ -84,9 +94,10 @@ export function LandingPage({ errorMessage, onLogin }: { errorMessage?: string; 
                     ) : null}
 
                     <div className="landing-actions landing-enter" style={enter(2)}>
-                        {/* AWS 계정이 아니라 Vigie 계정(Cognito)으로 로그인·가입하므로 'AWS에서 로그인'이 아니라 '시작하기' */}
+                        {/* AWS 계정이 아니라 Vigie 계정(Cognito)으로 로그인·가입하므로 'AWS에서 로그인'이 아니라 '시작하기'.
+                            데모는 로그인 없이 둘러보므로 '체험하기' */}
                         <button type="button" className="login-submit landing-cta" onClick={onLogin}>
-                            시작하기
+                            {demo ? '체험하기' : '시작하기'}
                         </button>
                     </div>
                 </div>
@@ -108,6 +119,19 @@ export function LandingPage({ errorMessage, onLogin }: { errorMessage?: string; 
                 ))}
             </ul>
 
+            {demo ? (
+                <p className="landing-sources">
+                    데모 데이터: 가상 회사 Frothly의 AWS 운영 기록{' '}
+                    <a href="https://github.com/splunk/botsv3" target="_blank" rel="noreferrer">
+                        Splunk BOTS v3
+                    </a>{' '}
+                    (CC0) ·{' '}
+                    <a href="https://github.com/FinOps-Open-Cost-and-Usage-Spec/FOCUS-Sample-Data" target="_blank" rel="noreferrer">
+                        FinOps Foundation FOCUS 샘플
+                    </a>{' '}
+                    (CC BY 4.0, 서비스별 비용 비중만 사용). 시각은 지금에 맞춰 옮겼습니다.
+                </p>
+            ) : null}
         </main>
     );
 }
