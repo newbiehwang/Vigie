@@ -8,6 +8,7 @@ import {
     ACTION_EVENTS,
     ADMIN_EVENTS,
     GROUP_NAMES,
+    kindTextOf,
     REDACTED_LABELS,
     redactedTotal,
     roleText,
@@ -16,7 +17,6 @@ import {
     suspiciousOf,
     tokenTotal,
     tokensText,
-    toolLabelOf,
     usdText,
 } from './auditModel';
 
@@ -170,10 +170,7 @@ export function ResultBadge({ record }: { record: AuditRecord }) {
 // 도구 칸: 질문·변경 작업·사용자 관리는 종류를, 도구 호출은 도구 이름을 보인다 (목록 행과 기록 팝업창 제목이 같이 쓴다).
 // 종류마다 색을 달리하지 않는다: 목록·팝업창 모두 둘레 글자색(검정)을 따른다
 export function KindLabel({ record }: { record: AuditRecord }) {
-    if (record.kind === 'request') return <>질문</>;
-    if (record.kind === 'action') return <>{toolLabelOf(record.tool)}</>;
-    if (record.kind === 'admin') return <>사용자 관리</>;
-    return <>{labelOf(record.tool ?? '')}</>;
+    return <>{kindTextOf(record)}</>;
 }
 
 // 표시 칸: Slack · 의심 문구 · 의심 뒤 요청 · 미등록 도구 · 가림 (목록 행과 기록 팝업창 머리가 같이 쓴다)

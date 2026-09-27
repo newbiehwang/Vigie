@@ -121,6 +121,7 @@
   top: 0;
   z-index: 6;
   background: #fff;
+  color: #6c757d; /* 정렬 머리글(components/SortHeader)이 이 색을 물려받는다 */
 }
 
 .plan-table-header span {
@@ -132,53 +133,6 @@
   letter-spacing: 0.04em;
 }
 
-.plan-table-sort-button {
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  margin: 0;
-  color: inherit;
-  font: inherit;
-  text-transform: inherit;
-  letter-spacing: inherit;
-  cursor: pointer;
-}
-
-.plan-table-sort-button:focus-visible {
-  outline: 2px solid rgba(0, 123, 255, 0.24);
-  outline-offset: 3px;
-  border-radius: 6px;
-}
-
-.plan-table-sort-button.is-active {
-  color: #4a5563;
-}
-
-.plan-table-sort-indicator {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 12px;
-  font-size: 9px;
-  line-height: 1;
-  color: rgba(108, 117, 125, 0.72);
-  transition: color 140ms ease, opacity 140ms ease;
-}
-
-.plan-table-sort-button.is-active .plan-table-sort-indicator {
-  color: #6c757d;
-  opacity: 1;
-}
-
-.plan-table-sort-button:not(.is-active) .plan-table-sort-indicator {
-  color: rgba(108, 117, 125, 0.38);
-  opacity: 0.42;
-}
-
 .plan-table-col-project { flex: 1; min-width: 200px; }
 
 .plan-table-col-progress { width: 400px; flex-shrink: 0; }
@@ -187,10 +141,6 @@
 
 .plan-table-header .plan-table-col-status {
   text-align: center;
-}
-
-.plan-table-header .plan-table-col-status .plan-table-sort-button {
-  justify-content: center;
 }
 
 .plan-table-col-date { width: 180px; flex-shrink: 0; }

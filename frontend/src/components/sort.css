@@ -1,0 +1,78 @@
+/* 목록의 정렬 머리글 (SortHeader.tsx). 머리글 글자와 같은 회색 계열만 쓴다:
+   정렬할 수 있는 열은 옅은 위·아래 꺾쇠, 마우스를 올리면 조금 진하게, 지금 정렬한 열은 글자와 그 방향 꺾쇠를 진하게 */
+.sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.sort-button.is-end {
+  flex-direction: row-reverse; /* 오른쪽 맞춤 열: 꺾쇠를 글자 왼쪽에 두어 숫자 끝선과 글자 끝선을 맞춘다 */
+}
+
+.sort-button .sort-label {
+  color: inherit; /* 목록 머리의 span 색(.plan-table-header span)보다 버튼의 상태 색을 따른다 */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sort-button:hover {
+  color: #3c4650;
+  background: rgba(31, 41, 51, 0.05);
+}
+
+.sort-button.is-active {
+  color: #1f2933;
+}
+
+.sort-button:focus-visible {
+  outline: 2px solid rgba(0, 123, 255, 0.35);
+  outline-offset: 1px;
+}
+
+.sort-icon {
+  flex: none;
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sort-icon path {
+  stroke: #c3cad3;
+  transition: stroke 120ms ease;
+}
+
+.sort-button:hover .sort-icon path {
+  stroke: #9aa4b1;
+}
+
+/* 지금 방향의 꺾쇠만 진하게, 반대쪽은 거의 보이지 않게 */
+.sort-icon.is-asc .sort-icon-up,
+.sort-icon.is-desc .sort-icon-down {
+  stroke: #1f2933;
+}
+
+.sort-icon.is-asc .sort-icon-down,
+.sort-icon.is-desc .sort-icon-up {
+  stroke: #dfe4ea;
+}
+
+.sort-button:hover .sort-icon.is-asc .sort-icon-up,
+.sort-button:hover .sort-icon.is-desc .sort-icon-down {
+  stroke: #1f2933;
+}

@@ -171,6 +171,22 @@ const RESULT_LABELS: Record<string, string> = {
 const resultOf = (record: AuditRecord) =>
     record.kind === 'action' && record.event && record.event in ACTION_EVENTS ? record.event : record.status;
 
+// 목록의 '도구' 칸 글자 (KindLabel과 같다. 정렬에도 쓴다)
+export const kindTextOf = (record: AuditRecord) =>
+    record.kind === 'request'
+        ? '질문'
+        : record.kind === 'action'
+          ? toolLabelOf(record.tool)
+          : record.kind === 'admin'
+            ? '사용자 관리'
+            : labelOf(record.tool ?? '');
+
+// 결과로 정렬할 때의 차례: 거르기 목록과 같은 차례 (성공 · 실패 · 승인 요청 · 승인 · 거절 · 실행 · 실행 실패)
+export const resultRankOf = (record: AuditRecord) => {
+    const index = Object.keys(RESULT_LABELS).indexOf(resultOf(record) ?? '');
+    return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+};
+
 const SOURCE_LABELS: Record<string, string> = { web: '웹', slack: 'Slack', direct: '직접 호출' };
 
 const FLAG_LABELS: Record<string, string> = {

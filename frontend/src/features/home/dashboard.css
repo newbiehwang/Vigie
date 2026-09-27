@@ -229,9 +229,17 @@
   color: #5f6670;
 }
 
+/* 마우스를 올리면 파란색으로 바꾸지 않고, 원래 회색을 진하게만 한다. 화살표는 가리키는 쪽으로 살짝 움직인다 */
 .dash-attention-item:hover .dash-attention-action,
-.dash-attention-item:hover .dash-ask-arrow {
-  color: var(--color-primary);
+.dash-attention-item:hover .dash-ask-arrow,
+.dash-attention-item:focus-visible .dash-attention-action,
+.dash-attention-item:focus-visible .dash-ask-arrow {
+  color: #1f2933;
+}
+
+.dash-attention-item:hover .dash-ask-arrow,
+.dash-attention-item:focus-visible .dash-ask-arrow {
+  transform: translate(1px, -1px);
 }
 
 /* ---------------------------------------------------------------- 숫자 카드 */
@@ -691,64 +699,79 @@
 .dash-badge.is-ok { background: var(--dash-ok-bg); color: var(--dash-ok-ink); }
 .dash-badge.is-none { background: var(--dash-none-bg); color: var(--dash-none-ink); }
 
-/* 리소스 표 */
+/* 리소스 표
+   한 번에 --visible-rows(10)줄까지 보이고, 넘치면 표 안에서 스크롤한다 (머리 줄은 위에 붙어 있다).
+   줄 높이를 고정해야 10줄 높이를 셀 수 있으므로, 이름·설명은 한 줄로 자르고(…) 전체는 마우스를 올리면 보인다 */
 .dash-table-wrap {
+  --dash-head: 35px; /* 머리 줄 높이 */
+  --dash-row: 54px; /* 줄 하나의 높이 (이름 한 줄 + 설명 한 줄 + 위아래 여백) */
   margin: 0 -16px -16px;
-  overflow-x: auto;
+  max-height: calc(var(--dash-head) + var(--visible-rows, 10) * var(--dash-row));
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: 0 0 14px 14px;
+}
+
+/* 스크롤이 생기면 아래에 옅은 그림자로 더 있다는 것을 알린다 (끝까지 내리면 사라진다) */
+.dash-table-wrap.is-scrolling {
+  background:
+    linear-gradient(#fff 30%, rgba(255, 255, 255, 0)) center bottom / 100% 24px no-repeat local,
+    radial-gradient(farthest-side at 50% 100%, rgba(31, 41, 51, 0.1), transparent) center bottom / 100% 10px no-repeat scroll;
+  background-color: #fff;
+}
+
+.dash-table-wrap:focus-visible {
+  outline: 2px solid rgba(0, 123, 255, 0.35);
+  outline-offset: -2px;
 }
 
 .dash-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed; /* 열 너비를 정해 두어야 긴 이름이 표를 넓히지 않고 …로 잘린다 */
   font-size: 0.84rem;
 }
 
 .dash-table th {
-  padding: 0;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: var(--dash-head);
+  box-sizing: border-box;
+  padding: 0 12px;
   border-top: 1px solid #eef2f6;
   border-bottom: 1px solid #eef2f6;
   background: #fafbfd;
   text-align: left;
   white-space: nowrap;
-}
-
-.dash-table th button {
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 12px;
-  border: 0;
-  background: transparent;
   font-family: var(--font-label);
   font-size: 12px;
   font-weight: 600;
   color: #6b7785;
-  cursor: pointer;
 }
 
-.dash-table th.is-errors button,
-.dash-table th.is-cost button {
-  justify-content: flex-end;
+.dash-table th.is-status { width: 92px; }
+.dash-table th.is-errors { width: 72px; }
+.dash-table th.is-cost { width: 104px; }
+
+.dash-table th.is-errors,
+.dash-table th.is-cost {
+  text-align: right;
 }
 
-.dash-table th:first-child button,
+.dash-table th:first-child,
 .dash-table td:first-child {
   padding-left: 16px;
 }
 
-.dash-table th:last-child button,
+.dash-table th:last-child,
 .dash-table td:last-child {
   padding-right: 16px;
 }
 
-.dash-sort {
-  font-size: 9px;
-  color: #c3cad3;
-}
-
-.dash-sort.is-active {
-  color: var(--color-primary);
+.dash-table tbody tr {
+  height: var(--dash-row);
 }
 
 .dash-table td {
@@ -800,13 +823,18 @@
 .dash-resource-name {
   font-weight: 600;
   color: var(--color-ink);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dash-resource-detail {
   font-size: 12px;
+  line-height: 1.4;
   color: #8a94a0;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* 최근 변경 (시간 줄)
