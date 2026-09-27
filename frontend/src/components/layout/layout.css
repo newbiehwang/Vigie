@@ -1,110 +1,6 @@
 /* AXPI(LG Entrue) components/layout/layout.css를 그대로 가져와 색만 바꿨다. 맨 아래 'Vigie에서 더한 것'만 새로 썼다 */
 
 
-.login-shell {
-  height: 100vh;
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  position: relative;
-  isolation: isolate;
-}
-
-.login-shell::before {
-  content: "";
-  position: absolute;
-  width: min(420px, 70vw);
-  aspect-ratio: 1;
-  left: max(-80px, -8vw);
-  top: max(-100px, -12vw);
-  background: radial-gradient(
-    circle,
-    rgba(0, 123, 255, 0.16) 0%,
-    rgba(0, 123, 255, 0) 70%
-  );
-  pointer-events: none;
-  z-index: -1;
-}
-
-.login-shell::after {
-  content: "";
-  position: absolute;
-  width: min(440px, 75vw);
-  aspect-ratio: 1;
-  right: max(-90px, -8vw);
-  bottom: max(-110px, -10vw);
-  background: radial-gradient(
-    circle,
-    rgba(35, 47, 62, 0.12) 0%,
-    rgba(35, 47, 62, 0) 72%
-  );
-  pointer-events: none;
-  z-index: -1;
-}
-
-.login-card {
-  width: min(420px, 100%);
-  border-radius: 16px;
-  border: 1px solid #dfe6ee;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 16px 40px rgba(35, 47, 62, 0.13);
-  padding: 28px 28px 24px;
-  animation: rise-in 320ms ease both;
-}
-
-/* 로고(가로로 긴 Vigie 워드마크) 아래에 제목과 안내를 가운데로 쌓는다.
-   예전에는 정사각형 아이콘 옆에 글을 두는 가로 배치라, 워드마크가 들어오자 글 칸이 한 글자 폭으로 눌렸다 */
-.login-brand {
-  display: grid;
-  justify-items: center;
-  gap: 16px;
-  margin: 8px 0 24px;
-  text-align: center;
-}
-
-/* 로고 칸이 카드 폭을 모두 차지하므로(AXPI의 .logo-mark: width 100%) 그 안에서 가운데에 둔다 */
-.login-brand .logo-mark {
-  justify-content: center;
-}
-
-.login-brand-text {
-  min-width: 0;
-}
-
-.login-title {
-  margin: 0;
-  font-family: var(--font-headline);
-  font-size: 1.4rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: #1f2933;
-}
-
-.login-description {
-  margin: 4px 0 0;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  color: var(--color-neutral);
-}
-
-.login-form {
-  display: grid;
-  gap: 12px;
-}
-
-.login-field {
-  display: grid;
-  gap: 6px;
-}
-
-.login-field label {
-  font-family: var(--font-label);
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: #3c4650;
-}
-
 .login-input {
   width: 100%;
   height: 42px;
@@ -126,14 +22,6 @@
   outline: none;
   border-color: rgba(0, 123, 255, 0.56);
   box-shadow: inset 0 0 0 1px rgba(0, 123, 255, 0.14);
-}
-
-.login-hint {
-  margin: 0;
-  font-family: var(--font-label);
-  font-size: 0.8rem;
-  line-height: 1.45;
-  color: #8a94a0;
 }
 
 .login-error-alert {
@@ -522,10 +410,6 @@
   width: auto;
 }
 
-.login-brand .logo-wordmark-image {
-  height: 48px;
-}
-
 .nav-link {
   text-decoration: none;
 }
@@ -560,18 +444,366 @@
   gap: 3px;
 }
 
-/* 로고의 'aws' 글자를 옆 글자('에서 로그인')와 한 줄의 낱말처럼 맞춘다 (AWS 로고 비율 640:512).
-   - 크기: 'aws' 글자 높이가 옆 한글 높이의 5/6쯤(11px)이 되게 한다. 소문자라 한글보다 조금 낮아야 자연스럽다
-   - 위치: 로고 아래쪽 절반은 화살표라, 가운데 정렬만 하면 'aws'가 위로 떠 보인다.
-     'aws' 글자의 아래 끝이 한글의 글자 기준선에 오도록 5px 내린다 */
-.login-submit-logo {
-  width: 35px;
-  height: 28px;
-  flex-shrink: 0;
-  transform: translateY(5px);
+/* ---------------------------------------------------------------- 안내 화면 (LandingPage.tsx)
+   바탕은 Cognito 로그인 페이지와 같은 번짐 이미지. 왼쪽에 소개와 로그인 버튼, 오른쪽에 대화 미리 보기(그림),
+   아래에 기능 카드 네 개. 카드·미리 보기는 앱 카드와 같은 입체감(--raised-*) */
+.landing {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 clamp(16px, 4vw, 56px);
+  background-color: #f7f9fc;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
 }
 
-/* 앱을 여는 중 (로그인 상태 확인) */
+.landing-nav {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: 22px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.landing-logo {
+  display: block;
+  height: 40px;
+  width: auto;
+}
+
+.landing-hero {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: clamp(24px, 6vh, 72px) 0 clamp(28px, 5vh, 56px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  align-items: center;
+  gap: clamp(28px, 5vw, 72px);
+}
+
+.landing-copy {
+  display: grid;
+  gap: 18px;
+  justify-items: start;
+}
+
+/* 제목 위 태그: #Cloud Native #Serverless #MCP */
+.landing-tags {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.landing-tags li {
+  padding: 4px 11px;
+  border: 1px solid rgba(0, 123, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(238, 244, 255, 0.85);
+  font-family: var(--font-label);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-secondary);
+}
+
+.landing-title {
+  margin: 0;
+  font-family: var(--font-headline);
+  font-size: clamp(2rem, 4.2vw, 3.1rem);
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: -0.03em;
+  color: var(--color-ink);
+}
+
+.landing-lead {
+  margin: 0;
+  max-width: 34em;
+  font-size: 1rem;
+  line-height: 1.7;
+  color: #4a5563;
+}
+
+.landing-actions {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  margin-top: 6px;
+}
+
+.landing-cta.login-submit {
+  min-width: 200px;
+  padding: 0 28px;
+  height: 48px;
+  font-size: 1rem;
+}
+
+.landing-copy .login-error-alert {
+  width: min(460px, 100%);
+}
+
+/* 대화 미리 보기 (그림): 창 모양 흰 카드 */
+.landing-preview-wrap {
+  min-width: 0;
+}
+
+.landing-preview {
+  border: 1px solid var(--raised-border);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 2px 4px rgba(35, 47, 62, 0.05),
+    0 28px 60px rgba(35, 47, 62, 0.14);
+  overflow: hidden;
+  animation: landing-float 7s ease-in-out 1.2s infinite;
+}
+
+.landing-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 11px 14px;
+  border-bottom: 1px solid #eef2f6;
+  background: #fafbfd;
+}
+
+.landing-preview-bar i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #dfe6ee;
+}
+
+.landing-preview-body {
+  display: grid;
+  gap: 14px;
+  padding: 18px 18px 20px;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: #1f2933;
+}
+
+.landing-bubble {
+  justify-self: end;
+  margin: 0;
+  padding: 8px 13px;
+  border: 1px solid #d3e4fb;
+  border-radius: 14px;
+  background: #e7f1ff;
+}
+
+.landing-answer {
+  display: flex;
+  gap: 10px;
+}
+
+.landing-avatar {
+  flex: none;
+  width: 26px;
+  height: 26px;
+}
+
+.landing-answer-body {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.landing-answer-body p {
+  margin: 0;
+}
+
+.landing-trace {
+  font-size: 12px;
+  color: #6b7785;
+}
+
+.landing-trace b {
+  color: #58a779;
+  font-size: 9px;
+  margin-right: 4px;
+}
+
+.landing-trace span {
+  margin-left: 4px;
+  color: #9aa4b1;
+}
+
+.landing-table {
+  border-collapse: collapse;
+  border: 1px solid #e1e7ef;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.landing-table td {
+  padding: 5px 10px;
+  border-top: 1px solid #eef2f6;
+}
+
+.landing-table td:nth-child(2) {
+  text-align: right;
+}
+
+.landing-approval {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--raised-border);
+  border-top: 3px solid #f0a020;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--raised-shadow-sm);
+}
+
+.landing-approval-badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(255, 153, 0, 0.18);
+  color: #9a5b00;
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.landing-approval-title {
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.landing-approval-change {
+  margin-left: auto;
+  font-family: var(--font-label);
+  font-size: 12px;
+  color: #8a94a0;
+}
+
+.landing-approval-change b {
+  color: #111827;
+  font-size: 13px;
+}
+
+/* 기능 카드 네 개 */
+.landing-features {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  padding-bottom: 40px;
+}
+
+.landing-feature {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 18px 18px 20px;
+  border: 1px solid var(--raised-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--raised-shadow);
+}
+
+.landing-feature-icon {
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border-radius: 9px;
+  background: #eef4ff;
+  fill: none;
+  stroke: var(--color-primary);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.landing-feature h2 {
+  margin: 4px 0 0;
+  font-family: var(--font-label);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.landing-feature p {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  color: #5f6b7a;
+}
+
+/* 처음 그릴 때 차례로 떠오른다 (--enter 순서, 70ms씩) */
+.landing-enter {
+  animation: landing-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--enter, 0) * 70ms + 60ms);
+}
+
+@keyframes landing-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 미리 보기 창이 천천히 떠 있는 듯 오르내린다 */
+@keyframes landing-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@media (max-width: 980px) {
+  .landing-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .landing-features {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .landing-logo {
+    height: 32px;
+  }
+
+  .landing-features {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .landing-cta.login-submit {
+    width: 100%;
+  }
+
+  .landing-actions {
+    justify-items: stretch;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-enter,
+  .landing-preview {
+    animation: none;
+  }
+}
+
 /* 로그인 전환 화면 (LoginSplash.tsx). 바탕은 Cognito 로그인 페이지와 같은 번짐 이미지(style의 backgroundImage),
    가운데 흰 카드는 Cognito 로그인 상자처럼 둥근 흰 카드 + 그림자 + 위쪽 Vigie 로고 */
 .login-splash {
