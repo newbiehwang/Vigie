@@ -16,6 +16,13 @@ import type { PendingAction } from "../types/actions";
 import type { Artifact } from "../types/artifacts";
 import type { AdminEvent, AuditQuery, AuditRecord, TraceStep } from "../types/audit";
 import type { ManagedGroup, ManagedUser, UserRole } from "../types/users";
+import type {
+  DashboardAlarm,
+  DashboardChange,
+  DashboardData,
+  DashboardFinding,
+  DashboardResource,
+} from "../types/dashboard";
 
 interface MockMessage {
   id: string;
@@ -1444,6 +1451,7 @@ const route = (
   if (method === "get" && path === "/audit" && params.answer) return answerAudit(params.answer);
   if (first === "users") return usersRoute(method, path.split("/").filter(Boolean), body, params);
   if (method === "get" && path === "/audit") return queryAudit(params);
+  if (method === "get" && path === "/dashboard") return [200, dashboardData()];
   if (method === "get" && path === "/health") {
     return [200, { status: "ok", model: MODEL }];
   }
@@ -1608,6 +1616,129 @@ const route = (
     ];
   }
   return [404, { error: `Route not found: ${method.toUpperCase()} ${path}` }];
+};
+
+// ---------------------------------------------------------------- 홈 대시보드 (GET /dashboard, types/dashboard.ts)
+// 실제로는 서버가 주기적으로 모아 둔 값을 읽는다 (아직 서버 집계는 없다). mock은 오늘 날짜에 맞춰 그럴듯한 값을 만든다.
+// 이 mock 안의 다른 상태와 이어진다: 대화에서 승인을 기다리는 요청 수, 승인해 실행한 변경(최근 변경),
+// 알람 알림을 끄면 치울 것에 '알림 꺼진 알람'이 생기고, 보존 기간을 줄이면 '보존 기간이 긴 로그'가 없어진다
+
+// 날짜마다 같은 값이 나오는 가짜 난수 (0~1). 새로 고쳐도 차트가 흔들리지 않게
+const wobble = (n: number) => {
+  const x = Math.sin(n * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+const dashboardData = (): DashboardData => {
+  const nowS = Math.floor(Date.now() / 1000);
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const dayOfMonth = today.getDate();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  // 일별 비용: 1일부터 어제까지 (비용 데이터는 하루 늦게 확정된다). 평일이 조금 더 높고, 사흘 전에 한 번 튄다
+  const daily = Array.from({ length: Math.max(dayOfMonth - 1, 1) }, (_, i) => {
+    const day = i + 1;
+    const weekday = new Date(year, month, day).getDay();
+    const base = weekday === 0 || weekday === 6 ? 11.2 : 14.6;
+    const spike = day === dayOfMonth - 3 ? 9.4 : 0;
+    return {
+      date: `${year}-${pad(month + 1)}-${pad(day)}`,
+      amount: Math.round((base + wobble(day + month * 31) * 3.1 + spike) * 100) / 100,
+    };
+  });
+  const monthToDate = Math.round(daily.reduce((sum, d) => sum + d.amount, 0) * 100) / 100;
+  const perDay = monthToDate / daily.length;
+  const forecast = Math.round(perDay * daysInMonth);
+  const shares: [string, number][] = [
+    ["Lambda", 0.34], ["EC2", 0.27], ["CloudWatch", 0.14], ["S3", 0.09], ["DynamoDB", 0.07], ["API Gateway", 0.05],
+  ];
+  const named = shares.map(([service, share]) => ({ service, amount: Math.round(monthToDate * share * 100) / 100 }));
+  const rest = Math.round((monthToDate - named.reduce((sum, s) => sum + s.amount, 0)) * 100) / 100;
+  const byService = [...named, { service: "기타", amount: rest }];
+
+  // 오류: 지난 24시간 1시간마다. 네 시간 전부터 늘었다
+  const hourly = Array.from({ length: 24 }, (_, i) =>
+    Math.round(wobble(i + dayOfMonth * 24) * 2 + (i >= 20 ? 6 + (i - 20) * 2 : 0)),
+  );
+  const total24h = hourly.reduce((sum, n) => sum + n, 0);
+
+  // 승인 대기: 대화에서 만든 요청 가운데 아직 결정하지 않은 것
+  const pendingActions = [...actions.values()].filter(
+    (action) => action.status === "pending" && action.expiresAt > nowS,
+  );
+
+  const firing: DashboardAlarm[] = mockResources.alarmActions
+    ? [{ name: MOCK_ALARM, metric: "5XXError > 5 (5분)", since: nowS - 12 * 60 }]
+    : []; // 알림을 끄면 울리지 않는 것으로 본다 (mock)
+
+  const HOUR = 3600;
+  const longRetention = mockResources.retention === null || mockResources.retention > 14; // 14일이면 충분한 개발 로그
+  const resources: DashboardResource[] = [
+    { id: "wga-llm-dev", kind: "Lambda", status: "fail", detail: "오류율 4.2% · 시간 초과 늘어남", errors24h: 31, costMonth: 118.4, changedAt: nowS - 26 * HOUR },
+    { id: MOCK_ALARM, kind: "Alarm", status: mockResources.alarmActions ? "fail" : "warn", detail: mockResources.alarmActions ? "ALARM · 12분째" : "알림 꺼짐 (점검 중)" },
+    { id: "i-0428ab91c3d5e7f60", label: "wga-batch", kind: "EC2", status: "warn", detail: "CPU 평균 1.8% (14일) · 놀고 있음", costMonth: 61.2 },
+    { id: "wga-reports-dev", kind: "S3", status: "warn", detail: "퍼블릭 액세스 차단 일부 꺼짐", costMonth: 4.1 },
+    { id: MOCK_LOG_GROUP, kind: "Logs", status: longRetention ? "warn" : "ok", detail: `보존 기간 ${retentionText(mockResources.retention)}` },
+    { id: "wga-mcp-dev", kind: "Lambda", status: "ok", detail: "오류 없음", errors24h: 0, costMonth: 22.7 },
+    { id: "wga-chat-history-dev", kind: "Lambda", status: "ok", detail: "오류 2건 (재시도로 성공)", errors24h: 2, costMonth: 3.9 },
+    { id: "i-0b17c2d9e4a5f6071", label: "wga-web", kind: "EC2", status: "ok", detail: "상태 검사 2/2 통과", costMonth: 58.9 },
+    { id: "wga-artifacts-dev", kind: "S3", status: "ok", detail: "차단 4개 모두 켜짐", costMonth: 6.3 },
+    { id: "/aws/lambda/wga-mcp-dev", kind: "Logs", status: "ok", detail: "보존 기간 14일" },
+    { id: "wga-slackbot-dev", kind: "Lambda", status: "none", detail: "지난 24시간 호출 없음", errors24h: 0, costMonth: 0.2 },
+  ];
+
+  // 최근 변경: 이 mock에서 승인해 실행한 것 + CloudTrail에만 있는 것
+  const appChanges: DashboardChange[] = [...actions.values()]
+    .filter((action) => action.status === "executed" && action.decidedAt)
+    .map((action) => ({
+      at: action.decidedAt!,
+      source: "app" as const,
+      actor: "나 (대화에서 승인)",
+      summary: `${action.before} → ${action.after} · ${action.target ?? action.tool}`,
+    }));
+  const cloudChanges: DashboardChange[] = [
+    { at: nowS - 47 * 60, source: "cloudtrail", actor: "deploy-bot", summary: "Lambda wga-llm-dev 코드 배포 (UpdateFunctionCode)" },
+    { at: nowS - 3 * HOUR, source: "app", actor: "kim@example.com", summary: "로그 보존 기간 30일 → 14일 · /aws/lambda/wga-mcp-dev" },
+    { at: nowS - 9 * HOUR, source: "cloudtrail", actor: "park@example.com", summary: "보안 그룹 sg-0a1b 인바운드 443 추가 (AuthorizeSecurityGroupIngress)" },
+    { at: nowS - 20 * HOUR, source: "cloudtrail", actor: "deploy-bot", summary: "S3 wga-reports-dev 버킷 정책 변경 (PutBucketPolicy)" },
+  ];
+  const changes = [...appChanges, ...cloudChanges].sort((a, b) => b.at - a.at);
+
+  const findings: DashboardFinding[] = [
+    { kind: "idle-ec2", status: "warn", title: "놀고 있는 EC2 1대", detail: "wga-batch · 14일 동안 CPU 평균 1.8%", savingsMonthly: 61.2, question: "놀고 있는 EC2 인스턴스 찾아줘" },
+    { kind: "public-s3", status: "fail", title: "공개될 수 있는 S3 버킷 1개", detail: "wga-reports-dev · 퍼블릭 액세스 차단 2개 꺼짐", question: "wga-reports-dev 버킷 보안 점검해줘" },
+    ...(longRetention
+      ? [{ kind: "log-retention" as const, status: "warn" as const, title: "보존 기간이 긴 로그 그룹 1개", detail: `${MOCK_LOG_GROUP} · ${retentionText(mockResources.retention)} 보관, 14일이면 충분`, savingsMonthly: 7.8, question: `${MOCK_LOG_GROUP} 로그 보존 기간 14일로 줄여줘` }]
+      : []),
+    ...(!mockResources.alarmActions
+      ? [{ kind: "alarm-muted" as const, status: "warn" as const, title: "알림이 꺼진 알람 1개", detail: `${MOCK_ALARM} · 울려도 메일이 가지 않음`, question: `${MOCK_ALARM} 알람 알림 다시 켜야 해?` }]
+      : []),
+  ];
+
+  return {
+    generatedAt: nowS - 3 * 60, // 3분 전에 모았다
+    env: "dev",
+    region: "ap-northeast-2",
+    alarms: { total: 24, firing },
+    errors: { total24h, previous24h: Math.round(total24h * 0.62), hourly },
+    cost: {
+      monthToDate,
+      lastMonthSamePeriod: Math.round((monthToDate / 1.081) * 100) / 100,
+      forecast,
+      daily,
+      byService,
+    },
+    approvals: {
+      pending: pendingActions.length,
+      soonestExpiresAt: pendingActions.length ? Math.min(...pendingActions.map((a) => a.expiresAt)) : undefined,
+    },
+    resources,
+    changes,
+    findings,
+  };
 };
 
 const mockAdapter: AxiosAdapter = (config) =>

@@ -1,78 +1,5 @@
-/* 홈: 흰 카드(AXPI .plan-panel)는 그대로 두고, 안의 구성과 글자 크기·굵기·등장 효과는 FinGate-X 첫 화면
-   (fingate/client/src/styles.css의 .entry-wrap · h1.hero · .standfirst · .prompt · .reveal)을 가져왔다.
-   색은 FinGate-X(갈색·로즈) 대신 WGA 색을 쓴다. */
-
-/* 내용을 카드 가운데보다 조금 위에 둔다. 정가운데면 입력칸 아래로 펼쳐지는 예시 목록이 카드 바닥에 잘린다 */
-.home-hero {
-  width: min(760px, 100%);
-  margin: 0 auto;
-  padding-top: clamp(2rem, 9vh, 6rem);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.1rem;
-  text-align: center;
-  word-break: keep-all; /* 한국어 단어 중간에서 줄이 바뀌지 않게 ('어떤 도 / 구를') */
-}
-
-.home-headline {
-  margin: 0;
-  font-family: var(--font-headline);
-  font-size: clamp(1.75rem, 3.4vw, 2.5rem);
-  font-weight: 300;
-  letter-spacing: -0.03em;
-  line-height: 1.24;
-  text-wrap: balance;
-  color: var(--color-ink);
-}
-
-/* 두 줄이 한 박자씩 따로 떠오르므로 줄마다 따로 둔다 */
-.home-headline > span,
-.home-headline > b {
-  display: block;
-}
-
-.home-headline b {
-  font-weight: 700;
-  color: var(--color-primary);
-}
-
-.home-standfirst {
-  margin: 0;
-  max-width: 38rem;
-  font-family: var(--font-body);
-  font-size: 1.0625rem;
-  line-height: 1.62;
-  color: #6b7785;
-}
-
-.reveal {
-  animation: home-enter 0.52s cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
-}
-
-@keyframes home-enter {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .reveal {
-    animation: none;
-  }
-}
-
-/* 큰 입력창 (FinGate-X .prompt): 2줄 입력칸 + 아래 줄(키 안내 · 모델 · 보내기) */
-.home-hero .composer-wrap {
-  width: 100%;
-  margin-top: 1.4rem;
-  text-align: left;
-}
+/* 홈의 입력창 (Composer variant="home"). 모양은 FinGate-X 첫 화면의 입력창(.prompt)을 가져왔다.
+   홈 대시보드 위에서는 한 줄짜리(compact)로 쓴다. 대시보드는 dashboard.css */
 
 .composer.composer--home {
   flex-direction: column;
@@ -92,6 +19,28 @@
 
 .composer--home .composer-actions {
   width: 100%;
+}
+
+/* 한 줄 입력칸: 입력칸 · 키 안내 · 보내기를 한 줄에 */
+.composer.composer--home.is-compact {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.55rem 0.55rem 1rem;
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(35, 47, 62, 0.05), 0 8px 22px rgba(35, 47, 62, 0.06);
+}
+
+.composer--home.is-compact .composer-input {
+  flex: 1;
+  min-height: 0;
+  font-size: 0.95rem;
+}
+
+.composer--home.is-compact .composer-actions {
+  width: auto;
+  flex: none;
+  gap: 0.75rem;
 }
 
 .composer-hint {
@@ -126,17 +75,12 @@
 }
 
 @media (max-width: 760px) {
-  .home-hero {
-    padding-top: 1.5rem;
-    gap: 0.9rem;
-  }
-
-  .home-standfirst {
-    font-size: 0.95rem;
-  }
-
   .composer.composer--home {
     padding: 0.9rem 0.9rem 0.7rem;
+  }
+
+  .composer.composer--home.is-compact {
+    padding: 0.45rem 0.45rem 0.45rem 0.85rem;
   }
 
   /* 좁은 화면: 키 안내는 숨긴다 (휴대폰에는 Tab 키가 없다) */
