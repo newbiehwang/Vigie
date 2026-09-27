@@ -42,17 +42,31 @@ def test_managed_login_needs_essentials_and_version_2():
 def test_logo_bytes_in_template_match_the_brand_files():
     assert cognito_branding.main(["--check"]) == 0
     assets = {a["Category"]: a for a in resources()["ManagedLoginBranding"]["Properties"]["Assets"]}
-    assert set(assets) == {"FORM_LOGO", "FAVICON_SVG"}
+    assert set(assets) == {"FORM_LOGO", "FAVICON_SVG", "PAGE_BACKGROUND"}
     assert all(a["Extension"] == "SVG" and a["ColorMode"] == "LIGHT" for a in assets.values())
     logo = base64.b64decode(assets["FORM_LOGO"]["Bytes"]).decode("utf-8")
     original = (ROOT / "frontend" / "src" / "assets" / "brand" / "vigie-logo.svg").read_text(encoding="utf-8")
     assert re.search(r' d="([^"]+)"', logo).group(1) == re.search(r' d="([^"]+)"', original).group(1)
 
 
-def test_logo_svgs_use_only_elements_and_attributes_cognito_accepts():
+# Cognito 문서의 허용 목록 가운데 여기서 쓰는 것 (요소·속성 이름은 대소문자를 가리지 않고 비교한다)
+ALLOWED_ELEMENTS = {"svg", "path", "defs", "lineargradient", "radialgradient", "stop", "rect"}
+ALLOWED_ATTRIBUTES = {"xmlns", "viewbox", "width", "height", "fill", "d", "preserveaspectratio", "id", "x1", "y1",
+                      "x2", "y2", "gradientunits", "cx", "cy", "r", "offset", "stop-color", "stop-opacity"}
+
+
+def test_svgs_use_only_elements_and_attributes_cognito_accepts():
     for svg in cognito_branding.assets().values():
-        assert set(re.findall(r"<(\w+)", svg)) <= {"svg", "path"}
-        assert set(re.findall(r"\s([\w:-]+)=", svg)) <= {"xmlns", "viewBox", "width", "height", "fill", "d"}
+        assert {name.lower() for name in re.findall(r"<(\w+)", svg)} <= ALLOWED_ELEMENTS
+        assert {name.lower() for name in re.findall(r"\s([\w:-]+)=", svg)} <= ALLOWED_ATTRIBUTES
+
+
+def test_page_background_is_on_and_shared_with_the_app():
+    settings = resources()["ManagedLoginBranding"]["Properties"]["Settings"]
+    assert settings["components"]["pageBackground"]["image"]["enabled"] is True
+    # 앱의 로그인 전환 화면(LoginSplash)도 같은 배경 파일을 쓴다
+    splash = (ROOT / "frontend" / "src" / "components" / "layout" / "LoginSplash.tsx").read_text(encoding="utf-8")
+    assert "assets/brand/login-background.svg" in splash
 
 
 def test_colors_are_rrggbbaa():

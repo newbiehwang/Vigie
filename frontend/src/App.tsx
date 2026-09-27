@@ -1,10 +1,13 @@
-// 앱 틀: 로그인하지 않았으면 로그인 화면, 했으면 위쪽 내비게이션 + 화면(홈 / 대화 / 감사 로그·사용자 관리는 관리자만)
+// 앱 틀: 로그인하지 않았으면 전환 화면(LoginSplash)을 잠깐 보인 뒤 바로 Cognito 로그인 페이지로 보내고,
+// 했으면 위쪽 내비게이션 + 화면(홈 / 대화 / 감사 로그·사용자 관리는 관리자만).
+// 안내 화면(LoginPage)은 로그인에 실패했을 때만 오류와 다시 시도 버튼을 보인다 (그대로 보내면 같은 실패를 되풀이한다)
 import { useEffect, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { setUnauthorizedHandler } from './api/http';
 import { isAdmin, isReturningFromLogin, onLoginResult } from './auth/authClient';
 import { useAuthStore } from './auth/authStore';
 import { LoginPage } from './components/layout/LoginPage';
+import { AutoLogin, LoginSplash } from './components/layout/LoginSplash';
 import { LogoutOverlay } from './components/layout/LogoutOverlay';
 import { Navigation } from './components/layout/Navigation';
 import { ToastProvider } from './components/Toast';
@@ -54,15 +57,16 @@ export default function App() {
         useChatStore.setState({ sessions: [], currentSession: null, loaded: false, error: null });
     };
 
-    if (status === 'loading') {
-        return (
-            <div className="app-loading" role="status">
-                <div className="plan-inline-spinner" />
-            </div>
+    // 세션을 읽는 동안·Cognito에서 돌아와 토큰을 받는 동안: Cognito 페이지와 같은 바탕의 전환 화면
+    if (status === 'loading') return <LoginSplash />;
+
+    if (status === 'signedOut' || !user) {
+        return loginError ? (
+            <LoginPage errorMessage={loginError} onSignedIn={refresh} />
+        ) : (
+            <AutoLogin onSignedIn={refresh} onError={setLoginError} />
         );
     }
-
-    if (status === 'signedOut' || !user) return <LoginPage errorMessage={loginError} onSignedIn={refresh} />;
 
     return (
         // 알림(토스트)은 모든 탭이 같이 쓴다: 띄우는 곳은 useToast, 보이는 곳은 각 탭 패널의 ToastHost
