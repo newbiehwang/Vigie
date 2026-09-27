@@ -11,7 +11,7 @@
 // - 그룹 기준(Datadog의 group by): 칸마다 무엇으로 묶어 색을 나눠 쌓을지. 필터 창(FilterMenu)에서 고른다 (seriesOf)
 //   · 결과: 실패(아래)·성공(위). 실패를 바닥에 두어 칸끼리 실패 건수를 비교하기 쉽게. 범례에 실패율
 //   · 종류: 도구 호출·질문·변경 작업·사용자 관리
-//   · 요청자·도구: 받은 기록 전체에서 많은 순 5개 + 기타 (도구는 도구 없는 기록을 '도구 없음'으로 따로)
+//   · 요청자·도구: 받은 기록 전체에서 많은 순 3개 + 기타 (도구는 도구 없는 기록도 '도구 없음'으로 순위에 든다)
 //     순위는 받은 기록 전체(rankRecords)로 정한다: 거르기·검색·드래그로 목록이 바뀌어도 같은 사람·도구는 같은 색을 지킨다
 // - 범례의 값을 누르면 왼쪽 거르기를 그 값 하나로 바꾼다 (기타·도구 없음은 누를 수 없다)
 // - 가로 눈금은 막대 수와 상관없이 '보기 좋은 시각'에 찍는다 (10분·3시간·하루·5일 등, timeWindow.ticksOf)
@@ -23,9 +23,10 @@
 // - 드래그하면 그 구간으로, 한 칸을 누르면 그 칸으로 기간을 좁힌다. 드래그하는 동안 고른 구간의 시각을 위에 보인다
 // - 움직임을 줄이는 설정이면 자라기·미끄러지기 효과를 끈다 (audit.css)
 // - 키보드: 그래프에 포커스를 두고 ←/→로 칸을 옮기고 Enter로 그 칸만 본다. 칸의 내용은 화면 읽기 프로그램에도 알린다
-// - 색: 결과는 성공 #4a8fe0·실패 #d03b3b, 나머지는 차례가 정해진 색 목록의 앞 다섯(CATEGORICAL)과 기타 회색.
-//   모두 흰 바탕에서 이웃한 색끼리의 색각 이상 구분 검사를 통과했다. 대비가 3:1보다 낮은 색(초록·노랑·분홍)이 있어
-//   색만으로 구분하지 않게 범례(건수)·말풍선에 이름을 함께 적고, 아래 목록이 표 역할을 한다
+// - 색: Midnight Ink 팔레트만 쓴다 (styles.css). 결과는 성공 주 색·실패 빨강(실패에만 쓰는 색),
+//   나머지는 차례가 정해진 세 색(CATEGORICAL: 주 색 → 남색 → 회청색)과 기타 옅은 선 색. 색을 돌려 쓰지 않는다.
+//   세 색은 흰 바탕에서 이웃한 색끼리의 색각 이상 구분 검사를 통과했다 (명도 차이라 누구에게나 구분된다).
+//   기타(옅은 선 색)는 대비가 3:1보다 낮아 색만으로 구분하지 않게 범례(건수)·말풍선에 이름을 함께 적고, 아래 목록이 표 역할을 한다
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { AuditRecord } from '@/types/audit';
 import {
@@ -49,21 +50,22 @@ interface Series {
     values?: string[];
 }
 
-// 차례가 정해진 색 목록의 앞 다섯 (dataviz 기본 팔레트: 파랑·주황·청록·노랑·분홍). 차례를 바꾸지 않는다
-const CATEGORICAL = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'];
-const TOP_N = CATEGORICAL.length;
-const OTHER: Series = { key: '__other', label: '기타', color: '#9aa4ae' };
-const NO_TOOL: Series = { key: '__none', label: '도구 없음', color: '#cfd6de' };
+// 차례가 정해진 계열 색 (주 색 → 남색 → 회청색 → 옅은 선 색). 차례를 바꾸지 않는다.
+// SVG fill에 CSS 변수를 그대로 쓴다 (styles.css의 --primary·--ink·--slate·--line)
+const CATEGORICAL = ['var(--primary)', 'var(--ink)', 'var(--slate)', 'var(--line)'];
+const TOP_N = CATEGORICAL.length - 1; // 많은 순 셋 + 기타(넷째 색)
+const OTHER: Series = { key: '__other', label: '기타', color: CATEGORICAL[TOP_N] };
+const NO_TOOL_KEY = '__none'; // 도구 없는 기록 (질문 등). 순위에 들면 '도구 없음'으로 보인다
 
 const failedOf = (record: AuditRecord) => record.status === 'error' || record.event === 'failed';
 
 // 결과: 실패에는 변경 작업의 실행 실패(failed)도 든다. 범례를 누르면 거르기의 결과 값 여럿으로 거른다
 const RESULT_SERIES: Series[] = [
-    { key: 'error', label: '실패', color: '#d03b3b', facet: 'result', values: ['error', 'failed'] },
+    { key: 'error', label: '실패', color: 'var(--danger)', facet: 'result', values: ['error', 'failed'] },
     {
         key: 'ok',
         label: '성공',
-        color: '#4a8fe0',
+        color: 'var(--primary)',
         facet: 'result',
         values: ['ok', 'requested', 'approved', 'denied', 'executed'],
     },
@@ -104,18 +106,17 @@ function seriesOf(groupBy: GroupBy, rankRecords: AuditRecord[]) {
         return { series: [...series, OTHER], keyOf: (record: AuditRecord) => (set.has(record.userId) ? record.userId : OTHER.key) };
     }
     if (groupBy === 'tool') {
-        const top = topKeys(rankRecords, (record) => record.tool);
-        const series: Series[] = top.map((tool, index) => ({
-            key: tool,
-            label: toolLabelOf(tool),
-            color: CATEGORICAL[index],
-            facet: 'tool',
-            values: [tool],
-        }));
+        const toolKey = (record: AuditRecord) => record.tool || NO_TOOL_KEY;
+        const top = topKeys(rankRecords, toolKey);
+        const series: Series[] = top.map((tool, index) =>
+            tool === NO_TOOL_KEY
+                ? { key: tool, label: '도구 없음', color: CATEGORICAL[index] } // 거를 값이 없어 누를 수 없다
+                : { key: tool, label: toolLabelOf(tool), color: CATEGORICAL[index], facet: 'tool', values: [tool] },
+        );
         const set = new Set(top);
         return {
-            series: [...series, OTHER, NO_TOOL],
-            keyOf: (record: AuditRecord) => (!record.tool ? NO_TOOL.key : set.has(record.tool) ? record.tool : OTHER.key),
+            series: [...series, OTHER],
+            keyOf: (record: AuditRecord) => (set.has(toolKey(record)) ? toolKey(record) : OTHER.key),
         };
     }
     return { series: RESULT_SERIES, keyOf: (record: AuditRecord) => (failedOf(record) ? 'error' : 'ok') };
