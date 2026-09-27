@@ -34,8 +34,8 @@ export function LoginSplash({ leaving = false, message }: { leaving?: boolean; m
     );
 }
 
-// 로그인하지 않았으면 안내 화면 없이 바로 Cognito 로그인 페이지로 보낸다 (전환 화면을 잠깐 보인 뒤).
-// 실패하면(설정이 없음 등) onError로 알리고, App은 안내 화면(LoginPage)에 오류와 다시 시도 버튼을 보인다.
+// 안내 화면(LandingPage)에서 로그인을 누르면 전환 화면을 잠깐 보인 뒤 Cognito 로그인 페이지로 보낸다.
+// 실패하면(설정이 없음 등) onError로 알리고, App은 안내 화면에 오류를 보인다.
 // mock 모드에서는 페이지를 옮기지 않고 로그인된 것으로 바뀐다 (onSignedIn)
 export function AutoLogin({ onSignedIn, onError }: { onSignedIn: () => Promise<void>; onError: (message: string) => void }) {
     const [leaving, setLeaving] = useState(false);

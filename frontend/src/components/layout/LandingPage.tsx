@@ -1,6 +1,6 @@
 // 안내 화면 (로그인하지 않았을 때): Vigie가 무엇인지 한눈에 보이고, 로그인 버튼 하나로 Cognito 로그인 페이지에 간다.
-//   [Vigie 로고]                                                  [로그인]
-//   AWS 클라우드 운영 AI 에이전트                 ┌ 대화 미리 보기 ────────────┐
+//   [Vigie 로고]
+//   #Cloud Native #Serverless #MCP                ┌ 대화 미리 보기 ────────────┐
 //   AWS 운영, 물어보면 답합니다                   │ 지난주 Lambda 오류 알려줘  │
 //   (한 줄 소개)                                  │ ● 로그 조회 … 답변 표      │
 //   [aws에서 로그인]  처음이라면 가입도 거기서     │ [승인 필요] 30일 → 14일    │
@@ -17,6 +17,9 @@ import vigieMark from '@/assets/brand/vigie-mark.svg';
 import { AwsLogo } from './AwsLogo';
 
 const enter = (order: number) => ({ '--enter': order }) as CSSProperties;
+
+// 제목 위의 태그: 서버리스(Lambda·API Gateway·DynamoDB)로 만든 클라우드 네이티브 앱이고, AI가 MCP로 AWS 도구를 부른다
+const TAGS = ['Cloud Native', 'Serverless', 'MCP'];
 
 const FEATURES: { title: string; text: string; icon: ReactNode }[] = [
     {
@@ -48,7 +51,6 @@ function ChatPreview() {
                 <i />
                 <i />
                 <i />
-                <span>대화</span>
             </div>
             <div className="landing-preview-body">
                 <p className="landing-bubble">지난주 Lambda 오류 알려줘</p>
@@ -94,16 +96,15 @@ export function LandingPage({ errorMessage, onLogin }: { errorMessage?: string; 
         <main className="landing" style={{ backgroundImage: `url(${background})` }}>
             <header className="landing-nav">
                 <img className="landing-logo" src={vigieLogo} alt="Vigie" />
-                <button type="button" className="landing-nav-login" onClick={onLogin}>
-                    로그인
-                </button>
             </header>
 
             <section className="landing-hero">
                 <div className="landing-copy">
-                    <p className="landing-eyebrow landing-enter" style={enter(0)}>
-                        AWS 클라우드 운영 AI 에이전트
-                    </p>
+                    <ul className="landing-tags landing-enter" style={enter(0)} aria-label="주제">
+                        {TAGS.map((tag) => (
+                            <li key={tag}>#{tag}</li>
+                        ))}
+                    </ul>
                     <h1 className="landing-title landing-enter" style={enter(1)}>
                         AWS 운영,
                         <br />
@@ -153,7 +154,6 @@ export function LandingPage({ errorMessage, onLogin }: { errorMessage?: string; 
                 ))}
             </ul>
 
-            <footer className="landing-foot">WeGoAWS 팀 프로젝트 · 로그인과 가입은 Amazon Cognito가 처리합니다</footer>
         </main>
     );
 }
