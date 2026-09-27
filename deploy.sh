@@ -631,6 +631,19 @@ if [ -d "services/llm" ]; then
     aws s3 cp build/llm/llm-lambda-$ENV.zip "s3://$DEPLOYMENT_BUCKET/llm/llm-lambda-$ENV-$CODE_VERSION.zip"
 fi
 
+# 홈 대시보드 수집 Lambda (services/dashboard). 공통 코드(common/dashboard_store.py)는 레이어에 있다
+if [ -d "services/dashboard" ]; then
+    echo "대시보드 수집 Lambda 패키징 중..."
+    mkdir -p build/dashboard
+    cp -r services/dashboard/* build/dashboard/
+    cd build/dashboard
+    zip -r dashboard-lambda-$ENV.zip *
+    cd ../..
+
+    echo "대시보드 수집 Lambda 업로드 중..."
+    aws s3 cp build/dashboard/dashboard-lambda-$ENV.zip "s3://$DEPLOYMENT_BUCKET/dashboard/dashboard-lambda-$ENV-$CODE_VERSION.zip"
+fi
+
 # Slackbot Lambda 패키징 및 업로드 (존재하는 경우)
 if [ -d "services/slackbot" ]; then
     echo "Slackbot Lambda 패키징 중..."

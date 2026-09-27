@@ -364,13 +364,20 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !GetAtt AuditLogGroup.Arn
-              # 변경 작업 승인 요청 저장·조회·결정 (approvals.py). AWS를 바꾸는 권한은 이 역할에 없다 (MCP 역할에만)
+              # 변경 작업 승인 요청 저장·조회·결정 (approvals.py). AWS를 바꾸는 권한은 이 역할에 없다 (MCP 역할에만).
+              # Scan: 홈 대시보드의 승인 대기 수 (dashboard_view.pending_approvals, 기록 TTL이 있는 작은 테이블)
               - Effect: Allow
                 Action:
                   - dynamodb:GetItem
                   - dynamodb:PutItem
                   - dynamodb:UpdateItem
+                  - dynamodb:Scan
                 Resource: !GetAtt PendingActionsTable.Arn
+              # 홈 대시보드: 수집 Lambda가 모아 둔 구역 읽기만 (dashboard_view.py)
+              - Effect: Allow
+                Action:
+                  - dynamodb:Scan
+                Resource: !GetAtt DashboardTable.Arn
 
   # 답변을 만드는 동안의 진행 상황 (생각 중·도구 실행 중·사고 요약). 화면이 답을 기다리며 1초마다 읽는다.
   # 답을 기다리는 동안만 쓰는 임시 기록이라 한 시간 뒤 TTL로 지워지고, 백업(PITR)·고객 관리 KMS 키를 두지 않는다
@@ -527,6 +534,8 @@ Resources:
           AUDIT_LOG_GROUP: !Ref AuditLogGroup
           # 변경 작업 승인 (approvals.py)
           PENDING_ACTIONS_TABLE: !Ref PendingActionsTable
+          # 홈 대시보드 (dashboard_view.py)
+          DASHBOARD_TABLE: !Ref DashboardTable
       Layers:
         - !Ref LlmLambdaLayer
       Tags:
@@ -1034,3 +1043,335 @@ Resources:
       FunctionName: !Ref UserAdminFunction
       Principal: 'apigateway.amazonaws.com'
       SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayId}/*/*/users*'
+
+  # ---------------------------------------------------------------- 홈 대시보드 (services/dashboard, dashboard_view.py)
+  # 수집 Lambda가 운영 현황을 구역마다 모아 이 테이블에 두고, 홈(GET /dashboard, LLM Lambda)은 읽기만 한다.
+  #   AWS 이벤트(알람 상태·EC2 상태·CloudTrail 변경) ──EventBridge 규칙──▶ 수집 Lambda (그 구역만 바로)
+  #   Scheduler: 5분마다(alarms·resources·errors·changes) · 1시간마다(usage) · 하루 1번(cost) ──▶ 수집 Lambda
+  # 예상 비용(월): Cost Explorer 약 $0.6 (하루 2번) + GetMetricData 1달러 안팎 + 나머지(Lambda·Scheduler·DynamoDB) 무료 한도 안
+
+  # 구역마다 항목 하나 (6개). 다시 모으면 되는 값이라 시점 복구·고객 관리 KMS 키를 두지 않는다
+  DashboardTable:
+    Type: AWS::DynamoDB::Table
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_28
+            comment: 수집 Lambda가 5분마다 다시 모으는 값이라 시점 복구가 필요 없다
+          - id: CKV_AWS_119
+            comment: 다시 모으면 되는 운영 현황이라 AWS 소유 키 암호화(기본값)로 충분하다
+    Properties:
+      TableName: !Sub 'wga-dashboard-${Environment}'
+      AttributeDefinitions:
+        - AttributeName: 'section'
+          AttributeType: S
+      KeySchema:
+        - AttributeName: 'section'
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # 수집 Lambda 전용 Role: 조회(Describe·List·Get·Lookup)와 대시보드 테이블 쓰기만. AWS를 바꾸는 권한은 없다
+  DashboardCollectorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'wga-dashboard-collector-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DashboardCollectorReadOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # collector.py가 부르는 조회 API만. 아래 액션은 모두 리소스 수준 권한을 지원하지 않아 '*'로 둔다
+              - Effect: Allow
+                Action:
+                  - cloudwatch:DescribeAlarms      # alarms
+                  - cloudwatch:GetMetricData       # errors · usage (메트릭 수만큼 요금)
+                  - lambda:ListFunctions           # resources
+                  - ec2:DescribeInstances          # resources
+                  - ec2:DescribeInstanceStatus     # resources (상태 검사)
+                  - logs:DescribeLogGroups         # resources (영구 보관 로그 그룹)
+                  - s3:ListAllMyBuckets            # resources
+                  - cloudtrail:LookupEvents        # changes (무료, 최근 90일 관리 이벤트)
+                  - ce:GetCostAndUsage             # cost (호출마다 $0.01, 하루 1번)
+                  - ce:GetCostForecast             # cost
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:GetBucketPublicAccessBlock  # resources (퍼블릭 차단 설정)
+                Resource: 'arn:aws:s3:::*'
+              # 구역 저장·실패 표시·마지막으로 모은 때 (common/dashboard_store.py)
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:GetItem
+                  - dynamodb:Scan
+                Resource: !GetAtt DashboardTable.Arn
+
+  # 로그 보존 기간을 정해 둔다 (Lambda가 만들면 영구 보관이 된다)
+  DashboardCollectorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_158
+            comment: CloudWatch Logs 기본 암호화를 쓴다. 고객 관리 KMS 키는 월 비용이 들어 두지 않는다
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/wga-dashboard-${Environment}'
+      RetentionInDays: 14
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  DashboardCollectorFunction:
+    Type: AWS::Lambda::Function
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_116
+            comment: 실패는 구역별로 테이블에 남기고(dashboard_store.put_error) 다음 주기에 다시 모은다. 다시 처리할 이벤트가 없어 DLQ를 두지 않는다
+          - id: CKV_AWS_117
+            comment: AWS API만 부르므로 VPC가 필요 없다 (VPC에 두면 NAT 비용이 든다)
+          - id: CKV_AWS_173
+            comment: 환경 변수는 테이블 이름뿐이라 비밀이 없다
+    Properties:
+      FunctionName: !Sub 'wga-dashboard-${Environment}'
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Code:
+        S3Bucket: !Sub 'wga-deployment-${AWS::AccountId}-${Environment}'
+        S3Key: !Sub 'dashboard/dashboard-lambda-${Environment}-${CodeVersion}.zip'
+      Timeout: 120
+      MemorySize: 256
+      # 이벤트가 몰려도 동시에 둘까지만 (CloudTrail LookupEvents는 초당 2번 제한, 몰린 이벤트는 20초 안이면 건너뛴다)
+      ReservedConcurrentExecutions: 2
+      Role: !GetAtt DashboardCollectorRole.Arn
+      TracingConfig:
+        Mode: Active
+      LoggingConfig:
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+        SystemLogLevel: INFO
+        LogGroup: !Ref DashboardCollectorLogGroup
+      Environment:
+        Variables:
+          ENV: !Ref Environment
+          DASHBOARD_TABLE: !Ref DashboardTable
+      Layers:
+        - !Ref LlmLambdaLayer  # common/dashboard_store.py
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---- 정해진 때 (EventBridge Scheduler가 Role로 Lambda를 부른다. 입력으로 모을 구역을 준다)
+  DashboardSchedulerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'wga-dashboard-scheduler-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: InvokeDashboardCollector
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt DashboardCollectorFunction.Arn
+
+  DashboardEvery5Minutes:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub 'wga-dashboard-5min-${Environment}'
+      Description: 알람·리소스·오류·변경 (이벤트를 놓쳐도 5분 안에는 맞춰진다)
+      ScheduleExpression: 'rate(5 minutes)'
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      Target:
+        Arn: !GetAtt DashboardCollectorFunction.Arn
+        RoleArn: !GetAtt DashboardSchedulerRole.Arn
+        Input: '{"sections": ["alarms", "resources", "errors", "changes"]}'
+        RetryPolicy:
+          MaximumRetryAttempts: 0  # 5분 뒤에 다시 모은다
+
+  DashboardHourly:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub 'wga-dashboard-hourly-${Environment}'
+      Description: 함수별 오류·호출, EC2 CPU (메트릭 수만큼 요금이라 1시간마다)
+      ScheduleExpression: 'rate(1 hour)'
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      Target:
+        Arn: !GetAtt DashboardCollectorFunction.Arn
+        RoleArn: !GetAtt DashboardSchedulerRole.Arn
+        Input: '{"sections": ["usage"]}'
+        RetryPolicy:
+          MaximumRetryAttempts: 1
+
+  DashboardDaily:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub 'wga-dashboard-daily-${Environment}'
+      Description: 비용 (Cost Explorer는 호출마다 $0.01이고 AWS가 하루 몇 번만 갱신한다)
+      ScheduleExpression: 'cron(30 0 * * ? *)'  # 매일 00:30 UTC (한국 09:30)
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      Target:
+        Arn: !GetAtt DashboardCollectorFunction.Arn
+        RoleArn: !GetAtt DashboardSchedulerRole.Arn
+        Input: '{"sections": ["cost"]}'
+        RetryPolicy:
+          MaximumRetryAttempts: 2
+
+  # ---- AWS에서 무언가 바뀌었을 때 (기본 이벤트 버스의 AWS 서비스 이벤트는 무료)
+  DashboardAlarmStateRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'wga-dashboard-alarm-state-${Environment}'
+      Description: 알람 상태가 바뀌면 alarms 구역을 바로 다시 모은다
+      EventPattern:
+        source: ['aws.cloudwatch']
+        detail-type: ['CloudWatch Alarm State Change']
+      Targets:
+        - Arn: !GetAtt DashboardCollectorFunction.Arn
+          Id: collector
+
+  DashboardEc2StateRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'wga-dashboard-ec2-state-${Environment}'
+      Description: EC2 상태가 바뀌면 resources 구역을 바로 다시 모은다
+      EventPattern:
+        source: ['aws.ec2']
+        detail-type: ['EC2 Instance State-change Notification']
+      Targets:
+        - Arn: !GetAtt DashboardCollectorFunction.Arn
+          Id: collector
+
+  # CloudTrail 쓰기 호출 중 대시보드에 보이는 것만 (이 계정에 CloudTrail 트레일이 켜져 있어야 이벤트가 온다.
+  # 트레일이 없으면 이 규칙은 조용히 아무것도 받지 않고, 최근 변경은 5분마다의 LookupEvents로 채워진다)
+  DashboardCloudTrailChangeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'wga-dashboard-changes-${Environment}'
+      Description: 리소스·알람 설정이 바뀌면 changes·resources(알람이면 alarms도) 구역을 바로 다시 모은다
+      EventPattern:
+        detail-type: ['AWS API Call via CloudTrail']
+        source: ['aws.ec2', 'aws.s3', 'aws.lambda', 'aws.logs', 'aws.monitoring']
+        detail:
+          eventName:
+            - 'RunInstances'
+            - 'StartInstances'
+            - 'StopInstances'
+            - 'RebootInstances'
+            - 'TerminateInstances'
+            - 'AuthorizeSecurityGroupIngress'
+            - 'RevokeSecurityGroupIngress'
+            - 'CreateBucket'
+            - 'DeleteBucket'
+            - 'PutBucketPolicy'
+            - 'DeleteBucketPolicy'
+            - 'PutBucketPublicAccessBlock'
+            - 'DeleteBucketPublicAccessBlock'
+            - 'PutBucketAcl'
+            - prefix: 'CreateFunction'        # Lambda API 이름에는 버전이 붙는다 (CreateFunction20150331)
+            - prefix: 'DeleteFunction'
+            - prefix: 'UpdateFunctionCode'
+            - prefix: 'UpdateFunctionConfiguration'
+            - 'CreateLogGroup'
+            - 'DeleteLogGroup'
+            - 'PutRetentionPolicy'
+            - 'DeleteRetentionPolicy'
+            - 'PutMetricAlarm'
+            - 'DeleteAlarms'
+            - 'EnableAlarmActions'
+            - 'DisableAlarmActions'
+      Targets:
+        - Arn: !GetAtt DashboardCollectorFunction.Arn
+          Id: collector
+
+  DashboardAlarmStatePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref DashboardCollectorFunction
+      Principal: 'events.amazonaws.com'
+      SourceArn: !GetAtt DashboardAlarmStateRule.Arn
+
+  DashboardEc2StatePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref DashboardCollectorFunction
+      Principal: 'events.amazonaws.com'
+      SourceArn: !GetAtt DashboardEc2StateRule.Arn
+
+  DashboardCloudTrailChangePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref DashboardCollectorFunction
+      Principal: 'events.amazonaws.com'
+      SourceArn: !GetAtt DashboardCloudTrailChangeRule.Arn
+
+  # ---- GET /dashboard (llm_service.handle_dashboard). 로그인한 사용자 누구나
+  DashboardApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGatewayId
+      ParentId: !Ref ApiGatewayRootResourceId
+      PathPart: 'dashboard'
+
+  DashboardMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayId
+      ResourceId: !Ref DashboardApiResource
+      HttpMethod: GET
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizerId
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LlmLambdaFunction.Arn}/invocations'
+
+  DashboardOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayId
+      ResourceId: !Ref DashboardApiResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LlmLambdaFunction.Arn}/invocations'
+
+  LlmLambdaPermissionForDashboard:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref LlmLambdaFunction
+      Principal: 'apigateway.amazonaws.com'
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayId}/*/*/dashboard'
