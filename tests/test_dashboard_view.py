@@ -54,7 +54,7 @@ def test_resources_get_status_from_state_and_usage(view):
     assert rows["wga-mcp-test"]["status"] == "warn" and rows["wga-mcp-test"]["errors24h"] == 1
     assert rows["wga-idle-test"]["status"] == "none"
     assert rows["wga-new-test"]["detail"] == "사용량을 아직 모으지 않았습니다"  # usage를 모으기 전에 생긴 함수
-    assert rows["i-batch"]["status"] == "warn" and "놀고 있음" in rows["i-batch"]["detail"]
+    assert rows["i-batch"]["status"] == "warn" and "유휴" in rows["i-batch"]["detail"]
     assert rows["i-bad"]["status"] == "fail" and rows["i-off"]["status"] == "none"
     assert rows["i-web"]["label"] == "web" and rows["i-web"]["status"] == "ok"
     assert rows["open-bucket"]["detail"] == "퍼블릭 액세스 차단 2개 꺼짐"
@@ -78,8 +78,8 @@ def test_findings(view):
     findings = {f["kind"]: f for f in view.build_findings(RESOURCES, USAGE)}
 
     assert findings["public-s3"]["status"] == "fail" and findings["public-s3"]["detail"] == "open-bucket"
-    assert findings["idle-ec2"]["title"] == "놀고 있는 EC2 1대" and findings["idle-ec2"]["detail"].startswith("batch")
-    assert findings["log-retention"]["title"] == "영구 보관 로그 그룹 3개"
+    assert findings["idle-ec2"]["title"] == "유휴 EC2 인스턴스 1대" and findings["idle-ec2"]["detail"].startswith("batch")
+    assert findings["log-retention"]["title"] == "보존 기간 미설정 로그 그룹 3개"
     assert all("question" not in f for f in findings.values())  # 화면은 보기만 한다 (AI에게 묻지 않는다)
 
 
