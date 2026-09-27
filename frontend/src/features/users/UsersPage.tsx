@@ -12,7 +12,7 @@
 // - 자기 권한 바꾸기·자기 정지는 버튼을 끄고, 서버도 막는다. 마지막 관리자도 서버가 막는다
 // - 바꾼 내용은 감사 로그의 '사용자 관리'에 남는다
 // - 권한을 바꿔도 그 사람의 화면·권한은 다시 로그인하거나 토큰이 갱신된 뒤(최대 1시간) 바뀐다
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { listUsers, setEnabled, setRole, userErrorText } from '@/api/users';
 import { ROLE_LABELS } from '@/auth/authClient';
 import { LoadingCard, useMinimumVisible } from '@/components/LoadingCard';
@@ -226,7 +226,7 @@ export function UsersPage() {
                 />
                 <p className="audit-count" role="status">
                     {listLoading ? null : (
-                        <>
+                        <span className="users-count-in">
                             <strong>{filtered.length.toLocaleString()}명</strong>
                             {conditions ? <span className="audit-muted"> / {users.length.toLocaleString()}명</span> : null}
                             {truncated ? (
@@ -234,7 +234,7 @@ export function UsersPage() {
                                     {(MAX_PAGES * 50).toLocaleString()}명까지만 불러왔습니다
                                 </span>
                             ) : null}
-                        </>
+                        </span>
                     )}
                 </p>
             </div>
@@ -269,12 +269,15 @@ export function UsersPage() {
                         )
                     ) : (
                         <ul className="plan-table-body users-table-body" aria-label="사용자 목록">
-                            {filtered.map((user) => {
+                            {/* 불러온 뒤 줄이 위에서부터 차례로 떠오른다 (--row: 순서, 14번째부터는 같이. users.css의 users-row-in).
+                                불러오는 동안 목록을 비우므로 새로 고칠 때마다 다시 보인다. 새로 초대한 사용자도 떠오르며 들어온다 */}
+                            {filtered.map((user, index) => {
                                 const rowBusy = busy === user.username;
                                 return (
                                     <li
                                         key={user.username}
                                         className={`plan-table-row users-row${user.enabled ? '' : ' is-disabled'}`}
+                                        style={{ '--row': Math.min(index, 14) } as CSSProperties}
                                     >
                                         <div className="users-row-grid">
                                             <span className="users-col-email" title={user.username}>
