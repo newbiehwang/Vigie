@@ -2,7 +2,7 @@
 
 | 파일 | 용도 |
 |---|---|
-| `vigie-logo.svg` | 밝은 바탕용 (#232F3E) |
+| `vigie-logo.svg` | 밝은 바탕용 (#0A1628, Midnight Ink의 글자색) |
 | `vigie-logo-white.svg` | 어두운 바탕용 (#FFFFFF) |
 | `vigie-mark.svg` | 첫 글자 V만 떼어 낸 정사각형 마크 (대화 아바타). `vigie-logo.svg`의 윤곽선 11개 중 앞의 두 개(V 본체·안쪽 고리) |
 
