@@ -8,7 +8,7 @@ from vigie_installer.steps import teardown
 from .helpers import responses, run_cli, run_step
 
 ACCOUNT = "123456789012"
-REPO = "octo/WGA_production"
+REPO = "octo/Vigie"
 ENV_BUCKETS = [f"vigie-{kind}-{ACCOUNT}-dev" for kind in (
     "deployment", "frontend", "outputbucket", "athenaoutputbucket", "guarddutyexportbucket", "dockerbuildbucket",
     "diagrambucket")]
@@ -158,7 +158,7 @@ def test_shared_resources_are_kept_while_other_env_exists(fake):
     assert code == 0
     assert not any(SHARED_BUCKET in c for c in done)
     assert not any("vigie-github-oidc-dev" in c for c in done)
-    assert not any("-prod" in c for c in done)   # 저장소 이름(WGA_production)의 prod와 구분
+    assert not any("-prod" in c for c in done)   # prod 환경의 스택·버킷은 지우지 않는다
     kept = next(e for e in evts if e.get("id") == "target_oidc")
     assert kept["status"] == "warn" and "vigie-github-oidc-prod" in kept["hint"]
 

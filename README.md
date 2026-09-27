@@ -203,7 +203,7 @@ aws cognito-idp admin-add-user-to-group --user-pool-id <UserPoolId> --username <
 ## 프로젝트 구조
 
 ```
-WGA_production/
+Vigie/
 ├─cloudformation
 ├─frontend
 │ ├─public
@@ -278,8 +278,8 @@ aws configure
 ### 1단계: 기본 설정
 ```bash
 # 프로젝트 클론
-git clone https://github.com/WeGoAWS/WGA_production.git
-cd WGA_production
+git clone https://github.com/newbiehwang/Vigie.git
+cd Vigie
 
 # 환경 값: 루트 .env에 Anthropic API 키를 적는다 (.env는 git에 올라가지 않는다)
 cp .env.example .env

@@ -8,7 +8,7 @@ from vigie_installer.steps import oidc
 
 from .helpers import ROOT, responses, run_step
 
-REPO = "octo/WGA_production"
+REPO = "octo/Vigie"
 ROLE_ARN = "arn:aws:iam::123456789012:role/vigie-github-deploy-dev"
 PROVIDER = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
 TEMPLATE_TEXT = (ROOT / "cloudformation" / "github-oidc.yaml").read_text()
@@ -106,7 +106,7 @@ def test_fresh_setup(fake, repo_dir):
 
     calls = mutating(fake)
     deploy = calls[0][1]
-    assert "--parameter-overrides Environment=dev GitHubRepository=octo/WGA_production ExistingOidcProviderArn=" in deploy
+    assert "--parameter-overrides Environment=dev GitHubRepository=octo/Vigie ExistingOidcProviderArn=" in deploy
     assert deploy.endswith("--tags Project=Vigie Environment=dev")
     assert calls[1:] == [
         ("gh", f"api -X PUT repos/{REPO}/environments/dev --input {calls[1][1].split('--input ')[1]}"),

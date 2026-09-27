@@ -12,7 +12,7 @@ Parameters:
 
   GitHubRepository:
     Type: String
-    Default: newbiehwang/WGA_production
+    Default: newbiehwang/Vigie
     AllowedPattern: '[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+'
     Description: 배포를 허용할 GitHub 저장소 (owner/repo)
 
