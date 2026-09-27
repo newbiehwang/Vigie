@@ -145,6 +145,46 @@
   display: block;
   padding: 10px 16px;
   flex-shrink: 0;
+  /* 불러온 뒤: 아래에서 8px 떠오르며 위에서부터 차례로 (35ms씩, --row는 UsersPage). 홈 대시보드 카드와 같은 곡선.
+     backwards: 효과가 끝나면 아무것도 남기지 않는다 (transform이 남으면 권한 메뉴·정지 확인이 다른 줄 아래로 깔릴 수 있다) */
+  animation: users-row-in 340ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(60ms + var(--row, 0) * 35ms);
+}
+
+@keyframes users-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 사람 수: 불러온 뒤 살짝 나타난다 */
+.users-count-in {
+  display: contents;
+}
+
+.audit-toolbar .audit-count:has(.users-count-in) {
+  animation: users-count-in 260ms ease backwards;
+}
+
+@keyframes users-count-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .users-row,
+  .audit-toolbar .audit-count:has(.users-count-in) {
+    animation: none;
+  }
 }
 
 .users-row-grid > span {
