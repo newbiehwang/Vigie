@@ -74,6 +74,7 @@ ANSWER = {"content": [{"type": "text", "text": "어제 보안 그룹 규칙을 �
 def test_real_tool_list_is_split_into_loaded_and_deferred(env, monkeypatch):  # noqa: F811
     import tool_search
     llm, client, _ = make_client(monkeypatch, env, [])
+    client.role = "admin"  # 관리자에게는 모든 도구를 싣는다 (일반 사용자는 test_tool_access.py)
     names = {tool["name"] for tool in client.tools}
     tools = client._convert_tools_format()
 
@@ -123,7 +124,9 @@ def test_search_blocks_are_sent_back_and_shown(env, monkeypatch):  # noqa: F811
     first = {"content": [SEARCH, SEARCH_RESULT, CALL], "usage": USAGE, "stop_reason": "tool_use"}
     llm, client, sent = make_client(monkeypatch, env, [first, ANSWER], calls)
 
-    response = llm.handle_llm1_with_mcp({"text": "어제 누가 보안 그룹 규칙을 바꿨어?"}, ORIGIN, caller_id="alice")
+    # CloudTrail은 관리자 전용이라 관리자의 요청으로 보낸다 (tool_access.py)
+    response = llm.handle_llm1_with_mcp({"text": "어제 누가 보안 그룹 규칙을 바꿨어?"}, ORIGIN, caller_id="alice",
+                                        caller_groups=["admins"])
     body = json.loads(response["body"])
 
     # 첫 요청: 시스템 프롬프트에 찾는 방법이 있고, 도구 목록에 검색 도구가 있다

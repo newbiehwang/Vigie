@@ -40,7 +40,7 @@ def s3_env(env):  # noqa: F811
 
 
 def call(env, name, args=None):  # noqa: F811
-    result = env["mcp"].call_tool(name, args or {})
+    result = env["mcp"].call_admin(name, args or {})  # 보안 점검·객체 목록은 관리자 전용
     body = json.loads(result["content"][0]["text"])  # 직접 둔 도구의 결과는 JSON이다
     assert body["status"] == "success", body
     return body

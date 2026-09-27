@@ -214,7 +214,7 @@ def client_run(aws, monkeypatch):
     client = mcp_anthropic_client.AnthropicMCPClient(
         mcp_url="https://example.invalid", api_key="k", model_id="claude-sonnet-5",
         thinking={"type": "adaptive", "display": "summarized"})
-    read = {"vigie/risk": "read"}  # MCP tools/list가 붙이는 위험도 (없으면 변경 도구로 본다)
+    read = {"vigie/risk": "read", "vigie/access": "all"}  # MCP tools/list가 붙이는 위험도·쓸 수 있는 사람
     client.tools = [{"name": "describe_log_groups", "description": "", "inputSchema": {}, "_meta": read},
                     {"name": "analyze_log_group", "description": "", "inputSchema": {}, "_meta": read}]
     monkeypatch.setattr(client.mcp_client, "call_tool", fake_call_tool)

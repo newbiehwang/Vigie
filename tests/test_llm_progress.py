@@ -68,7 +68,7 @@ def client_run(aws, monkeypatch):
         mcp_url="https://example.invalid", api_key="k", model_id="claude-sonnet-5",
         thinking={"type": "adaptive", "display": "summarized"})
     client.tools = [{"name": "describe_log_groups", "description": "로그 그룹", "inputSchema": {},
-                     "_meta": {"vigie/risk": "read"}}]  # MCP tools/list가 붙이는 위험도 (없으면 변경 도구로 본다)
+                     "_meta": {"vigie/risk": "read", "vigie/access": "all"}}]  # MCP tools/list가 붙이는 표시
     monkeypatch.setattr(client.mcp_client, "call_tool",
                         lambda name, args: {"content": [{"type": "text", "text": "3 groups"}]})
     client.progress = ProgressReporter()  # 저장 없이 단계만 모은다

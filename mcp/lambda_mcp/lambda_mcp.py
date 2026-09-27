@@ -10,7 +10,7 @@ from .mcp_types import (
 )
 from .session import SessionManager
 from .approval import ACTION_ID_META, PREVIEW_META
-from .risk import annotate, needs_approval
+from .risk import annotate, is_allowed, needs_approval
 import json
 import logging
 from typing import Optional, Any, Dict, Callable, get_type_hints, List, TypeVar, Generic, Union, get_args, get_origin
@@ -394,6 +394,15 @@ class LambdaMCPServer:
                 if tool_name not in self.tools and not (self.external and self.external.has(tool_name)):
                     return self._create_error_response(-32601, f"Tool '{tool_name}' not found", request.id,
                                                        session_id=session_id)
+
+                # 관리자 전용 도구(CloudTrail·IAM·네트워크 등, risk.ADMIN_ONLY): LLM Lambda가 요청자의 그룹을 확인하고
+                # 관리자라고 붙여 보낸 호출만 실행한다. LLM Lambda도 막지만, 그쪽 코드에 실수가 있어도 여기서 한 번 더 막는다.
+                # 모델이 읽고 사용자에게 설명하도록 JSON-RPC 오류가 아니라 isError 결과로 돌려준다
+                if not is_allowed(tool_name, meta):
+                    content = [TextContent(text=f"'{tool_name}'은(는) 관리자(admins 그룹)만 쓸 수 있는 도구라 "
+                                                "실행하지 않았습니다.").model_dump()]
+                    return self._create_success_response({"content": content, "isError": True},
+                                                         request.id, session_id)
 
                 # 변경 도구(위험도 목록에 없는 공식 도구 포함): 승인 테이블을 직접 다시 확인한 뒤에만 실행한다 (approval.py)
                 if needs_approval(tool_name):

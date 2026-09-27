@@ -55,17 +55,17 @@ def test_only_vpc_and_path_tools_are_attached(net_env):
 
 def test_vpc_and_eni_details_are_read(net_env):
     env, _, ids = net_env
-    assert ids["vpc"] in text_of(env["mcp"].call_tool("list_vpcs", {}))
-    eni = text_of(env["mcp"].call_tool("get_eni_details", {"eni_id": ids["eni"]}))
+    assert ids["vpc"] in text_of(env["mcp"].call_admin("list_vpcs", {}))
+    eni = text_of(env["mcp"].call_admin("get_eni_details", {"eni_id": ids["eni"]}))
     assert ids["sg"] in eni and "443" in eni
-    assert ids["subnet"] in text_of(env["mcp"].call_tool("get_vpc_network", {"vpc_id": ids["vpc"]}))
-    assert text_of(env["mcp"].call_tool("get_path_trace_methodology", {}))
+    assert ids["subnet"] in text_of(env["mcp"].call_admin("get_vpc_network", {"vpc_id": ids["vpc"]}))
+    assert text_of(env["mcp"].call_admin("get_path_trace_methodology", {}))
 
 
 def test_profile_name_from_the_model_is_ignored(net_env):
     # 모델이 profile_name을 보내도 비워 둔 값이 이긴다 (Lambda 역할로 조회)
     env, _, ids = net_env
-    assert ids["vpc"] in text_of(env["mcp"].call_tool("list_vpcs", {"profile_name": "other-account"}))
+    assert ids["vpc"] in text_of(env["mcp"].call_admin("list_vpcs", {"profile_name": "other-account"}))
 
 
 ROOT_LOGGER_CHECK = r"""

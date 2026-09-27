@@ -72,6 +72,10 @@ class McpBridge:
             raise Exception(body["error"]["message"])
         return body["result"]
 
+    def call_admin(self, name, args=None):
+        """관리자의 요청으로 부른다: LLM Lambda가 관리자라고 붙여 보내는 표시와 같다 (관리자 전용 도구, risk.ADMIN_ONLY)."""
+        return self.call_tool(name, args, meta={"vigie/role": "admin"})
+
 
 @pytest.fixture
 def env(aws, monkeypatch):
