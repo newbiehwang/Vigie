@@ -687,7 +687,7 @@ const entryFor = (body: RequestBody): MockEntry => {
   // 알람 알림 끄기: Vigie 알람이면 승인 요청, 앞에서 본 Frothly 보안 알람이면 끄지 않기를 권한다
   if (/알람|알림/.test(text) && /끄|꺼|멈|중지/.test(text)) {
     if (/vigie/i.test(text)) return APPROVAL_ENTRIES.alarm;
-    if (/frothly|cis|보안|security|signin/i.test(text) || topic === "alarms") return alarmMuteAdviceEntry();
+    if (/frothly|cis|보안|security|signin/i.test(text) || topic === "alarms" || topic === "alarmCause") return alarmMuteAdviceEntry();
     return APPROVAL_ENTRIES.alarm;
   }
   // 퍼블릭 액세스 차단 켜기 (데모의 공개됐던 버킷). 버킷 이야기 뒤의 "막아 줘"도 같은 뜻이다
