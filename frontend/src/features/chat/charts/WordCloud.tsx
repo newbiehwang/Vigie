@@ -5,9 +5,9 @@ import { useMemo } from 'react';
 import type { ChartSpec, ChartTheme } from './chartOption';
 
 const WIDTH = 640; // viewBox 폭 (화면에서는 폭에 맞춰 늘고 준다)
-// 색: 크기가 이미 값을 보이므로 색은 세 단계만. 값이 큰 다섯 단어는 주 색, 위 30%까지는 남색, 나머지는 옅은 글자색
+// 색: 크기가 이미 값을 보이므로 색은 세 단계만. 값이 큰 다섯 단어는 주 색, 위 30%까지는 중간 파랑, 나머지는 옅은 글자색
 const colorOf = (rank: number, count: number, theme: ChartTheme) =>
-    rank < 5 ? theme.palette[0] : rank < Math.max(5, count * 0.3) ? theme.ink : theme.muted;
+    rank < 5 ? theme.palette[0] : rank < Math.max(5, count * 0.3) ? theme.palette[1] : theme.muted;
 
 interface Placed {
     text: string;
@@ -57,7 +57,7 @@ function layout(spec: ChartSpec, height: number, theme: ChartTheme): Placed[] {
 
 export function WordCloud({ spec, height, theme }: { spec: ChartSpec; height: number; theme: ChartTheme }) {
     // theme은 그릴 때마다 새 객체라, 실제로 쓰는 값만 의존 목록에 둔다 (배치를 매번 다시 하지 않게)
-    const words = useMemo(() => layout(spec, height, theme), [spec, height, theme.font, theme.palette[0], theme.ink, theme.muted]);
+    const words = useMemo(() => layout(spec, height, theme), [spec, height, theme.font, theme.palette[0], theme.palette[1], theme.muted]);
     const title = spec.options.title ? String(spec.options.title).slice(0, 60) : '';
     return (
         <svg className="artifact-chart-canvas" viewBox={`0 0 ${WIDTH} ${height}`} role="img" aria-label={title || '워드 클라우드'}

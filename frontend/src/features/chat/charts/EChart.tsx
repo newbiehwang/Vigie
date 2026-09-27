@@ -16,7 +16,7 @@ echarts.use([
     SVGRenderer,
 ]);
 
-// 앱의 색·글꼴 (styles.css의 변수)을 차트에도 쓴다. 계열 색은 주 색 → 남색 → 회청색 → 옅은 선 색('기타') 차례
+// 앱의 색·글꼴 (styles.css의 변수)을 차트에도 쓴다. 계열 색은 파랑 세 단계 (주 색 → 중간 → 옅은 파랑, 셋째는 '기타'에도)
 function appTheme(): ChartTheme {
     const css = getComputedStyle(document.documentElement);
     const read = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
@@ -27,7 +27,7 @@ function appTheme(): ChartTheme {
         line,
         muted: read('--ink-3', '#596d87'),
         font: read('--font-body', 'sans-serif'),
-        palette: [read('--primary', '#1e5aa8'), ink, read('--slate', '#7b93b0'), line],
+        palette: [read('--chart-1', '#1e5aa8'), read('--chart-2', '#7fa0cf'), read('--chart-3', '#c9d7ea')],
         surface: read('--surface', '#ffffff'),
         soft: read('--primary-soft', '#e9eff6'),
     };

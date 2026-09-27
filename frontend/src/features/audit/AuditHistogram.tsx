@@ -10,8 +10,7 @@
 // - 목록과 같은 기록(기간·검색어·거르기를 적용한 것)을 칸마다 센다. 칸은 기간에 따라 1분~하루 (timeWindow.bucketSizeOf)
 // - 그룹 기준(Datadog의 group by): 칸마다 무엇으로 묶어 색을 나눠 쌓을지. 필터 창(FilterMenu)에서 고른다 (seriesOf)
 //   · 결과: 실패(아래)·성공(위). 실패를 바닥에 두어 칸끼리 실패 건수를 비교하기 쉽게. 범례에 실패율
-//   · 종류: 도구 호출·질문·변경 작업·사용자 관리
-//   · 요청자·도구: 받은 기록 전체에서 많은 순 3개 + 기타 (도구는 도구 없는 기록도 '도구 없음'으로 순위에 든다)
+//   · 종류·요청자·도구: 받은 기록 전체에서 많은 순 2개 + 기타 (도구는 도구 없는 기록도 '도구 없음'으로 순위에 든다)
 //     순위는 받은 기록 전체(rankRecords)로 정한다: 거르기·검색·드래그로 목록이 바뀌어도 같은 사람·도구는 같은 색을 지킨다
 // - 범례의 값을 누르면 왼쪽 거르기를 그 값 하나로 바꾼다 (기타·도구 없음은 누를 수 없다)
 // - 가로 눈금은 막대 수와 상관없이 '보기 좋은 시각'에 찍는다 (10분·3시간·하루·5일 등, timeWindow.ticksOf)
@@ -23,10 +22,9 @@
 // - 드래그하면 그 구간으로, 한 칸을 누르면 그 칸으로 기간을 좁힌다. 드래그하는 동안 고른 구간의 시각을 위에 보인다
 // - 움직임을 줄이는 설정이면 자라기·미끄러지기 효과를 끈다 (audit.css)
 // - 키보드: 그래프에 포커스를 두고 ←/→로 칸을 옮기고 Enter로 그 칸만 본다. 칸의 내용은 화면 읽기 프로그램에도 알린다
-// - 색: Midnight Ink 팔레트만 쓴다 (styles.css). 결과는 성공 주 색·실패 빨강(실패에만 쓰는 색),
-//   나머지는 차례가 정해진 세 색(CATEGORICAL: 주 색 → 남색 → 회청색)과 기타 옅은 선 색. 색을 돌려 쓰지 않는다.
-//   세 색은 흰 바탕에서 이웃한 색끼리의 색각 이상 구분 검사를 통과했다 (명도 차이라 누구에게나 구분된다).
-//   기타(옅은 선 색)는 대비가 3:1보다 낮아 색만으로 구분하지 않게 범례(건수)·말풍선에 이름을 함께 적고, 아래 목록이 표 역할을 한다
+// - 색: 결과는 성공 주 색·실패 빨강(실패에만 쓰는 색), 나머지는 차트 파랑 세 단계(CATEGORICAL, styles.css --chart-1~3)이고
+//   셋째 색은 '기타'다. 색을 돌려 쓰지 않는다. 세 파랑은 어느 두 색을 골라도 색각 이상 구분 검사를 통과한다 (명도 차이).
+//   옅은 파랑(셋째)은 대비가 3:1보다 낮아 색만으로 구분하지 않게 범례(건수)·말풍선에 이름을 함께 적고, 아래 목록이 표 역할을 한다
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { AuditRecord } from '@/types/audit';
 import {
@@ -52,8 +50,8 @@ interface Series {
 
 // 차례가 정해진 계열 색 (주 색 → 남색 → 회청색 → 옅은 선 색). 차례를 바꾸지 않는다.
 // SVG fill에 CSS 변수를 그대로 쓴다 (styles.css의 --primary·--ink·--slate·--line)
-const CATEGORICAL = ['var(--primary)', 'var(--ink)', 'var(--slate)', 'var(--line)'];
-const TOP_N = CATEGORICAL.length - 1; // 많은 순 셋 + 기타(넷째 색)
+const CATEGORICAL = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)'];
+const TOP_N = CATEGORICAL.length - 1; // 많은 순 둘 + 기타(셋째 색)
 const OTHER: Series = { key: '__other', label: '기타', color: CATEGORICAL[TOP_N] };
 const NO_TOOL_KEY = '__none'; // 도구 없는 기록 (질문 등). 순위에 들면 '도구 없음'으로 보인다
 
@@ -83,14 +81,17 @@ const topKeys = (records: AuditRecord[], keyOf: (r: AuditRecord) => string | und
 
 function seriesOf(groupBy: GroupBy, rankRecords: AuditRecord[]) {
     if (groupBy === 'kind') {
-        const series = (Object.keys(KIND_LABELS) as (keyof typeof KIND_LABELS)[]).map((kind, index) => ({
+        // 종류는 넷인데 색은 셋이라, 요청자·도구처럼 많은 순 둘 + 기타로 묶는다
+        const top = topKeys(rankRecords, (record) => record.kind);
+        const series: Series[] = top.map((kind, index) => ({
             key: kind,
-            label: KIND_LABELS[kind],
+            label: KIND_LABELS[kind as keyof typeof KIND_LABELS] ?? kind,
             color: CATEGORICAL[index],
-            facet: 'kind' as const,
+            facet: 'kind',
             values: [kind],
         }));
-        return { series, keyOf: (record: AuditRecord) => record.kind as string };
+        const set = new Set(top);
+        return { series: [...series, OTHER], keyOf: (record: AuditRecord) => (set.has(record.kind) ? record.kind : OTHER.key) };
     }
     if (groupBy === 'requester') {
         const top = topKeys(rankRecords, (record) => record.userId);

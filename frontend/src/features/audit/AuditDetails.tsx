@@ -160,7 +160,7 @@ export function ResultBadge({ record }: { record: AuditRecord }) {
     const event = record.kind === 'action' ? ACTION_EVENTS[record.event ?? ''] : undefined;
     if (event) return <span className={`badge ${event.className}`}>{event.label}</span>;
     const failed = record.status === 'error';
-    return <span className={`badge ${failed ? 'is-fail' : 'is-quiet'}`}>{failed ? '실패' : '성공'}</span>;
+    return <span className={`badge ${failed ? 'is-fail' : 'is-ok'}`}>{failed ? '실패' : '성공'}</span>;
 }
 
 // 도구 칸: 질문·변경 작업·사용자 관리는 종류를, 도구 호출은 도구 이름을 보인다 (목록 행과 기록 팝업창 제목이 같이 쓴다).

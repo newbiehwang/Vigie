@@ -287,8 +287,8 @@
 
 .users-role.is-armed,
 .users-account-button.is-armed {
-  border-color: rgba(180, 35, 24, 0.6);
-  background: rgba(180, 35, 24, 0.1);
+  border-color: rgba(180, 55, 63, 0.6);
+  background: rgba(180, 55, 63, 0.1);
   color: var(--danger);
 }
 
