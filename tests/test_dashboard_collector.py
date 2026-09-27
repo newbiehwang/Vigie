@@ -140,7 +140,8 @@ def test_changes_keep_write_events_and_drop_noise(dash):
     now = datetime.now(timezone.utc)
     trail = FakeCloudTrail([
         {"EventName": "PutRetentionPolicy", "EventTime": now - timedelta(minutes=5), "Username": "kim",
-         "EventSource": "logs.amazonaws.com", "Resources": [{"ResourceName": "/aws/lambda/wga-llm-test"}]},
+         "EventSource": "logs.amazonaws.com", "Resources": [{"ResourceName": "/aws/lambda/wga-llm-test"}],
+         "CloudTrailEvent": json.dumps({"requestID": "req-1"})},
         {"EventName": "AssumeRole", "EventTime": now - timedelta(minutes=4), "Username": "x",
          "EventSource": "sts.amazonaws.com"},
         {"EventName": "StopInstances", "EventTime": now - timedelta(minutes=1), "Username": "park",
@@ -152,7 +153,7 @@ def test_changes_keep_write_events_and_drop_noise(dash):
     assert [e["eventName"] for e in data["events"]] == ["StopInstances", "PutRetentionPolicy"]  # 최근 것부터
     assert data["events"][1] == {"at": int((now - timedelta(minutes=5)).timestamp()), "actor": "kim",
                                  "eventName": "PutRetentionPolicy", "eventSource": "logs",
-                                 "resource": "/aws/lambda/wga-llm-test"}
+                                 "resource": "/aws/lambda/wga-llm-test", "requestId": "req-1"}
     assert trail.calls[0]["LookupAttributes"] == [{"AttributeKey": "ReadOnly", "AttributeValue": "false"}]
 
 

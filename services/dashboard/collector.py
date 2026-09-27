@@ -16,6 +16,7 @@
 각 collect_* 함수는 boto3 클라이언트를 받아 JSON으로 바꿀 수 있는 dict를 돌려준다 (저장 모양은 함수 설명에).
 시각은 모두 epoch 초(UTC)다. 화면 모양(types/dashboard.ts)으로 합치는 일은 읽는 쪽(services/llm)이 한다.
 """
+import json
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
@@ -255,7 +256,8 @@ def _run_metric_queries(cloudwatch, queries: List[Dict[str, Any]], start: dateti
 # ---------------------------------------------------------------- changes
 def collect_changes(cloudtrail, now: Optional[datetime] = None) -> Dict[str, Any]:
     """CloudTrail의 최근 24시간 쓰기 이벤트 (관리 이벤트, 최근 것부터 MAX_CHANGES개).
-    {"events": [{"at", "actor", "eventName", "eventSource", "resource"}]}
+    {"events": [{"at", "actor", "eventName", "eventSource", "resource", "requestId"}]}
+    requestId: 이 앱에서 승인해 실행한 변경은 감사 로그에 같은 요청 ID(awsRequestId)가 남는다. 화면에서 두 번 보이지 않게 거른다
     LookupEvents는 무료이고 트레일이 없어도 최근 90일을 읽을 수 있다 (초당 2번 제한이 있다)."""
     now = now or datetime.now(timezone.utc)
     events = []
@@ -274,6 +276,7 @@ def collect_changes(cloudtrail, now: Optional[datetime] = None) -> Dict[str, Any
                 "eventName": name,
                 "eventSource": (event.get("EventSource") or "").replace(".amazonaws.com", ""),
                 "resource": resources[0].get("ResourceName") if resources else None,
+                "requestId": _request_id(event.get("CloudTrailEvent")),
             })
             if len(events) >= MAX_CHANGES:
                 break
@@ -281,6 +284,14 @@ def collect_changes(cloudtrail, now: Optional[datetime] = None) -> Dict[str, Any
             break
     events.sort(key=lambda e: e["at"] or 0, reverse=True)
     return {"events": events}
+
+
+def _request_id(raw: Any) -> Optional[str]:
+    """CloudTrail 이벤트 원문(JSON 글)의 requestID."""
+    try:
+        return json.loads(raw).get("requestID") if raw else None
+    except (TypeError, ValueError, AttributeError):
+        return None
 
 
 # ---------------------------------------------------------------- cost (하루 1번)
