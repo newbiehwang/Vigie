@@ -23,9 +23,9 @@ def dash(aws, monkeypatch):
     handler = load_service_module("services/dashboard", "lambda_function")
     handler._clients.clear()
     import collector
-    import dashboard_store
+    from common.dashboard_store import DashboardStore
     return {"handler": handler, "collector": collector,
-            "store": dashboard_store.DashboardStore(boto3.resource("dynamodb").Table(TABLE))}
+            "store": DashboardStore(boto3.resource("dynamodb").Table(TABLE))}
 
 
 # ---------------------------------------------------------------- 알람

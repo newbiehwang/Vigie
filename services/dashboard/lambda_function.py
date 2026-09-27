@@ -18,7 +18,7 @@ from typing import Any, Callable, Dict, List
 import boto3
 
 import collector
-from dashboard_store import DashboardStore
+from common.dashboard_store import DashboardStore
 
 SECTIONS = ("alarms", "resources", "errors", "changes", "usage", "cost")
 MIN_EVENT_GAP_S = 20

@@ -5,6 +5,7 @@
 - 실패하면 지난번 성공 값(data)과 그 때(lastSuccessAt)는 그대로 두고, 실패했다는 것과 까닭만 덧붙인다.
   화면은 '모으지 못함 · 마지막 성공 3시간 전'으로 보인다.
 - 읽는 쪽(services/llm의 GET /dashboard)은 get_all로 모든 구역을 한 번에 읽는다 (구역은 6개뿐이라 Scan 한 번).
+- 쓰는 수집 Lambda(services/dashboard)와 읽는 LLM Lambda가 함께 쓰므로 공통 레이어(common)에 둔다.
 """
 import json
 import time
