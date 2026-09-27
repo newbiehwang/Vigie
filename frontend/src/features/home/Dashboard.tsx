@@ -104,11 +104,11 @@ const enter = (order: number) => ({ '--enter': order }) as CSSProperties;
 // 9분 후
 const until = (at: number) => `${Math.max(1, Math.ceil((at - nowSeconds()) / 60))}분 후`;
 
-// ---------------------------------------------------------------- 상태 배지 (공통 배지 components/badge.css. 색이 아니라 진하기로 나눈다)
-// 문제: 남색 채움 · 주의: 파랑 테두리 · 정상: 글자와 회청색 점 · 데이터 없음: 옅은 점
+// ---------------------------------------------------------------- 상태 배지 (공통 배지 components/badge.css)
+// 문제: 옅은 빨강 · 주의: 옅은 노랑 · 정상: 글자와 회청색 점 · 데이터 없음: 옅은 점
 const BADGE_VARIANT: Record<HealthStatus, string> = {
-    fail: 'is-strong',
-    warn: 'is-normal',
+    fail: 'is-alert',
+    warn: 'is-warn',
     ok: 'is-quiet',
     none: 'is-quiet is-empty',
 };
@@ -340,7 +340,7 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                                 <EmptyKpi label="이번 달 비용" data={data} section="cost" order={3} />
                             )}
 
-                            <div className={`dash-kpi dash-enter${data.approvals.pending ? ' is-warn' : ''}`} style={enter(4)}>
+                            <div className="dash-kpi dash-enter" style={enter(4)}>
                                 <span className="dash-kpi-label">
                                     승인 대기
                                 </span>

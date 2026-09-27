@@ -1079,10 +1079,10 @@
 
 @keyframes approval-card-glow-alert {
   from {
-    box-shadow: var(--raised-shadow), 0 0 0 0 rgba(180, 35, 24, 0.35);
+    box-shadow: var(--raised-shadow), 0 0 0 0 rgba(180, 55, 63, 0.35);
   }
   to {
-    box-shadow: var(--raised-shadow), 0 0 0 10px rgba(180, 35, 24, 0);
+    box-shadow: var(--raised-shadow), 0 0 0 10px rgba(180, 55, 63, 0);
   }
 }
 
@@ -1112,7 +1112,7 @@
   align-items: flex-start;
   gap: 10px;
   background: var(--danger-soft);
-  border-bottom: 1px solid rgba(180, 35, 24, 0.2);
+  border-bottom: 1px solid rgba(180, 55, 63, 0.2);
   font-size: 0.82rem;
   line-height: 1.45;
   color: var(--ink-2);
@@ -1297,7 +1297,7 @@
 
 .plan-create-button.approval-approve-risky {
   background: var(--danger);
-  box-shadow: 0 8px 16px rgba(180, 35, 24, 0.2);
+  box-shadow: 0 8px 16px rgba(180, 55, 63, 0.2);
 }
 
 .plan-create-button.approval-approve-risky:hover:not(:disabled) {
@@ -1305,7 +1305,7 @@
 }
 
 .plan-create-button.approval-approve-risky:disabled {
-  background: rgba(180, 35, 24, 0.4);
+  background: rgba(180, 55, 63, 0.4);
   box-shadow: none;
   cursor: not-allowed;
 }

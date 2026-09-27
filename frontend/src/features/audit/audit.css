@@ -1443,10 +1443,10 @@
 }
 
 .audit-trace-answer-box.is-ok { border-left-color: var(--status-ok); }
-.audit-trace-answer-box.is-warn { border-left-color: var(--status-pending); }
+.audit-trace-answer-box.is-warn { border-left-color: var(--status-warn); }
 .audit-trace-answer-box.is-fail { border-left-color: var(--status-fail); }
 
-/* 판정 개수: ● 주의 3  ● 정상 3  ● 참고 1 (점: 실패 빨강 · 주의 파랑 · 정상 회청색 · 참고 옅은 선 색) */
+/* 판정 개수: ● 주의 3  ● 정상 3  ● 참고 1 (점: 실패 빨강 · 주의 노랑 · 정상 회청색 · 참고 옅은 선 색) */
 .audit-counts {
   margin: 0;
   padding: 0;
@@ -1477,7 +1477,7 @@
 }
 
 .audit-counts .is-ok .audit-counts-dot { background: var(--status-ok); }
-.audit-counts .is-warn .audit-counts-dot { background: var(--status-pending); }
+.audit-counts .is-warn .audit-counts-dot { background: var(--status-warn); }
 .audit-counts .is-fail .audit-counts-dot { background: var(--status-fail); }
 .audit-counts .is-info .audit-counts-dot { background: var(--status-none); }
 
@@ -1494,14 +1494,14 @@
 }
 
 /* 판정이 있으면 조각의 바탕색 = 판정 (이 기록·흔적의 채움보다 앞선다).
-   진하기로 나눈다: 실패 옅은 빨강 · 주의 파랑 28% · 정상 옅은 선 색 · 참고 흰색 */
+   실패 옅은 빨강 · 주의 옅은 노랑 · 정상 옅은 선 색 · 참고 흰색 */
 .audit-cycle-svg .audit-cycle-seg.has-status.is-ok .audit-cycle-shape { fill: var(--line-soft); }
-.audit-cycle-svg .audit-cycle-seg.has-status.is-warn .audit-cycle-shape { fill: #c0d0e6; } /* primary 28% */
+.audit-cycle-svg .audit-cycle-seg.has-status.is-warn .audit-cycle-shape { fill: var(--warning-soft); }
 .audit-cycle-svg .audit-cycle-seg.has-status.is-fail .audit-cycle-shape { fill: var(--danger-soft); }
 .audit-cycle-svg .audit-cycle-seg.has-status.is-info .audit-cycle-shape { fill: var(--surface); }
 
 .audit-cycle-svg .audit-cycle-seg.has-status.is-ok .audit-cycle-label { fill: var(--ink-2); }
-.audit-cycle-svg .audit-cycle-seg.has-status.is-warn .audit-cycle-label { fill: var(--primary-active); }
+.audit-cycle-svg .audit-cycle-seg.has-status.is-warn .audit-cycle-label { fill: var(--warning-ink); }
 .audit-cycle-svg .audit-cycle-seg.has-status.is-fail .audit-cycle-label { fill: var(--danger); }
 .audit-cycle-svg .audit-cycle-seg.has-status.is-info .audit-cycle-label { fill: var(--ink-3); }
 

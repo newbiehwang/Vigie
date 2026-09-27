@@ -757,7 +757,7 @@
   font-size: 13px;
   color: var(--danger);
   background: var(--danger-soft);
-  border: 1px solid rgba(180, 35, 24, 0.25);
+  border: 1px solid rgba(180, 55, 63, 0.25);
   border-radius: 8px;
   padding: 8px 12px;
   line-height: 1.5;
@@ -1063,7 +1063,7 @@
 
 .drawn-mark.is-alert {
   --mark: var(--danger);
-  --mark-soft: rgba(180, 35, 24, 0.22);
+  --mark-soft: rgba(180, 55, 63, 0.22);
 }
 
 .drawn-mark.is-cross,
