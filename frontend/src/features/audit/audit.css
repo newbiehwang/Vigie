@@ -1446,7 +1446,7 @@
 .audit-trace-answer-box.is-warn { border-left-color: var(--status-warn); }
 .audit-trace-answer-box.is-fail { border-left-color: var(--status-fail); }
 
-/* 판정 개수: ● 주의 3  ● 정상 3  ● 참고 1 (점: 실패 빨강 · 주의 노랑 · 정상 회청색 · 참고 옅은 선 색) */
+/* 판정 개수: ● 주의 3  ● 정상 3  ● 참고 1 (점: 실패 빨강 · 주의 노랑 · 정상 파랑 · 참고 옅은 선 색) */
 .audit-counts {
   margin: 0;
   padding: 0;

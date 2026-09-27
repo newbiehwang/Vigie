@@ -2,8 +2,8 @@
 // spec은 MCP 차트 도구(mcp/lambda_mcp/chart_utils.py)가 PNG를 그리며 검사를 마친 값이고, 같은 모양이다.
 //   { type: 'line' | 'bar' | … , options: { data, title, axisXTitle, axisYTitle, stack, group, … } }
 // 글자는 모델·로그에서 온 값이라 ECharts가 글자로만 그리게 한다 (HTML로 해석하는 formatter를 쓰지 않는다).
-// 색: Midnight Ink 팔레트에서 차례가 정해진 색만 쓴다 (주 색 → 남색 → 회청색, 넷째·'기타'는 옅은 선 색).
-//     계열이 다섯 이상이면 큰 셋만 남기고 나머지를 '기타'로 묶는다 (색을 돌려 쓰지 않는다)
+// 색: 주 색에서 옅어지는 파랑 세 단계만 쓴다 (styles.css --chart-1~3. 글자색·남색은 차트에 쓰지 않는다).
+//     계열이 넷 이상이면 큰 둘만 남기고 나머지를 '기타'(셋째 색)로 묶는다 (색을 돌려 쓰지 않는다)
 import type { EChartsCoreOption } from 'echarts/core';
 
 export interface ChartSpec {
@@ -16,12 +16,12 @@ export interface ChartTheme {
     line: string; // 격자·축
     muted: string; // 보조 글자
     font: string;
-    palette: string[]; // 계열 색 (차례대로. 넷째는 '기타'에도 쓴다)
+    palette: string[]; // 계열 색 (차례대로. 셋째는 '기타'에도 쓴다)
     surface: string; // 카드 바탕 (노드·이름표 바탕)
     soft: string; // 주 색을 옅게 푼 바탕 (강조 노드)
 }
 
-export const MAX_SERIES = 4; // 이보다 많으면 큰 셋 + '기타'
+export const MAX_SERIES = 3; // 이보다 많으면 큰 둘 + '기타'
 const OTHER = '기타';
 
 type Item = Record<string, unknown>;
@@ -37,7 +37,7 @@ const num = (value: unknown) => {
 };
 const list = (value: unknown): Item[] => (Array.isArray(value) ? (value as Item[]) : []);
 
-// 계열(그룹)이 MAX_SERIES보다 많으면 합계가 큰 셋만 남기고 나머지를 '기타' 하나로 더한다
+// 계열(그룹)이 MAX_SERIES보다 많으면 합계가 큰 것부터 MAX_SERIES - 1개만 남기고 나머지를 '기타' 하나로 더한다
 function foldGroups(groups: Map<string, Map<string, number>>) {
     if (groups.size <= MAX_SERIES) return groups;
     const total = (g: Map<string, number>) => [...g.values()].reduce((a, b) => a + b, 0);
@@ -152,7 +152,7 @@ function bars(options: Item, theme: ChartTheme, horizontal: boolean): EChartsCor
     };
 }
 
-// 원 조각: 합이 큰 셋만 남기고 나머지는 '기타' 한 조각 (조각이 MAX_SERIES 이하면 그대로)
+// 원 조각: 합이 큰 둘만 남기고 나머지는 '기타' 한 조각 (조각이 MAX_SERIES 이하면 그대로)
 function pieSlices(xs: string[], groups: Map<string, Map<string, number>>) {
     const slices = xs
         .map((x) => ({ name: x, value: [...groups.values()].reduce((sum, g) => sum + (g.get(x) ?? 0), 0) }))
@@ -555,7 +555,7 @@ function fishbone(options: Item, theme: ChartTheme): EChartsCoreOption {
     const point = (name: string, x: number, y: number) => nodes.push({ name, x, y, symbolSize: 0, label: { show: false } });
     point('__tail', 0, 0);
     nodes.push({ name: root.name, x: count * gap + 90, y: 0, symbol: 'roundRect', symbolSize: [130, 36],
-                 itemStyle: { color: theme.soft, borderColor: theme.ink, borderWidth: 1.5 }, // 머리(문제): 옅은 파랑 바탕, 남색 테두리
+                 itemStyle: { color: theme.soft, borderColor: theme.palette[0], borderWidth: 1.5 }, // 머리(문제): 옅은 파랑 바탕, 주 색 테두리
                  label: { show: true, fontWeight: 600, color: theme.ink } });
     links.push({ source: '__tail', target: root.name, lineStyle: { width: 3, color: theme.ink } });
     causes.forEach((cause, i) => {

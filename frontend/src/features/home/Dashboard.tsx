@@ -105,11 +105,11 @@ const enter = (order: number) => ({ '--enter': order }) as CSSProperties;
 const until = (at: number) => `${Math.max(1, Math.ceil((at - nowSeconds()) / 60))}분 후`;
 
 // ---------------------------------------------------------------- 상태 배지 (공통 배지 components/badge.css)
-// 문제: 옅은 빨강 · 주의: 옅은 노랑 · 정상: 글자와 회청색 점 · 데이터 없음: 옅은 점
+// 문제: 빨강 · 주의: 노랑 · 정상: 파랑(감사 로그 그래프의 '성공'과 같은 색) · 데이터 없음: 옅은 점
 const BADGE_VARIANT: Record<HealthStatus, string> = {
     fail: 'is-alert',
     warn: 'is-warn',
-    ok: 'is-quiet',
+    ok: 'is-ok',
     none: 'is-quiet is-empty',
 };
 

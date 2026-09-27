@@ -47,12 +47,14 @@ SPEC_LIMIT = 16000
 # 글꼴: 웹과 같은 Pretendard (Dockerfile이 이미지에 넣는다). 없으면 한글 글꼴을 차례로 찾는다
 KOREAN_FONTS = ["Pretendard", "Noto Sans CJK KR", "Noto Sans CJK JP", "NanumGothic", "Malgun Gothic", "AppleGothic",
                 "Apple SD Gothic Neo"]
-# 색: 웹과 같은 Midnight Ink 팔레트 (frontend/src/styles.css). 계열은 차례가 정해진 넷만 쓴다:
-# 주 색 → 남색 → 회청색 → 옅은 선 색(넷째·'기타'). 계열이 다섯 이상이면 큰 셋 + '기타'로 묶는다 (색을 돌려 쓰지 않는다)
+# 색: 웹과 같은 Midnight Ink 팔레트 (frontend/src/styles.css). 계열은 주 색에서 옅어지는 파랑 세 단계만 쓴다
+# (--chart-1~3: 주 색 → 중간 파랑 → 옅은 파랑, 셋째는 '기타'에도). 글자색·남색은 차트에 쓰지 않는다.
+# 계열이 넷 이상이면 큰 둘 + '기타'로 묶는다 (색을 돌려 쓰지 않는다)
 INK, INK_2, INK_3 = "#0A1628", "#37485E", "#596D87"  # 글자 · 설명 글 · 작은 글씨
 SLATE, LINE, SOFT = "#7B93B0", "#D6DEE8", "#E9EFF6"  # 아이콘·보조 선 · 테두리·격자 · 주 색을 옅게 푼 바탕
 PRIMARY = "#1E5AA8"
-PALETTE = [PRIMARY, INK, SLATE, LINE]
+CHART_2, CHART_3 = "#7FA0CF", "#C9D7EA"
+PALETTE = [PRIMARY, CHART_2, CHART_3]
 MAX_SERIES = len(PALETTE)
 OTHER = "기타"
 
@@ -124,7 +126,7 @@ def _axis_titles(ax, options: Dict[str, Any]) -> None:
 
 
 def _fold(groups: "OrderedDict[str, Dict[str, float]]") -> "OrderedDict[str, Dict[str, float]]":
-    """그룹이 MAX_SERIES보다 많으면 합계가 큰 셋만 남기고 나머지를 '기타' 하나로 더한다 (frontend foldGroups와 같다)."""
+    """그룹이 MAX_SERIES보다 많으면 합계가 큰 것부터 MAX_SERIES - 1개만 남기고 나머지를 '기타' 하나로 더한다 (frontend foldGroups와 같다)."""
     if len(groups) <= MAX_SERIES:
         return groups
     ranked = sorted(groups.items(), key=lambda item: -sum(item[1].values()))
@@ -225,7 +227,7 @@ def _pie(options):
     values = [sum(g.get(x, 0.0) for g in groups.values()) for x in xs]
     if any(v < 0 for v in values) or not sum(values):
         raise ChartError("pie values must be non-negative and not all zero")
-    # 큰 조각부터. 조각이 MAX_SERIES보다 많으면 큰 셋 + '기타' (frontend pieSlices와 같다)
+    # 큰 조각부터. 조각이 MAX_SERIES보다 많으면 큰 둘 + '기타' (frontend pieSlices와 같다)
     slices = sorted(zip(xs, values), key=lambda s: -s[1])
     if len(slices) > MAX_SERIES:
         slices = slices[:MAX_SERIES - 1] + [(OTHER, sum(v for _, v in slices[MAX_SERIES - 1:]))]
@@ -234,8 +236,8 @@ def _pie(options):
     _, _, percents = ax.pie(values, labels=xs, colors=[PALETTE[i % len(PALETTE)] for i in range(len(xs))],
                             autopct="%1.1f%%", startangle=90, counterclock=False, textprops={"fontsize": 8},
                             wedgeprops={"edgecolor": "white", "linewidth": 1.5, **({"width": 1 - inner} if inner else {})})
-    for index, percent in enumerate(percents):  # 짙은 조각(주 색·남색) 위의 비율은 흰 글자
-        percent.set_color("white" if PALETTE[index % len(PALETTE)] in (PRIMARY, INK) else INK)
+    for index, percent in enumerate(percents):  # 짙은 조각(주 색) 위의 비율만 흰 글자
+        percent.set_color("white" if PALETTE[index % len(PALETTE)] == PRIMARY else INK)
     ax.axis("equal")
     return fig
 
@@ -330,8 +332,8 @@ def _word_cloud(options):
     placed: List[Any] = []
     for index, (word, value) in enumerate(words):
         size = 8 + 28 * ((value - low) / (high - low) if high > low else 1)
-        # 크기가 값을 보이므로 색은 세 단계만: 큰 다섯 단어 주 색, 위 30%까지 남색, 나머지 옅은 글자색 (frontend와 같다)
-        color = PRIMARY if index < 5 else INK if index < max(5, len(words) * 0.3) else INK_3
+        # 크기가 값을 보이므로 색은 세 단계만: 큰 다섯 단어 주 색, 위 30%까지 중간 파랑, 나머지 옅은 글자색 (frontend와 같다)
+        color = PRIMARY if index < 5 else CHART_2 if index < max(5, len(words) * 0.3) else INK_3
         artist = ax.text(0, 0, word, fontsize=size, ha="center", va="center", color=color)
         for step in range(1500):  # 나선: 반지름을 조금씩 키우며 빈자리를 찾는다
             angle = step * 0.35
@@ -410,7 +412,7 @@ def _fishbone(options):
     count = math.ceil(len(causes) / 2)
     gap = 1.8  # 가지 사이 (작은 원인 글자가 옆 가지와 겹치지 않게)
     ax.plot([0, count * gap + 0.6], [0, 0], color=INK_2, lw=2)
-    _box(ax, count * gap + 1.1, 0, root["name"], INK, 10, SOFT)  # 머리(문제): 옅은 파랑 바탕, 남색 테두리
+    _box(ax, count * gap + 1.1, 0, root["name"], PRIMARY, 10, SOFT)  # 머리(문제): 옅은 파랑 바탕, 주 색 테두리
     for index, cause in enumerate(causes):
         side = 1 if index % 2 == 0 else -1
         x = (index // 2 + 1) * gap

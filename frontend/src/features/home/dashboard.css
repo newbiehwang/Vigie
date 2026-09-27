@@ -1,7 +1,7 @@
 /* ---------------------------------------------------------------- 홈 대시보드 (Dashboard.tsx, DashboardCharts.tsx)
    흰 패널 안: 머리(제목·모은 때·새로 고침)와 한 줄 입력칸은 제자리에 두고, 아래 내용만 스크롤한다.
    색: Midnight Ink 다섯 색 + 상태 색 두 가지 (styles.css). 크기(비용·오류)는 파랑 한 색,
-   상태는 문제 빨강 · 주의 노랑 · 정상 회청색 · 데이터 없음 옅은 선 색.
+   상태는 문제 빨강 · 주의 노랑 · 정상 파랑(감사 로그 그래프의 '성공'과 같은 색) · 데이터 없음 옅은 선 색.
    빨강·노랑은 점·배지·상태 막대 칸·알람 숫자에만 쓰고, 카드 테두리·제목에는 쓰지 않는다.
    상태는 늘 글자(배지·범례)와 함께 둔다 */
 
@@ -16,8 +16,8 @@
   --dash-warn-bg: rgba(217, 164, 65, 0.22);
   --dash-ok: var(--status-ok);
   --dash-none: var(--status-none);
-  /* 막대: 주 색을 흰 바탕에 절반쯤 푼 색 (primary 50%). 마우스를 올리면 주 색 그대로 */
-  --dash-bar: #8fadd3;
+  /* 막대: 차트 파랑 둘째 단계 (styles.css --chart-2). 마우스를 올리면 주 색 그대로 */
+  --dash-bar: var(--chart-2);
   --dash-bar-hover: var(--primary);
   flex: 1;
   min-height: 0;
@@ -484,7 +484,7 @@
 }
 
 .dash-spark-bar {
-  fill: #b0c5e1; /* primary 35% */
+  fill: var(--chart-3);
 }
 
 .dash-bar.is-hover,

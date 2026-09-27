@@ -1,12 +1,11 @@
-/* 상태 배지 하나 (홈·대화·감사 로그·사용자 관리가 같이 쓴다). 색은 상태 색 두 가지(빨강·노랑)와 파랑만 쓴다:
-     (● 문제)     is-alert   옅은 빨강 바탕에 빨간 점·글자. 문제 리소스·울리는 알람
-     (● 실패)     is-fail    is-alert와 같은 모양. 실행한 작업이 실패한 것
-     (● 주의)     is-warn    옅은 노랑 바탕에 노란 점, 글자는 짙은 황토색 (노랑 글자는 읽히지 않아서)
-     [□ 승인 대기] is-normal  파랑(primary) 테두리. 누군가 해야 할 일이 남은 것 (승인 대기, 관리자)
-     · 정상       is-quiet   바탕 없이 글자와 회청색 점. 문제없는 것 (정상, 완료, 성공, 참고)
-     · 정보 없음   is-quiet is-empty  점이 옅은 선 색이고 글자도 옅다 (모으지 못한 것)
-   빨강·노랑 배지는 옅은 바탕(soft)만 쓰고 진하게 채우지 않는다 (표에 여러 개 있어도 시끄럽지 않게).
-   배지 안에는 늘 글자가 있어 색만으로 뜻을 전하지 않는다 */
+/* 상태 배지 하나 (홈·대화·감사 로그가 같이 쓴다). 모두 같은 모양: 바탕 없이 점 + 글자, 점과 글자가 같은 색 계열이다.
+     ● 문제·실패  is-alert / is-fail  빨강. 문제 리소스·울리는 알람·실행 실패
+     ● 주의       is-warn            노란 점, 글자는 짙은 황토색 (노랑 글자는 읽히지 않아서)
+     ● 정상·성공  is-ok              주 색(파랑). 감사 로그 그래프의 '성공'과 같은 색 (정상·성공·실행·승인)
+     ● 승인 요청  is-quiet           회청색 점, 글자는 옅은 글자색. 결과가 아직 없는 것
+     ● 정보 없음  is-quiet is-empty  점이 옅은 선 색 (모으지 못한 것·거절·참고)
+     [□ 승인 필요] is-normal         파랑 테두리. 대화의 승인 카드처럼 지금 누를 버튼이 옆에 있는 곳에만
+   바탕을 칠하지 않아 표에 배지가 여러 개 있어도 시끄럽지 않다. 배지 안에는 늘 글자가 있어 색만으로 뜻을 전하지 않는다 */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -24,10 +23,11 @@
   background: transparent;
 }
 
-/* 점 (문제·주의·정상) */
+/* 점 */
 .badge.is-alert::before,
 .badge.is-fail::before,
 .badge.is-warn::before,
+.badge.is-ok::before,
 .badge.is-quiet::before {
   content: "";
   flex: none;
@@ -39,7 +39,6 @@
 .badge.is-alert,
 .badge.is-fail {
   color: var(--danger);
-  background: var(--danger-soft);
 }
 
 .badge.is-alert::before,
@@ -49,32 +48,34 @@
 
 .badge.is-warn {
   color: var(--warning-ink);
-  background: var(--warning-soft);
 }
 
 .badge.is-warn::before {
   background: var(--status-warn);
 }
 
-.badge.is-normal {
-  color: var(--status-pending);
-  border-color: var(--status-pending);
-  background: var(--surface);
+.badge.is-ok {
+  color: var(--primary);
 }
 
-.badge.is-quiet {
-  color: var(--ink-2);
-  font-weight: 500;
-}
-
-.badge.is-quiet::before {
+.badge.is-ok::before {
   background: var(--status-ok);
 }
 
-.badge.is-quiet.is-empty {
+.badge.is-quiet {
   color: var(--ink-3);
+}
+
+.badge.is-quiet::before {
+  background: var(--status-quiet);
 }
 
 .badge.is-quiet.is-empty::before {
   background: var(--status-none);
+}
+
+.badge.is-normal {
+  color: var(--status-pending);
+  border-color: var(--status-pending);
+  background: var(--surface);
 }

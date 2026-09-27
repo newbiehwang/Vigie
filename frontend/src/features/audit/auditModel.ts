@@ -67,11 +67,12 @@ export const layerLabel = (id: TraceLayer) => LAYERS.find((layer) => layer.id ==
 
 // 변경 작업의 사건 → 결과 열에 보일 이름과 모양
 export const ACTION_EVENTS: Record<string, { label: string; className: string }> = {
-    // className: 공통 배지(components/badge.css)의 변형. 승인 요청만 파랑 테두리, 실패만 빨강, 나머지는 조용하게
-    requested: { label: '승인 요청', className: 'is-normal' },
-    approved: { label: '승인', className: 'is-quiet' },
+    // className: 공통 배지(components/badge.css)의 변형. 승인·실행은 그래프의 '성공'과 같은 파랑, 실패는 빨강,
+    // 승인 요청은 결과가 아직 없어 회청색, 거절은 옅은 점
+    requested: { label: '승인 요청', className: 'is-quiet' },
+    approved: { label: '승인', className: 'is-ok' },
     denied: { label: '거절', className: 'is-quiet is-empty' },
-    executed: { label: '실행', className: 'is-quiet' },
+    executed: { label: '실행', className: 'is-ok' },
     failed: { label: '실패', className: 'is-fail' },
 };
 
