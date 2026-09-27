@@ -47,8 +47,8 @@ def assets() -> dict:
     logo_box, logo_paths = _svg_parts("vigie-logo.svg")
     mark_box, mark_paths = _svg_parts("vigie-mark.svg")
     return {
-        "FORM_LOGO": _svg(logo_box, 461, 242, "#232F3E", logo_paths),
-        "FAVICON_SVG": _svg(mark_box, 64, 64, "#232F3E", mark_paths),
+        "FORM_LOGO": _svg(logo_box, 461, 242, "#0A1628", logo_paths),
+        "FAVICON_SVG": _svg(mark_box, 64, 64, "#0A1628", mark_paths),
         "PAGE_BACKGROUND": _minified("login-background.svg"),
     }
 

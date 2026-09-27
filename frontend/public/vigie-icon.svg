@@ -2,7 +2,7 @@
   <!-- 브라우저 탭 아이콘: 바탕 없이 V만 (src/assets/brand/vigie-logo.svg의 첫 글자).
        밝은 탭에는 남색, 어두운 탭(다크 모드)에는 흰색으로 보인다. 작은 크기에서 잘 보이게 V가 칸을 거의 채운다 -->
   <style>
-    path { fill: #232F3E; }
+    path { fill: #0A1628; }
     @media (prefers-color-scheme: dark) {
       path { fill: #FFFFFF; }
     }
