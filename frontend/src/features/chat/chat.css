@@ -692,7 +692,9 @@
 }
 
 /* 실행 시간 · 사고 과정 */
+/* 실행 시간·사고 과정: 답변 글(과 승인 카드)이 다 나온 뒤 나타난다 (ChatMessage) */
 .query-metadata {
+  animation: menu-in 240ms ease both;
   margin-top: 8px;
   display: flex;
   flex-wrap: wrap;
@@ -1009,7 +1011,79 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr); /* 좁은 화면에서 한 줄·호출 줄이 카드 밖으로 넘치지 않게 */
   gap: 10px;
-  animation: menu-in 160ms ease both;
+}
+
+/* 방금 받은 답변의 카드가 나타날 때 (ChatMessage가 글을 다 보인 뒤 잠깐 쉬었다가 그린다):
+   1) 카드가 아래에서 살짝 떠오르며 또렷해지고
+   2) 안의 줄(머리 → 대상·변경·영향 → 호출 → 버튼)이 차례로 채워지고
+   3) 위쪽 상태 색(기다림 주황, 의심 신호 빨강)이 테두리 밖으로 한 번 번져 눈길을 끈다 */
+.approval-card.is-entering {
+  animation: approval-card-in 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 번짐은 결정을 기다리는 카드에만 (결정한 뒤 접힌 줄에는 두지 않는다) */
+.approval-card.is-entering.is-pending {
+  animation:
+    approval-card-in 460ms cubic-bezier(0.22, 1, 0.36, 1) both,
+    approval-card-glow 1100ms ease-out 380ms both;
+}
+
+.approval-card.is-entering.is-pending.is-tainted {
+  animation:
+    approval-card-in 460ms cubic-bezier(0.22, 1, 0.36, 1) both,
+    approval-card-glow-alert 1100ms ease-out 380ms both;
+}
+
+.approval-card.is-entering > * {
+  animation: approval-part-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.approval-card.is-entering > :nth-child(1) { animation-delay: 140ms; }
+.approval-card.is-entering > :nth-child(2) { animation-delay: 200ms; }
+.approval-card.is-entering > :nth-child(3) { animation-delay: 260ms; }
+.approval-card.is-entering > :nth-child(4) { animation-delay: 320ms; }
+.approval-card.is-entering > :nth-child(5) { animation-delay: 380ms; }
+.approval-card.is-entering > :nth-child(n + 6) { animation-delay: 440ms; }
+
+@keyframes approval-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes approval-part-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 카드의 입체감 그림자(--raised-shadow)는 그대로 두고, 상태 색 번짐만 더했다 뺀다 */
+@keyframes approval-card-glow {
+  from {
+    box-shadow: var(--raised-shadow), 0 0 0 0 rgba(240, 160, 32, 0.45);
+  }
+  to {
+    box-shadow: var(--raised-shadow), 0 0 0 10px rgba(240, 160, 32, 0);
+  }
+}
+
+@keyframes approval-card-glow-alert {
+  from {
+    box-shadow: var(--raised-shadow), 0 0 0 0 rgba(220, 53, 69, 0.4);
+  }
+  to {
+    box-shadow: var(--raised-shadow), 0 0 0 10px rgba(220, 53, 69, 0);
+  }
 }
 
 .approval-card.is-tainted {
@@ -1376,7 +1450,12 @@
 
 @media (prefers-reduced-motion: reduce) {
   .approval-card,
-  .approval-more {
+  .approval-card.is-entering,
+  .approval-card.is-entering.is-pending,
+  .approval-card.is-entering.is-pending.is-tainted,
+  .approval-card.is-entering > *,
+  .approval-more,
+  .query-metadata {
     animation: none;
   }
 
