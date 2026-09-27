@@ -1,7 +1,8 @@
 """Cognito 로그인 화면(managed login)에 올릴 로고 이미지를 만든다 (cloudformation/base.yaml의 ManagedLoginBranding.Assets).
 
 CloudFormation은 파일을 읽지 못하므로 이미지를 base64 글자로 템플릿에 적어 둔다. 원본은 frontend/src/assets/brand의 SVG이고,
-Cognito가 받는 SVG 요소·속성만 남긴다 (svg·path, xmlns·viewBox·width·height·fill·d. title·role·aria-label은 뺀다.
+Cognito가 받는 SVG 요소·속성만 남긴다 (로고는 svg·path, xmlns·viewBox·width·height·fill·d. title·role·aria-label은 뺀다.
+배경은 그라디언트(defs·linearGradient·radialGradient·stop·rect)로 쓴 login-background.svg를 한 줄로 줄여 그대로 쓴다.
 허용 목록: https://docs.aws.amazon.com/cognito/latest/developerguide/managed-login-brandingeditor.html).
 
     python3 scripts/cognito_branding.py           # 템플릿에 붙일 base64 값을 보여 준다
@@ -33,14 +34,22 @@ def _svg(view_box: str, width: int, height: int, fill: str, paths) -> str:
             f'{body}</svg>')
 
 
+def _minified(name: str) -> str:
+    """이미 Cognito가 받는 요소만으로 쓴 SVG를 한 줄로 (줄바꿈·들여쓰기만 뺀다)."""
+    text = (BRAND / name).read_text(encoding="utf-8")
+    return re.sub(r">\s+<", "><", text.strip())
+
+
 def assets() -> dict:
     """카테고리 → SVG 글자.
-    FORM_LOGO: 로그인 상자 위의 워드마크 (남색). FAVICON_SVG: 탭 아이콘, 앱과 같은 V (바탕 투명)."""
+    FORM_LOGO: 로그인 상자 위의 워드마크 (남색). FAVICON_SVG: 탭 아이콘, 앱과 같은 V (바탕 투명).
+    PAGE_BACKGROUND: 파란·남색 번짐 배경 (login-background.svg. 앱의 로그인 전환 화면도 같은 파일을 쓴다)."""
     logo_box, logo_paths = _svg_parts("vigie-logo.svg")
     mark_box, mark_paths = _svg_parts("vigie-mark.svg")
     return {
         "FORM_LOGO": _svg(logo_box, 461, 242, "#232F3E", logo_paths),
         "FAVICON_SVG": _svg(mark_box, 64, 64, "#232F3E", mark_paths),
+        "PAGE_BACKGROUND": _minified("login-background.svg"),
     }
 
 
