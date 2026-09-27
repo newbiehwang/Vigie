@@ -1,7 +1,4 @@
 # Vigie - AWS 클라우드 운영 정보 챗봇 서비스
-
-> 이전 이름은 WGA(WeGoAWS)입니다. 서비스 이름과 AWS 리소스 이름(`vigie-*`)을 Vigie로 바꿨습니다.
-
 ![thumbnail](./images/thumbnail.png)
 
 ## 개요
