@@ -74,6 +74,8 @@ export interface DashboardData {
     resources: DashboardResource[]; // 표의 줄: 문제·주의 먼저, 최대 40줄
     resourceCounts?: Record<HealthStatus, number>; // 상태별 개수 (잘리기 전 모든 리소스)
     resourceTotal?: number;
-    changes: DashboardChange[]; // 최근 것부터
+    // 최근 것부터. 관리자(admins 그룹)가 아니면 null: 누가 무엇을 바꿨나(CloudTrail·감사 로그)는 관리자만 본다.
+    // 대화의 CloudTrail 조회가 관리자 전용인 것과 같은 범위 (services/llm/dashboard_view.py). 화면은 카드를 그리지 않는다
+    changes: DashboardChange[] | null;
     findings: DashboardFinding[];
 }

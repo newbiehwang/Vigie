@@ -164,13 +164,33 @@ def test_dashboard_reads_saved_sections_and_live_parts(llm):
 
     alice = llm.handle_dashboard({"sub": "alice", "email": "alice@example.com"}, ORIGIN)
     decider = llm.handle_dashboard({"sub": "dave", "cognito:groups": "approvers"}, ORIGIN)
+    admin = llm.handle_dashboard({"sub": "ann", "cognito:groups": "admins,approvers"}, ORIGIN)
 
     body = json.loads(alice["body"])
     assert alice["statusCode"] == 200
     assert body["alarms"] == {"total": 1, "firing": []} and body["env"] == "test"
     assert body["approvals"]["pending"] == 1  # 본인 요청만 (만료는 빼고)
     assert json.loads(decider["body"])["approvals"]["pending"] == 2  # 결정자는 모두
-    assert [c["source"] for c in body["changes"]] == ["app"] and body["changes"][0]["actor"] == "kim@example.com"
+    # 최근 변경(누가 무엇을 바꿨나)은 관리자에게만 (대화의 CloudTrail 조회와 같은 범위, tool_access.py)
+    admin_body = json.loads(admin["body"])
+    assert [c["source"] for c in admin_body["changes"]] == ["app"]
+    assert admin_body["changes"][0]["actor"] == "kim@example.com"
+
+
+def test_recent_changes_are_for_admins_only(llm):
+    from common.dashboard_store import DashboardStore
+    DashboardStore(boto3.resource("dynamodb").Table(DASHBOARD_TABLE)).put_section(
+        "changes", {"events": [{"at": int(time.time()) - 60, "eventName": "AuthorizeSecurityGroupIngress",
+                                "resource": "sg-1", "actor": "park@example.com"}]})
+    put_executed(5, "req-1")
+    for claims in ({"sub": "alice"}, {"sub": "dave", "cognito:groups": "approvers"}):
+        body = json.loads(llm.handle_dashboard(claims, ORIGIN)["body"])
+        # 값도, 모은 때(sections)도 주지 않는다. 사람 이름·이메일이 응답 어디에도 없다
+        assert body["changes"] is None and "changes" not in body["sections"]
+        assert "park@example.com" not in json.dumps(body) and "kim@example.com" not in json.dumps(body)
+    admin = json.loads(llm.handle_dashboard({"sub": "ann", "cognito:groups": ["admins"]}, ORIGIN)["body"])
+    assert {c["actor"] for c in admin["changes"]} == {"park@example.com", "kim@example.com"}
+    assert "changes" in admin["sections"]
 
 
 def test_dashboard_requires_login_and_table(llm, monkeypatch):

@@ -1727,7 +1727,8 @@ const dashboardData = (): DashboardData => {
     sections: {
       alarms: collected(20), // 이벤트로 바로
       resources: collected(20),
-      changes: collected(40),
+      // 최근 변경은 관리자에게만 (서버의 dashboard_view.build_view show_changes). ?mock-role=member면 빠진다
+      ...(mockIsAdmin() ? { changes: collected(40) } : {}),
       errors: collected(150), // 5분마다
       usage: collected(1700), // 1시간마다
       cost: collected(5 * 3600), // 하루 1번
@@ -1750,7 +1751,7 @@ const dashboardData = (): DashboardData => {
     resources,
     resourceCounts,
     resourceTotal: resources.length,
-    changes,
+    changes: mockIsAdmin() ? changes : null,
     findings,
   };
 };

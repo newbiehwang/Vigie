@@ -11,6 +11,9 @@ AWS는 부르지 않는다 (DynamoDB만 읽는다).
     (실시간)   → approvals (볼 수 있는 대기 요청만, approvals.can_view)
 - 한 번도 모으지 못한 구역은 null이다. 화면은 그 칸에 '데이터가 존재하지 않습니다.'를 보인다.
 - sections에 구역마다 모은 때·성공 여부를 담아, 화면이 '모으지 못함 · 마지막 성공 N분 전'을 보일 수 있게 한다.
+- changes(최근 변경)는 관리자에게만 준다 (show_changes). 누가 무엇을 바꿨는지가 CloudTrail과 감사 로그에서 오므로,
+  대화의 CloudTrail 조회(lookup_events)·감사 로그와 같이 관리자(admins 그룹)만 본다 (docs/threat-model.md T41).
+  일반 사용자에게는 null이고 sections에도 넣지 않는다. 화면은 null이면 카드를 그리지 않는다.
 """
 import time
 from datetime import datetime, timedelta, timezone
@@ -191,9 +194,12 @@ def pending_approvals(approval_store, can_view: Callable[..., bool], caller_id: 
 
 
 def build_view(sections: Dict[str, Dict[str, Any]], *, env: str, region: str, approvals: Dict[str, Any],
-               app_changes: List[Dict[str, Any]], now: Optional[int] = None) -> Dict[str, Any]:
-    """저장된 구역들(DashboardStore.get_all) + 실시간 값 → 화면 모양 (types/dashboard.ts의 DashboardData)."""
+               app_changes: List[Dict[str, Any]], now: Optional[int] = None,
+               show_changes: bool = True) -> Dict[str, Any]:
+    """저장된 구역들(DashboardStore.get_all) + 실시간 값 → 화면 모양 (types/dashboard.ts의 DashboardData).
+    show_changes=False(일반 사용자)면 최근 변경을 빼고 null로 둔다."""
     now = now or int(time.time())
+    shown = [name for name in SECTIONS if name in sections and (show_changes or name != "changes")]
 
     def data(name: str) -> Optional[Dict[str, Any]]:
         return (sections.get(name) or {}).get("data")
@@ -205,7 +211,7 @@ def build_view(sections: Dict[str, Dict[str, Any]], *, env: str, region: str, ap
         "env": env,
         "region": region,
         "sections": {name: {key: sections[name].get(key) for key in ("ok", "error", "collectedAt", "lastSuccessAt")}
-                     for name in SECTIONS if name in sections},
+                     for name in shown},
         "alarms": data("alarms"),
         "errors": build_errors(data("errors")),
         "cost": data("cost"),
@@ -213,6 +219,6 @@ def build_view(sections: Dict[str, Dict[str, Any]], *, env: str, region: str, ap
         "resources": resources["rows"],
         "resourceCounts": resources["counts"],
         "resourceTotal": resources["total"],
-        "changes": build_changes(data("changes"), app_changes, now),
+        "changes": build_changes(data("changes"), app_changes, now) if show_changes else None,
         "findings": build_findings(data("resources"), data("usage")),
     }

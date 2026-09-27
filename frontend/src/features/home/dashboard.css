@@ -369,6 +369,11 @@
   align-items: start;
 }
 
+/* 카드가 하나뿐인 줄 (일반 사용자는 '최근 변경' 카드가 없어 리소스 표가 한 줄을 다 쓴다) */
+.dash-row--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .dash-card {
   min-width: 0;
   border: 1px solid var(--raised-border);

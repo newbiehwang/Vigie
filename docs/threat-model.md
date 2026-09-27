@@ -121,7 +121,7 @@ Vigie는 사용자가 자연어로 AWS 계정을 조회하고 일부를 바꾸�
 
 | # | 위협 | 방어 | 테스트 |
 |:--|:--|:--|:--|
-| T41 | 가입만 한 사용자(A2)가 계정 전체의 CloudTrail(누가·언제·어느 IP에서·무엇을), IAM 권한 구조, 네트워크 구성, 공개 버킷 목록을 조회해 계정을 정찰한다 | 관리자 전용 도구(`mcp/lambda_mcp/risk.py`의 `ADMIN_ONLY`)는 `admins` 그룹만 쓴다. 일반 사용자 요청에는 모델에게 주는 도구 목록에서 빼고(도구 검색으로도 찾을 수 없다), 이름으로 불러도 LLM Lambda가 거절해 감사 로그에 실패로 남긴다. MCP 서버도 관리자 표시가 없는 호출은 실행하지 않는다. Slack 봇 요청은 일반 사용자다. 목록에 없는 도구는 관리자 전용으로 본다 | `tests/test_tool_access.py::test_member_does_not_see_admin_tools`, `tests/test_tool_access.py::test_member_calling_an_admin_tool_by_name_is_refused_and_audited`, `tests/test_tool_access.py::test_mcp_refuses_admin_tools_without_the_admin_mark`, `tests/test_tool_access.py::test_slack_requests_are_members`, `tests/test_tool_access.py::test_every_tool_says_who_can_use_it_and_the_admin_list_is_exact` |
+| T41 | 가입만 한 사용자(A2)가 계정 전체의 CloudTrail(누가·언제·어느 IP에서·무엇을), IAM 권한 구조, 네트워크 구성, 공개 버킷 목록을 조회해 계정을 정찰한다 | 관리자 전용 도구(`mcp/lambda_mcp/risk.py`의 `ADMIN_ONLY`)는 `admins` 그룹만 쓴다. 일반 사용자 요청에는 모델에게 주는 도구 목록에서 빼고(도구 검색으로도 찾을 수 없다), 이름으로 불러도 LLM Lambda가 거절해 감사 로그에 실패로 남긴다. MCP 서버도 관리자 표시가 없는 호출은 실행하지 않는다. Slack 봇 요청은 일반 사용자다. 목록에 없는 도구는 관리자 전용으로 본다. 홈 대시보드의 '최근 변경'(CloudTrail·감사 로그)도 관리자에게만 준다 | `tests/test_tool_access.py::test_member_does_not_see_admin_tools`, `tests/test_tool_access.py::test_member_calling_an_admin_tool_by_name_is_refused_and_audited`, `tests/test_tool_access.py::test_mcp_refuses_admin_tools_without_the_admin_mark`, `tests/test_tool_access.py::test_slack_requests_are_members`, `tests/test_tool_access.py::test_every_tool_says_who_can_use_it_and_the_admin_list_is_exact`, `tests/test_dashboard_view.py::test_recent_changes_are_for_admins_only` |
 
 ## 5. 남은 위험
 
@@ -136,7 +136,7 @@ Vigie는 사용자가 자연어로 AWS 계정을 조회하고 일부를 바꾸�
 | R5 | 인젝션 탐지는 패턴이다 | 중간 | 다른 말로 바꾸면 빠져나간다. 변경은 승인으로 막고 계정 밖으로 나가는 통로는 Claude API뿐이지만, 답변을 왜곡해 사용자를 속이는 것(무결성)은 막지 못한다 | 답변에 근거 도구 결과 표시 |
 | R6 | 가리기는 패턴이다 | 중간 | 모르는 형식의 비밀 값, 리소스 이름·IP·버킷 이름 같은 값은 Claude API로 나간다 | 로그 조회 결과의 필드 허용 목록, 데이터 분류에 따른 도구별 가리기 |
 | R7 | 요청 수·비용 한도가 없다 | 중간 | API Gateway 사용량 계획·사용자별 할당이 없다. 한 사용자가 Anthropic 토큰, Logs Insights 스캔, 흐름 로그 조회, Cost Explorer API 비용을 키울 수 있다 | 사용량 계획과 사용자별 일일 한도, 요청당 반복 수·스캔 범위 제한 |
-| R8 | 조회 권한이 사용자별로 나뉘지 않는다 | 낮음 (일부 해결) | 계정을 정찰할 수 있는 도구(CloudTrail·IAM·네트워크·S3 보안 점검과 객체 목록)는 `admins` 그룹만 쓴다 (T41). 감사 기록도 `admins`만 조회한다. 남은 것: ① 홈 대시보드의 '최근 변경' 카드가 CloudTrail 변경 기록을 모든 사용자에게 보인다 ② 도구는 여전히 한 MCP 역할로 AWS를 부르므로, 이 구분은 IAM이 아니라 LLM Lambda와 MCP 코드가 지킨다 ③ 로그 조회 결과에 개인정보가 섞일 수 있다 | '최근 변경' 카드도 관리자에게만, 관리자 전용 도구를 다른 MCP 역할로 분리 |
+| R8 | 조회 권한이 사용자별로 나뉘지 않는다 | 낮음 (일부 해결) | 계정을 정찰할 수 있는 도구(CloudTrail·IAM·네트워크·S3 보안 점검과 객체 목록)와 홈 대시보드의 '최근 변경'은 `admins` 그룹만 본다 (T41). 감사 기록도 `admins`만 조회한다. 남은 것: ① 도구는 여전히 한 MCP 역할로 AWS를 부르므로, 이 구분은 IAM이 아니라 LLM Lambda와 MCP 코드가 지킨다 ② 로그 조회 결과에 개인정보가 섞일 수 있다 ③ 홈 대시보드의 리소스 표·개선 권고는 퍼블릭 액세스 차단이 꺼진 버킷 이름을 모든 사용자에게 보인다 (차단을 켜는 변경 요청은 모든 사용자가 할 수 있어서 남겼다) | 관리자 전용 도구를 다른 MCP 역할로 분리 |
 | R9 | 계정 관리자는 감사 기록을 지울 수 있다 | 낮음 | LLM 역할은 덧붙이기만 하지만 계정 관리자 권한은 이 앱 밖의 일이다 | 로그를 다른 계정·S3 Object Lock으로 복제 |
 | R10 | 체류 신호는 질문 하나 안에서만 센다 | 낮음 | 대화 기록에는 도구 결과가 아니라 글만 남는다. 앞 질문에서 읽은 의심 결과를 모델이 답변에 옮겼고, 다음 질문에서 그 답변을 보고 변경을 요청하면 신호가 없다 (승인은 여전히 필요하다) | 대화 단위로 의심 결과를 서버에 남겨 다음 질문의 변경 요청에도 적기 |
 | R11 | 관리자 토큰을 빼앗기면 결정자를 늘릴 수 있다 | 중간 | 관리자는 사용자 관리 탭에서 누구든 결정자로 만들 수 있다. 바꾼 내용은 감사 로그에 남고 prod의 승인은 요청자 본인이 할 수 없지만, 관리자 계정 하나로 결정자를 만들고 그 사람으로 승인할 수 있다 | 관리자 MFA 필수, 그룹 변경에도 다른 관리자의 승인(두 사람 규칙) |
