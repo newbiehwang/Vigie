@@ -156,7 +156,7 @@ def test_chart_tools_get_pseudonyms_but_lookups_get_real_values(env, monkeypatch
     alias = None
     sent, calls = [], []
 
-    def fake_post(url, headers=None, json=None):
+    def fake_post(url, headers=None, json=None, **kwargs):
         nonlocal alias
         sent.append(copy.deepcopy(json))
         if len(sent) == 1:
@@ -176,12 +176,12 @@ def test_chart_tools_get_pseudonyms_but_lookups_get_real_values(env, monkeypatch
         calls.append((name, args))
         return {"content": [{"type": "text", "text": '{"status": "success", "url": "https://example.invalid/x.png"}'}]}
 
-    monkeypatch.setattr(mcp_anthropic_client.requests, "post", fake_post)
+    monkeypatch.setattr(mcp_anthropic_client.HTTP, "post", fake_post)
     client = mcp_anthropic_client.AnthropicMCPClient(mcp_url="https://example.invalid", api_key="k",
                                                      model_id="claude-sonnet-5")
     client.tools = json.loads(env["mcp"]._rpc("tools/list")["body"])["result"]["tools"]
     monkeypatch.setattr(client.mcp_client, "call_tool", call_tool)
-    monkeypatch.setattr(llm, "get_client", lambda: client)
+    monkeypatch.setattr(llm, "get_client", lambda *_: client)
 
     llm.handle_llm1_with_mcp({"text": f"{ARN} 역할 정책을 차트로 그려줘"}, ORIGIN, caller_id="alice")
 

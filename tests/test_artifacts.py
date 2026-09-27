@@ -100,7 +100,7 @@ def test_chart_reaches_the_screen_but_not_the_model(env, monkeypatch):  # noqa: 
 
     sent = []
 
-    def fake_post(url, headers=None, json=None):
+    def fake_post(url, headers=None, json=None, **kwargs):
         sent.append(copy.deepcopy(json))
         if len(sent) == 1:
             return FakeResponse({"content": [{"type": "tool_use", "id": "toolu_1", "name": "generateBarChart",
@@ -111,12 +111,12 @@ def test_chart_reaches_the_screen_but_not_the_model(env, monkeypatch):  # noqa: 
         return FakeResponse({"content": [{"type": "text", "text": f"비용입니다.\n\n![서비스별 비용]({ref})"}],
                              "usage": {}, "stop_reason": "end_turn"})
 
-    monkeypatch.setattr(mcp_anthropic_client.requests, "post", fake_post)
+    monkeypatch.setattr(mcp_anthropic_client.HTTP, "post", fake_post)
     client = mcp_anthropic_client.AnthropicMCPClient(mcp_url="https://example.invalid", api_key="k",
                                                      model_id="claude-sonnet-5")
     client.tools = json.loads(env["mcp"]._rpc("tools/list")["body"])["result"]["tools"]
     monkeypatch.setattr(client.mcp_client, "call_tool", env["mcp"].call_tool)
-    monkeypatch.setattr(llm, "get_client", lambda: client)
+    monkeypatch.setattr(llm, "get_client", lambda *_: client)
 
     body = json.loads(llm.handle_llm1_with_mcp({"text": "비용 차트 그려줘"}, ORIGIN, caller_id="alice")["body"])
 
@@ -125,7 +125,7 @@ def test_chart_reaches_the_screen_but_not_the_model(env, monkeypatch):  # noqa: 
     assert "artifact://charts/" in to_model
     for word in ("https://", "X-Amz", BUCKET, "320.5", "spec"):
         assert word not in to_model, word
-    assert "artifact://" in sent[0]["system"]  # 시스템 프롬프트가 참조를 그대로 옮기라고 한다
+    assert "artifact://" in "".join(block["text"] for block in sent[0]["system"])  # 시스템 프롬프트가 참조를 그대로 옮기라고 한다
 
     # 화면에게: 답변의 참조와 같은 결과물이 주소·그릴 내용과 함께 있다
     [artifact] = body["inference"]["artifacts"]

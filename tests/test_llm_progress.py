@@ -59,11 +59,11 @@ def client_run(aws, monkeypatch):
         {"content": [THINK_2, ANSWER], "usage": {}},
     ]
 
-    def fake_post(url, headers=None, json=None):
+    def fake_post(url, headers=None, json=None, **kwargs):
         sent.append(copy.deepcopy(json))  # 클라이언트가 보낸 뒤에도 메시지 목록을 고치므로 보낸 순간의 모습을 남긴다
         return FakeResponse(replies[len(sent) - 1])
 
-    monkeypatch.setattr(mcp_anthropic_client.requests, "post", fake_post)
+    monkeypatch.setattr(mcp_anthropic_client.HTTP, "post", fake_post)
     client = mcp_anthropic_client.AnthropicMCPClient(
         mcp_url="https://example.invalid", api_key="k", model_id="claude-sonnet-5",
         thinking={"type": "adaptive", "display": "summarized"})
@@ -186,7 +186,7 @@ class FakeClient:
 
 def test_llm1_records_progress_and_returns_steps(progress_env, monkeypatch):
     llm = load_service_module("services/llm", "llm_service")
-    monkeypatch.setattr(llm, "get_client", lambda: FakeClient())
+    monkeypatch.setattr(llm, "get_client", lambda *_: FakeClient())
 
     body = {"text": "알람 알려줘", "requestId": REQUEST_ID}
     response = llm.handle_llm1_with_mcp(body, "https://test.abc.amplifyapp.com", caller_id="alice")
@@ -201,7 +201,7 @@ def test_llm1_records_progress_and_returns_steps(progress_env, monkeypatch):
 def test_llm1_without_request_id_does_not_save_progress(progress_env, monkeypatch):
     # Slack 봇이나 예전 화면은 requestId를 보내지 않는다: 저장하지 않고 단계만 답변에 넣는다
     llm = load_service_module("services/llm", "llm_service")
-    monkeypatch.setattr(llm, "get_client", lambda: FakeClient())
+    monkeypatch.setattr(llm, "get_client", lambda *_: FakeClient())
 
     response = llm.handle_llm1_with_mcp({"text": "알람 알려줘"}, "https://test.abc.amplifyapp.com", caller_id="alice")
     assert [s["type"] for s in json.loads(response["body"])["inference"]["steps"]] == ["thinking", "tool"]

@@ -35,7 +35,7 @@ def run(env, monkeypatch, replies, log_text=ATTACK_KO):
     import mcp_anthropic_client
     sent = []
 
-    def fake_post(url, headers=None, json=None):
+    def fake_post(url, headers=None, json=None, **kwargs):
         sent.append(copy.deepcopy(json))
         return FakeResponse({"usage": {}, **replies[len(sent) - 1]})
 
@@ -45,12 +45,12 @@ def run(env, monkeypatch, replies, log_text=ATTACK_KO):
                 {"results": [[{"field": "@message", "value": log_text}]]}, ensure_ascii=False)}]}
         return env["mcp"].call_tool(name, args, meta)
 
-    monkeypatch.setattr(mcp_anthropic_client.requests, "post", fake_post)
+    monkeypatch.setattr(mcp_anthropic_client.HTTP, "post", fake_post)
     client = mcp_anthropic_client.AnthropicMCPClient(mcp_url="https://example.invalid", api_key="k",
                                                      model_id="claude-sonnet-5")
     client.tools = json.loads(env["mcp"]._rpc("tools/list")["body"])["result"]["tools"]
     monkeypatch.setattr(client.mcp_client, "call_tool", call_tool)
-    monkeypatch.setattr(llm, "get_client", lambda: client)
+    monkeypatch.setattr(llm, "get_client", lambda *_: client)
     return json.loads(llm.handle_llm1_with_mcp({"text": "최근 오류 로그 보여줘"}, ORIGIN, caller_id="alice")["body"])
 
 

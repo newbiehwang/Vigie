@@ -90,7 +90,7 @@ def client_run(audit_env, monkeypatch):
     ]
     sent = []
 
-    def fake_post(url, headers=None, json=None):
+    def fake_post(url, headers=None, json=None, **kwargs):
         sent.append(copy.deepcopy(json))
         return FakeResponse(replies[len(sent) - 1])
 
@@ -99,7 +99,7 @@ def client_run(audit_env, monkeypatch):
             return {"content": [{"type": "text", "text": REAL_ARN}]}
         return {"isError": True, "content": [{"type": "text", "text": f"AccessDenied for {ACCESS_KEY}"}]}
 
-    monkeypatch.setattr(mcp_anthropic_client.requests, "post", fake_post)
+    monkeypatch.setattr(mcp_anthropic_client.HTTP, "post", fake_post)
     client = mcp_anthropic_client.AnthropicMCPClient(
         mcp_url="https://example.invalid", api_key="k", model_id="claude-sonnet-5")
     read = {"wga/risk": "read"}  # MCP tools/list가 붙이는 위험도 (없으면 변경 도구로 본다)
@@ -174,7 +174,7 @@ def items_of(table, user_id):
 
 def test_llm1_records_the_request(audit_env, monkeypatch):
     llm = load_service_module("services/llm", "llm_service")
-    monkeypatch.setattr(llm, "get_client", lambda: FakeClient())
+    monkeypatch.setattr(llm, "get_client", lambda *_: FakeClient())
 
     body = {"text": f"계정 {ACCOUNT}의 키 {ACCESS_KEY} 확인", "requestId": REQUEST_ID, "sessionId": "s1"}
     llm.handle_llm1_with_mcp(body, ORIGIN, caller_id="alice", caller_email="alice@example.com")
@@ -190,7 +190,7 @@ def test_llm1_records_the_request(audit_env, monkeypatch):
 
 def test_slack_requests_are_recorded_by_slack_user(audit_env, monkeypatch):
     llm = load_service_module("services/llm", "llm_service")
-    monkeypatch.setattr(llm, "get_client", lambda: FakeClient())
+    monkeypatch.setattr(llm, "get_client", lambda *_: FakeClient())
     monkeypatch.setattr(llm, "send_slack_dm", lambda user, text: None)
 
     body = {"text": "알람", "user_id": "U123", "previous_questions": [{"role": "user", "content": "x"}]}
@@ -206,7 +206,7 @@ def test_failed_request_is_recorded(audit_env, monkeypatch):
         def process_user_input(self, text, system_prompt):
             raise RuntimeError(f"Anthropic 오류 {ACCESS_KEY}")
 
-    monkeypatch.setattr(llm, "get_client", lambda: Broken())
+    monkeypatch.setattr(llm, "get_client", lambda *_: Broken())
     response = llm.handle_llm1_with_mcp({"text": "알람"}, ORIGIN, caller_id="alice")
     assert response["statusCode"] == 500
     request = items_of(audit_env, "alice")[0]
@@ -218,7 +218,7 @@ def test_audit_failure_does_not_stop_the_answer(aws, monkeypatch):
     monkeypatch.setenv("AUDIT_TABLE", "missing-table")
     monkeypatch.setenv("AUDIT_LOG_GROUP", "/missing/group")
     llm = load_service_module("services/llm", "llm_service")
-    monkeypatch.setattr(llm, "get_client", lambda: FakeClient())
+    monkeypatch.setattr(llm, "get_client", lambda *_: FakeClient())
     response = llm.handle_llm1_with_mcp({"text": "알람"}, ORIGIN, caller_id="alice")
     assert response["statusCode"] == 200 and json.loads(response["body"])["answer"] == "답변"
 
@@ -246,7 +246,7 @@ def run_llm1(llm, monkeypatch, answer):
             super().process_user_input(text, system_prompt)
             return answer
 
-    monkeypatch.setattr(llm, "get_client", lambda: Answering())
+    monkeypatch.setattr(llm, "get_client", lambda *_: Answering())
     body = {"text": "알람", "requestId": REQUEST_ID, "sessionId": "s1"}
     return llm.handle_llm1_with_mcp(body, ORIGIN, caller_id="alice", caller_email="alice@example.com")
 
@@ -295,7 +295,7 @@ def test_failed_request_has_no_answer(audit_env, monkeypatch):
         def process_user_input(self, text, system_prompt):
             raise RuntimeError("Anthropic 오류")
 
-    monkeypatch.setattr(llm, "get_client", lambda: Broken())
+    monkeypatch.setattr(llm, "get_client", lambda *_: Broken())
     llm.handle_llm1_with_mcp({"text": "알람"}, ORIGIN, caller_id="alice")
     (request,) = items_of(audit_env, "alice")
     assert request["kind"] == "request" and "answerPreview" not in request
@@ -368,7 +368,7 @@ class CountingClient(FakeClient):
 
 def test_llm1_records_tokens_and_estimated_cost(audit_env, monkeypatch):
     llm = load_service_module("services/llm", "llm_service")
-    monkeypatch.setattr(llm, "get_client", lambda: CountingClient())
+    monkeypatch.setattr(llm, "get_client", lambda *_: CountingClient())
     llm.handle_llm1_with_mcp({"text": "알람", "requestId": REQUEST_ID}, ORIGIN, caller_id="alice")
     request = next(i for i in items_of(audit_env, "alice") if i["kind"] == "request")
     assert request["tokens"] == USAGE["tokens"] and request["modelCalls"] == USAGE["calls"]
@@ -386,7 +386,7 @@ def test_unknown_model_keeps_tokens_without_cost(audit_env, monkeypatch):
     class NewModel(CountingClient):
         model_id = "claude-sonnet-9"
 
-    monkeypatch.setattr(llm, "get_client", lambda: NewModel())
+    monkeypatch.setattr(llm, "get_client", lambda *_: NewModel())
     llm.handle_llm1_with_mcp({"text": "알람"}, ORIGIN, caller_id="alice")
     request = next(i for i in items_of(audit_env, "alice") if i["kind"] == "request")
     assert request["tokens"] == USAGE["tokens"]
@@ -400,7 +400,7 @@ def test_failed_request_keeps_the_tokens_it_used(audit_env, monkeypatch):
         def process_user_input(self, text, system_prompt):
             raise RuntimeError("Anthropic 오류")
 
-    monkeypatch.setattr(llm, "get_client", lambda: Broken())
+    monkeypatch.setattr(llm, "get_client", lambda *_: Broken())
     llm.handle_llm1_with_mcp({"text": "알람"}, ORIGIN, caller_id="alice")
     (request,) = items_of(audit_env, "alice")
     assert request["status"] == "error" and request["costMicroUsd"] == 14000
@@ -409,7 +409,7 @@ def test_failed_request_keeps_the_tokens_it_used(audit_env, monkeypatch):
 def test_clients_without_usage_leave_no_tokens(audit_env, monkeypatch):
     # usage_summary가 없는 클라이언트(Bedrock)는 토큰·비용 없이 남긴다
     llm = load_service_module("services/llm", "llm_service")
-    monkeypatch.setattr(llm, "get_client", lambda: FakeClient())
+    monkeypatch.setattr(llm, "get_client", lambda *_: FakeClient())
     llm.handle_llm1_with_mcp({"text": "알람"}, ORIGIN, caller_id="alice")
     request = next(i for i in items_of(audit_env, "alice") if i["kind"] == "request")
     assert "tokens" not in request and "costMicroUsd" not in request

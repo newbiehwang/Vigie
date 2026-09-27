@@ -7,10 +7,24 @@ import injection
 
 
 def build_system_prompt(now) -> str:
+    """시스템 프롬프트 한 덩어리 (측정 스크립트용). now: 요청 시각 (UTC datetime)."""
+    return STATIC_PROMPT + "\n" + time_note(now)
+
+
+def build_system_blocks(now) -> list:
+    """Messages API의 system 블록 두 개: 바뀌지 않는 본문(캐시 표시) + 요청 시각.
+    프롬프트 캐시는 앞부분이 글자 하나까지 같아야 맞는다. 예전에는 초 단위 시각이 본문 맨 앞에 있어 질문마다 시스템
+    프롬프트 캐시가 깨졌다. 시각을 캐시 표시 뒤의 작은 블록으로 떼어 두면, 도구 목록 + 본문은 다음 질문에서도 캐시로 읽는다."""
+    return [{"type": "text", "text": STATIC_PROMPT, "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": time_note(now)}]
+
+
+def time_note(now) -> str:
     """now: 요청 시각 (UTC datetime). 모델은 지금이 언제인지 모르므로 시간 범위를 계산할 수 있게 넣는다."""
-    return f"""You are "AWS Cloud Agent" - an AWS-specialized AI assistant. Always respond in Korean.
-        The current time is UTC {now.strftime('%Y-%m-%d %H:%M:%S')}.
-        Korean time is UTC+9.
+    return f"The current time is UTC {now.strftime('%Y-%m-%d %H:%M:%S')}. Korean time is UTC+9."
+
+
+STATIC_PROMPT = """You are "AWS Cloud Agent" - an AWS-specialized AI assistant. Always respond in Korean.
         <Tools>
         1. Log Analysis (AWS official CloudWatch MCP tools):
             Step1: describe_log_groups (find the actual log group name, e.g. prefix "/aws/lambda")

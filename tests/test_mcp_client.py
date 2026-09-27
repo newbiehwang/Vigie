@@ -18,20 +18,21 @@ class FakeResponse:
 
 
 @pytest.fixture
-def sent():
-    captured = []
-
-    def fake_request(method, url, headers=None, data=None):
-        captured.append({"method": method, "url": url, "headers": headers, "data": data})
-        return FakeResponse()
-
-    with patch("requests.request", fake_request):
-        yield captured
+def mcp_client():
+    return load_service_module("services/llm", "mcp_client")
 
 
 @pytest.fixture
-def mcp_client():
-    return load_service_module("services/llm", "mcp_client")
+def sent(mcp_client):
+    """MCP 서버로 나가는 요청 (컨테이너 안에서 다시 쓰는 연결 mcp_client.HTTP로 보낸다)."""
+    captured = []
+
+    def fake_request(method, url, headers=None, data=None, timeout=None):
+        captured.append({"method": method, "url": url, "headers": headers, "data": data, "timeout": timeout})
+        return FakeResponse()
+
+    with patch.object(mcp_client.HTTP, "request", fake_request):
+        yield captured
 
 
 def test_function_url_requests_are_sigv4_signed(mcp_client, sent):
@@ -52,6 +53,7 @@ def test_function_url_requests_are_sigv4_signed(mcp_client, sent):
     assert json.loads(init["data"])["method"] == "initialize"
     assert "mcp-session-id" in tools["headers"]["Authorization"].lower()
     assert close["method"] == "DELETE" and close["data"] is None
+    assert init["timeout"] == mcp_client.HTTP_TIMEOUT  # 응답이 오지 않아도 영원히 기다리지 않는다
 
 
 def test_non_lambda_url_uses_bearer_token(mcp_client, sent):

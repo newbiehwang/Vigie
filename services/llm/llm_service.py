@@ -4,6 +4,7 @@ import requests
 import boto3
 import os
 import re
+import threading
 import time
 from datetime import datetime, timezone
 from common.config import get_config
@@ -19,7 +20,8 @@ from mcp_client import MCPClient
 from common.dashboard_store import DashboardStore
 from dashboard_view import app_changes_from_audit, build_view, pending_approvals
 import metrics
-from system_prompt import build_system_prompt
+from system_prompt import build_system_blocks, build_system_prompt
+from timing import Stopwatch
 from artifacts import Artifacts
 
 # Lambda 환경에서 효율적인 재사용을 위한 클라이언트 캐싱
@@ -68,12 +70,15 @@ dashboard_store = DashboardStore(boto3.resource("dynamodb").Table(DASHBOARD_TABL
 # (예전 기본값 claude-3-5-sonnet-20241022는 2025-10-28, claude-3-7-sonnet-20250219는 2026-02-19에 퇴역했다).
 MODEL_FAMILY = "sonnet"
 MODELS_CACHE_SECONDS = 3600  # 모델 목록은 자주 바뀌지 않는다. Lambda 컨테이너마다 한 시간 재사용
+COLD_MODELS_TIMEOUT = 5  # 목록이 아직 없을 때(새 컨테이너) 기다리는 시간. 넘으면 FALLBACK_MODEL로 답한다
+# 대화 기록은 최근 것만 보낸다 (오래된 대화까지 매번 보내면 입력이 커져 첫 응답이 늦어지고 요금이 는다)
+MAX_HISTORY_MESSAGES = 20
 # 목록을 한 번도 받지 못했을 때만 쓰는 모델 (Models API 장애 등). 평소에는 쓰이지 않는다
 FALLBACK_MODEL = {"id": "claude-sonnet-5", "display_name": "Claude Sonnet 5", "thinking": "adaptive"}
 _models_cache = {"at": 0.0, "models": []}
 
 
-def get_anthropic_models():
+def get_anthropic_models(timeout=10):
     """
     Anthropic Models API(GET /v1/models)에서 지금 사용할 수 있는 모델 목록을 끝까지 조회한다.
 
@@ -99,7 +104,7 @@ def get_anthropic_models():
         params = {"limit": 1000}
         while True:
             response = requests.get("https://api.anthropic.com/v1/models", headers=headers, params=params,
-                                    timeout=10)
+                                    timeout=timeout)
             if response.status_code != 200:
                 print(f"Anthropic Models API 오류: {response.status_code} - {response.text}")
                 return []
@@ -157,14 +162,30 @@ def thinking_config(model):
     return None
 
 
-def available_models():
-    """모델 목록 (캐시). 새로 받지 못하면 마지막으로 받은 목록을 계속 쓴다 (일시적인 오류로 채팅이 멈추지 않게)."""
-    now = time.time()
-    if _models_cache["models"] and now - _models_cache["at"] < MODELS_CACHE_SECONDS:
-        return _models_cache["models"]
-    models = get_anthropic_models()
+def _refresh_models(timeout=10):
+    models = get_anthropic_models(timeout=timeout)
     if models:
-        _models_cache.update(at=now, models=models)
+        _models_cache.update(at=time.time(), models=models)
+
+
+_models_refresh = None  # 뒤에서 목록을 새로 받는 스레드 (한 번에 하나)
+
+
+def available_models():
+    """모델 목록 (캐시). 질문이 목록 조회를 기다리지 않게 한다.
+    - 한 시간 안: 캐시를 그대로 쓴다
+    - 오래됨: 캐시를 바로 쓰고, 뒤에서(스레드) 새로 받는다. 다음 질문부터 새 목록이 쓰인다
+      (Lambda는 응답 뒤 멈추므로 이번 요청 안에 못 끝나면 다음 호출 때 이어서 끝난다)
+    - 없음(새 컨테이너): 받아야 고를 수 있으니 기다리되, COLD_MODELS_TIMEOUT을 넘기면 FALLBACK_MODEL로 답한다
+    새로 받지 못하면 마지막으로 받은 목록을 계속 쓴다 (일시적인 오류로 채팅이 멈추지 않게)."""
+    global _models_refresh
+    now = time.time()
+    if _models_cache["models"]:
+        if now - _models_cache["at"] >= MODELS_CACHE_SECONDS and not (_models_refresh and _models_refresh.is_alive()):
+            _models_refresh = threading.Thread(target=_refresh_models, daemon=True)
+            _models_refresh.start()
+        return _models_cache["models"]
+    _refresh_models(timeout=COLD_MODELS_TIMEOUT)
     return _models_cache["models"]
 
 
@@ -215,6 +236,16 @@ def tool_step(entry):
     return None
 
 
+def recent_history(messages: list) -> list:
+    """최근 MAX_HISTORY_MESSAGES개만 남긴다. 첫 메시지는 사용자 질문이어야 한다 (Messages API 규칙)."""
+    if len(messages) <= MAX_HISTORY_MESSAGES:
+        return messages
+    recent = messages[-MAX_HISTORY_MESSAGES:]
+    while recent and recent[0]["role"] != "user":
+        recent = recent[1:]
+    return recent
+
+
 def get_session_messages_as_array(session_id: str, user_id: str) -> list:
     """
     DynamoDB에서 세션의 메시지 히스토리를 messages 배열 형식으로 가져옴
@@ -262,6 +293,7 @@ def get_session_messages_as_array(session_id: str, user_id: str) -> list:
                     "content": text
                 })
 
+        formatted_messages = recent_history(formatted_messages)
         print(f"세션 {session_id}에서 {len(formatted_messages)}개 메시지를 배열 형식으로 로드됨")
         return formatted_messages
 
@@ -270,17 +302,19 @@ def get_session_messages_as_array(session_id: str, user_id: str) -> list:
         return []
 
 
-def get_client():
+def get_client(timer=None):
     """
     MCP 클라이언트 인스턴스를 가져오거나 생성. 요청할 때의 최신 Sonnet을 쓰고, 모델 ID별로 캐시한다
-    (새 Sonnet이 나오면 새 클라이언트가 만들어진다)
+    (새 Sonnet이 나오면 새 클라이언트가 만들어진다). timer(timing.Stopwatch)가 있으면 모델 고르기·MCP 준비 시간을 잰다
     """
     global client_cache
+    timer = timer or Stopwatch.off()
 
     # 사용할 클라이언트 유형 결정 (Bedrock 또는 Anthropic)
     use_anthropic = os.environ.get('USE_ANTHROPIC_API', 'true').lower() == 'true'
     # Bedrock은 모델 ID 형식이 달라(anthropic.claude-…) Anthropic 목록으로 고르지 않고 BedrockMCPClient의 기본값을 쓴다
-    model = current_model() if use_anthropic else None
+    with timer.step("models"):
+        model = current_model() if use_anthropic else None
     model_id = model["id"] if model else None
 
     # 캐시에 해당 모델 ID의 클라이언트가 없으면 생성
@@ -315,8 +349,9 @@ def get_client():
                 model_id=model_id
             )
 
-        # 세션 초기화 및 도구 로드
-        client_cache[model_id].initialize()
+        # 세션 초기화 및 도구 로드 (MCP Lambda가 차가우면 오래 걸린다: 공식 MCP 서버를 불러온다)
+        with timer.step("mcp_init"):
+            client_cache[model_id].initialize()
 
         print(f"클라이언트 초기화 완료 - 모델 ID: {model_id}")
 
@@ -371,8 +406,8 @@ def handle_llm1_with_mcp(body, origin, caller_id=None, caller_email=None):
             return cors_response(400, {"error": "사용자 입력이 제공되지 않았습니다."}, origin)
 
 
-        # 시스템 프롬프트 설정
-        system_prompt = build_system_prompt(now)
+        # 단계마다 걸린 시간 (끝에 로그 한 줄, timing.py)
+        timer = Stopwatch()
 
         # 진행 상황: 화면이 보낸 requestId로 단계마다 기록한다 (웹 요청만. Slack 봇은 기록할 곳 없이 단계만 모은다)
         request_id = body.get('requestId')
@@ -393,7 +428,11 @@ def handle_llm1_with_mcp(body, origin, caller_id=None, caller_email=None):
                          request_id=request_id, session_id=session_id, model_id=model_id, question=user_input)
 
         # MCP 클라이언트 가져오기
-        client = get_client()
+        client = get_client(timer)
+        client.timer = timer
+        # 시스템 프롬프트: 블록을 받는 클라이언트(Anthropic)에는 캐시되는 본문 + 요청 시각으로 나눠 보낸다 (system_prompt.py)
+        system_prompt = (build_system_blocks(now) if getattr(client, "supports_system_blocks", False)
+                         else build_system_prompt(now))
         client.progress = progress
         client.redactor = redactor
         client.audit = audit
@@ -424,7 +463,8 @@ def handle_llm1_with_mcp(body, origin, caller_id=None, caller_email=None):
                 print(f"세션 ID: {session_id}")
 
                 # 세션 메시지 히스토리를 messages 배열로 로드
-                previous_messages = get_session_messages_as_array(session_id, caller_id)
+                with timer.step("history"):
+                    previous_messages = get_session_messages_as_array(session_id, caller_id)
 
                 if previous_messages:
                     print(f"=== 히스토리 발견 ===")
@@ -537,6 +577,7 @@ def handle_llm1_with_mcp(body, origin, caller_id=None, caller_email=None):
         # 감사 로그에는 사용자가 받은 답변(가린 뒤의 글자) 그대로. Slack으로 보낼 때 바꾸는 주소는 곧 만료되므로 넣지 않는다
         audit.request_finished(True, answer=response_text, usage=usage_of(client))
         emit_request_metrics(progress, redactor, approvals)
+        timer.log(ok=True, model=getattr(client, "model_id", None), tools=len(tools_used))
 
         # 응답 시간 기록 및 경과 시간 계산
         response_time = datetime.now(timezone.utc)
@@ -573,6 +614,8 @@ def handle_llm1_with_mcp(body, origin, caller_id=None, caller_email=None):
 
     except Exception as e:
         print(f"MCP 처리 중 오류: {str(e)}")
+        if 'timer' in locals():
+            timer.log(ok=False)
         if 'progress' in locals():
             progress.finished(False)
         if 'audit' in locals():

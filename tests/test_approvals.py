@@ -274,11 +274,11 @@ def run_loop(env, monkeypatch, tool_name="setLogRetention", tool_input=None, wit
     ]
     sent = []
 
-    def fake_post(url, headers=None, json=None):
+    def fake_post(url, headers=None, json=None, **kwargs):
         sent.append(copy.deepcopy(json))
         return FakeResponse(replies[len(sent) - 1])
 
-    monkeypatch.setattr(mcp_anthropic_client.requests, "post", fake_post)
+    monkeypatch.setattr(mcp_anthropic_client.HTTP, "post", fake_post)
     client = mcp_anthropic_client.AnthropicMCPClient(mcp_url="https://example.invalid", api_key="k",
                                                      model_id="claude-sonnet-5")
     client.tools = json.loads(env["mcp"]._rpc("tools/list")["body"])["result"]["tools"]
@@ -486,7 +486,7 @@ class FakeClient:
 
 def test_follow_up_explains_the_stored_result(env, monkeypatch):
     llm = env["llm"]
-    monkeypatch.setattr(llm, "get_client", lambda: FakeClient())
+    monkeypatch.setattr(llm, "get_client", lambda *_: FakeClient())
     action = make_action(env)
 
     def ask(sub):
@@ -512,7 +512,7 @@ def test_llm1_response_lists_pending_actions(env, monkeypatch):
                                    {"summary": "보존 기간 30일 → 14일", "before": "30일", "after": "14일"})
             return "승인이 필요합니다."
 
-    monkeypatch.setattr(llm, "get_client", lambda: Requesting())
+    monkeypatch.setattr(llm, "get_client", lambda *_: Requesting())
     body = json.loads(llm.handle_llm1_with_mcp({"text": "줄여줘"}, ORIGIN, caller_id="alice")["body"])
     pending = body["inference"]["pendingActions"]
     assert len(pending) == 1 and pending[0]["status"] == "pending" and pending[0]["before"] == "30일"
@@ -526,7 +526,7 @@ def test_llm1_response_lists_pending_actions(env, monkeypatch):
             seen["approvals"] = self.approvals
             return "답"
 
-    monkeypatch.setattr(llm, "get_client", lambda: Slack())
+    monkeypatch.setattr(llm, "get_client", lambda *_: Slack())
     monkeypatch.setattr(llm, "send_slack_dm", lambda user, text: None)
     llm.handle_llm1_with_mcp({"text": "줄여줘", "user_id": "U1", "previous_questions": [{"role": "user",
                                                                                    "content": "x"}]}, ORIGIN)

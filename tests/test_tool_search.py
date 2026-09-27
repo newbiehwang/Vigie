@@ -30,7 +30,7 @@ def make_client(monkeypatch, env, replies, calls=None):  # noqa: F811
 
     sent = []
 
-    def fake_post(url, headers=None, json=None):
+    def fake_post(url, headers=None, json=None, **kwargs):
         sent.append(copy.deepcopy(json))
         reply = replies[len(sent) - 1]
         return reply if isinstance(reply, ErrorResponse) else FakeResponse(reply)
@@ -39,12 +39,12 @@ def make_client(monkeypatch, env, replies, calls=None):  # noqa: F811
         (calls if calls is not None else []).append(name)
         return {"content": [{"type": "text", "text": '{"events": []}'}]}
 
-    monkeypatch.setattr(mcp_anthropic_client.requests, "post", fake_post)
+    monkeypatch.setattr(mcp_anthropic_client.HTTP, "post", fake_post)
     client = mcp_anthropic_client.AnthropicMCPClient(mcp_url="https://example.invalid", api_key="k",
                                                      model_id="claude-sonnet-5")
     client.tools = real_tools(env)
     monkeypatch.setattr(client.mcp_client, "call_tool", call_tool)
-    monkeypatch.setattr(llm, "get_client", lambda: client)
+    monkeypatch.setattr(llm, "get_client", lambda *_: client)
     return llm, client, sent
 
 
@@ -127,7 +127,11 @@ def test_search_blocks_are_sent_back_and_shown(env, monkeypatch):  # noqa: F811
     body = json.loads(response["body"])
 
     # 첫 요청: 시스템 프롬프트에 찾는 방법이 있고, 도구 목록에 검색 도구가 있다
-    assert "<Tool search>" in sent[0]["system"] and sent[0]["tools"][0]["name"] == "tool_search_tool_regex"
+    system = sent[0]["system"]
+    # 시스템 프롬프트는 캐시되는 본문(찾는 방법 포함, 캐시 표시) + 요청 시각 두 블록이다 (system_prompt.build_system_blocks)
+    assert "<Tool search>" in system[0]["text"] and system[0]["cache_control"] == {"type": "ephemeral"}
+    assert system[1]["text"].startswith("The current time is UTC") and "cache_control" not in system[1]
+    assert sent[0]["tools"][0]["name"] == "tool_search_tool_regex"
     # 찾은 도구만 실행했다 (검색은 Anthropic 서버에서 이미 끝났다)
     assert calls == ["lookup_events"]
     # 두 번째 요청: 검색 블록을 고치지 않고 돌려보내고, tool_result는 tool_use에만 보낸다

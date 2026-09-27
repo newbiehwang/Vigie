@@ -14,6 +14,10 @@ import tool_search
 MAX_TOKENS = 16000
 # 승인 요청에 적는 '먼저 읽은 의심 결과'의 최대 수 (최근 것부터). 승인 테이블 항목 크기를 제한한다
 MAX_TAINTED = 5
+# Messages API 연결을 컨테이너 안에서 다시 쓴다 (요청마다 TLS 연결을 새로 맺지 않게). requests.post는 부를 때마다
+# 새 세션을 만들어 연결을 버린다. 제한 시간: 연결 10초, 응답을 기다리는 시간 300초 (사고가 긴 답변도 끊기지 않게)
+HTTP = requests.Session()
+HTTP_TIMEOUT = (10, 300)
 
 
 class AnthropicMCPClient:
@@ -78,6 +82,16 @@ class AnthropicMCPClient:
         # 이번 질문에서 부른 도구 수와, 모델이 이미 읽은 의심 결과 (체류 신호, invoke_with_tools가 질문마다 비운다)
         self._tool_calls = 0
         self._seen_suspicious: List[Dict[str, Any]] = []
+        # 요청마다 llm_service가 넣어 주는 시간 기록 (timing.Stopwatch). 모델 호출·도구마다 걸린 시간을 모은다
+        self.timer = None
+
+    # system에 블록 목록(system_prompt.build_system_blocks: 캐시되는 본문 + 요청 시각)을 받는다
+    supports_system_blocks = True
+
+    def _time(self, name: str):
+        """걸린 시간을 재는 with 블록 (시간 기록이 없으면 재지 않는다)."""
+        from timing import Stopwatch
+        return (self.timer or Stopwatch.off()).step(name)
 
     def _report(self, event: str, *args) -> None:
         """한 단계를 진행 상황과 감사 로그에 알린다 (기록할 곳이 없으면 아무것도 하지 않는다).
@@ -193,24 +207,29 @@ class AnthropicMCPClient:
         # AWS 공식 MCP 도구는 설명이 길어 도구 목록만 수만 토큰이고, 질문 하나에서도 도구를 부를 때마다 다시 보낸다
         return tool_search.build(anthropic_tools, self.tool_search)
 
-    def _system_prompt(self, system_prompt: Optional[str]) -> Optional[str]:
-        """요청에 넣을 시스템 프롬프트. 도구 검색을 켰으면 찾는 방법을 덧붙인다."""
-        if system_prompt and self.tool_search:
-            return system_prompt + tool_search.SYSTEM_HINT
-        return system_prompt
+    def _system_prompt(self, system_prompt):
+        """요청에 넣을 시스템 프롬프트. 도구 검색을 켰으면 찾는 방법을 덧붙인다.
+        블록 목록(캐시되는 본문 + 요청 시각)이면 찾는 방법을 본문 블록 끝에 붙인다 (캐시되는 앞부분에 들어가게)."""
+        if not system_prompt or not self.tool_search:
+            return system_prompt
+        if isinstance(system_prompt, list):
+            blocks = [dict(block) for block in system_prompt]
+            blocks[0]["text"] = blocks[0]["text"] + tool_search.SYSTEM_HINT
+            return blocks
+        return system_prompt + tool_search.SYSTEM_HINT
 
     def _post(self, payload: Dict[str, Any], system_prompt: Optional[str]):
         """Messages API 요청. 모델이 도구 검색을 받지 않으면(400) 끄고 모든 도구를 실어 한 번 다시 보낸다.
         self.tool_search를 끄므로 같은 질문의 다음 반복과 이 모델의 다음 질문도 모든 도구로 보낸다.
         거절은 첫 요청에서 오므로 대화에 검색 블록이 남아 있지 않다."""
-        response = requests.post(self.api_url, headers=self.api_headers, json=payload)
+        response = HTTP.post(self.api_url, headers=self.api_headers, json=payload, timeout=HTTP_TIMEOUT)
         if self.tool_search and tool_search.is_unsupported(response.status_code, response.text):
             print(f"도구 검색을 쓸 수 없어 모든 도구를 싣고 다시 보냅니다 ({self.model_id}): {response.text[:300]}")
             self.tool_search = False
             payload["tools"] = self._convert_tools_format()
             if system_prompt:
                 payload["system"] = system_prompt
-            response = requests.post(self.api_url, headers=self.api_headers, json=payload)
+            response = HTTP.post(self.api_url, headers=self.api_headers, json=payload, timeout=HTTP_TIMEOUT)
         return response
 
     def _is_response_complete(self, message_content: str, tool_uses: List) -> bool:
@@ -794,12 +813,13 @@ class AnthropicMCPClient:
             if system_prompt:
                 payload["system"] = self._system_prompt(system_prompt)
 
-            # 디버깅을 위한 로깅 추가
-            print(f"API 요청 페이로드: {json.dumps(payload, indent=2, ensure_ascii=False)[:500]}...")
+            # 요청 요약만 남긴다 (예전에는 도구 정의까지 든 페이로드 전체를 들여쓰기 JSON으로 만든 뒤 500자만 찍었다)
+            print(f"API 요청: 모델={self.model_id}, 메시지 {len(self.messages)}개, 도구 {len(payload.get('tools', []))}개")
 
             # API 요청 전송 (응답을 기다리는 동안 화면에는 '생각하는 중')
             self._report("thinking_started")
-            response = self._post(payload, system_prompt)
+            with self._time("model"):
+                response = self._post(payload, system_prompt)
 
             # 디버깅을 위한 응답 로깅
             print(f"API 응답 상태 코드: {response.status_code}")
@@ -930,10 +950,11 @@ class AnthropicMCPClient:
                         if is_write:
                             result = self._request_approval(tool_name, tool_input, self._tainted_by(call_no))
                         else:
-                            result = self.mcp_client.call_tool(
-                                tool_name,
-                                self.redactor.restore(tool_input) if restore else tool_input
-                            )
+                            with self._time(f"tool:{tool_name}"):
+                                result = self.mcp_client.call_tool(
+                                    tool_name,
+                                    self.redactor.restore(tool_input) if restore else tool_input
+                                )
                             # 결과물은 주소·그릴 내용을 떼어 두고 모델에는 참조(artifact://…)만 준다
                             if risk == "artifact" and self.artifacts is not None:
                                 result = self.artifacts.take(tool_name, result)
