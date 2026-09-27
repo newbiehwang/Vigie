@@ -108,6 +108,19 @@ def test_changes_merge_app_and_cloudtrail_without_duplicates(view):
     ]
 
 
+def test_view_shows_only_the_latest_ten_changes_with_the_total(view):
+    # 카드 높이가 고정이라 한 번에 10개까지만 보인다. 24시간 안의 전체 건수는 따로 준다
+    trail = {"events": [{"at": NOW - i * 60, "actor": "park", "eventName": f"Event{i}", "resource": "r"}
+                        for i in range(1, 15)]}
+    result = view.build_view({"changes": {"data": trail, "ok": True}}, env="dev", region="ap-southeast-2",
+                             approvals={"pending": 0}, app_changes=[], now=NOW)
+    assert [c["summary"] for c in result["changes"]] == [f"Event{i} · r" for i in range(1, 11)]
+    assert result["changesTotal"] == 14
+    hidden = view.build_view({"changes": {"data": trail, "ok": True}}, env="dev", region="ap-southeast-2",
+                             approvals={"pending": 0}, app_changes=[], now=NOW, show_changes=False)
+    assert hidden["changes"] is None and hidden["changesTotal"] is None
+
+
 def test_view_marks_missing_and_failed_sections(view):
     sections = {
         "alarms": section({"total": 2, "firing": []}),

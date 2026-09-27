@@ -32,6 +32,10 @@ import { getErrorText } from '@/utils/formatters';
 import { DailyCostChart, ServiceBars, Sparkbars, STATUS_LABEL, STATUS_ORDER, StatusBar, usd } from './DashboardCharts';
 import { examplesFor } from './examples';
 
+// 최근 변경 카드에 보일 수. 카드 높이를 이 수만큼의 줄로 고정한다 (줄마다 요약·출처를 한 줄씩, 넘치면 …).
+// 서버도 이만큼만 보낸다 (services/llm/dashboard_view.py의 MAX_CHANGES). 변경이 적거나 많아도 카드 크기는 그대로다
+const MAX_CHANGES = 10;
+
 // ---------------------------------------------------------------- 시간 글자
 const nowSeconds = () => Math.floor(Date.now() / 1000);
 
@@ -471,19 +475,32 @@ export function Dashboard({ onAsk }: { onAsk: (question: string) => void }) {
                             </section>
 
                             {data.changes ? (
-                                <section className="dash-card dash-enter" style={enter(8)} aria-labelledby="dash-change-title">
+                                <section
+                                    className="dash-card dash-card--changes dash-enter"
+                                    style={{ ...enter(8), '--change-rows': MAX_CHANGES } as CSSProperties}
+                                    aria-labelledby="dash-change-title"
+                                >
                                     <header className="dash-card-head">
                                         <h3 id="dash-change-title">
                                             최근 변경 <Freshness data={data} section="changes" />
                                         </h3>
+                                        {/* 10개보다 많으면 몇 개 중 몇 개인지 (서버가 24시간 안의 전체 수를 준다) */}
+                                        {(data.changesTotal ?? 0) > Math.min(data.changes.length, MAX_CHANGES) ? (
+                                            <span className="dash-card-aside">
+                                                24시간 {data.changesTotal}건 중 최근 {Math.min(data.changes.length, MAX_CHANGES)}건
+                                            </span>
+                                        ) : null}
                                     </header>
                                     {data.changes.length ? (
                                         <ol className="dash-changes">
-                                            {data.changes.map((change) => (
+                                            {data.changes.slice(0, MAX_CHANGES).map((change) => (
                                                 <li key={`${change.at}-${change.summary}`} className={`is-${change.source}`}>
                                                     <span className="dash-change-dot" aria-hidden="true" />
                                                     <span className="dash-change-body">
-                                                        <span className="dash-change-summary">{change.summary}</span>
+                                                        {/* 한 줄로 자르고, 전체는 마우스를 올리면 보인다 */}
+                                                        <span className="dash-change-summary" title={change.summary}>
+                                                            {change.summary}
+                                                        </span>
                                                         <span className="dash-change-meta">
                                                             {ago(change.at)} · {change.actor} ·{' '}
                                                             <span className="dash-change-source">

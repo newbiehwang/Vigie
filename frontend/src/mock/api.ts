@@ -1703,8 +1703,19 @@ const dashboardData = (): DashboardData => {
     { at: nowS - 3 * HOUR, source: "app", actor: "kim@example.com", summary: "로그 보존 기간 30일 → 14일 · /aws/lambda/vigie-mcp-dev" },
     { at: nowS - 9 * HOUR, source: "cloudtrail", actor: "park@example.com", summary: "보안 그룹 sg-0a1b 인바운드 443 추가 (AuthorizeSecurityGroupIngress)" },
     { at: nowS - 20 * HOUR, source: "cloudtrail", actor: "deploy-bot", summary: "S3 vigie-reports-dev 버킷 정책 변경 (PutBucketPolicy)" },
+    // 카드에 10개까지만 보이는 것을 확인하도록 24시간 안의 변경을 10개보다 많이 둔다
+    { at: nowS - 12 * 60, source: "cloudtrail", actor: "deploy-bot", summary: "Lambda vigie-mcp-dev 환경 변수 변경 (UpdateFunctionConfiguration)" },
+    { at: nowS - 2 * HOUR, source: "cloudtrail", actor: "lee@example.com", summary: "CloudWatch 알람 vigie-dev-llm-errors 임계값 변경 (PutMetricAlarm)" },
+    { at: nowS - 4 * HOUR, source: "cloudtrail", actor: "deploy-bot", summary: "API Gateway vigie-api-dev 스테이지 배포 (CreateDeployment)" },
+    { at: nowS - 6 * HOUR, source: "cloudtrail", actor: "park@example.com", summary: "EC2 vigie-batch 인스턴스 유형 변경 (ModifyInstanceAttribute)" },
+    { at: nowS - 11 * HOUR, source: "cloudtrail", actor: "deploy-bot", summary: "DynamoDB vigie-audit-dev 특정 시점 복구 켜기 (UpdateContinuousBackups)" },
+    { at: nowS - 14 * HOUR, source: "cloudtrail", actor: "kim@example.com", summary: "IAM 역할 vigie-llm-role-dev 인라인 정책 수정 (PutRolePolicy)" },
+    { at: nowS - 17 * HOUR, source: "cloudtrail", actor: "deploy-bot", summary: "CloudFormation vigie-dev-llm 스택 업데이트 (UpdateStack)" },
+    { at: nowS - 22 * HOUR, source: "cloudtrail", actor: "lee@example.com", summary: "SNS vigie-dev-alerts 구독 추가 (Subscribe)" },
   ];
-  const changes = [...appChanges, ...cloudChanges].sort((a, b) => b.at - a.at);
+  // 서버처럼 최근 10개까지만 보내고 전체 수를 따로 준다 (dashboard_view.MAX_CHANGES)
+  const allChanges = [...appChanges, ...cloudChanges].sort((a, b) => b.at - a.at);
+  const changes = allChanges.slice(0, 10);
 
   const findings: DashboardFinding[] = [
     { kind: "idle-ec2", status: "warn", title: "유휴 EC2 인스턴스 1대", detail: "vigie-batch · 최근 14일 CPU 평균 1.8%" },
@@ -1752,6 +1763,7 @@ const dashboardData = (): DashboardData => {
     resourceCounts,
     resourceTotal: resources.length,
     changes: mockIsAdmin() ? changes : null,
+    changesTotal: mockIsAdmin() ? allChanges.length : null,
     findings,
   };
 };

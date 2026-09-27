@@ -14,6 +14,8 @@ AWS는 부르지 않는다 (DynamoDB만 읽는다).
 - changes(최근 변경)는 관리자에게만 준다 (show_changes). 누가 무엇을 바꿨는지가 CloudTrail과 감사 로그에서 오므로,
   대화의 CloudTrail 조회(lookup_events)·감사 로그와 같이 관리자(admins 그룹)만 본다 (docs/threat-model.md T41).
   일반 사용자에게는 null이고 sections에도 넣지 않는다. 화면은 null이면 카드를 그리지 않는다.
+- changes는 최근 MAX_CHANGES개까지만 준다. 카드 높이가 고정이라 한 번에 그만큼만 보인다.
+  24시간 안의 전체 건수는 changesTotal (화면이 '24시간 N건 중 최근 10건'을 보인다).
 """
 import time
 from datetime import datetime, timedelta, timezone
@@ -26,6 +28,7 @@ MAX_RESOURCE_ROWS = 40  # 표에 보일 줄 수 (문제·주의를 먼저 모두
 FAIL_ERROR_RATE = 0.05  # 오류율이 이보다 높으면 문제
 IDLE_CPU = 5.0  # 14일 CPU 평균이 이보다 낮으면 유휴 인스턴스 (MCP의 find_ec2_waste와 같은 기준)
 MAX_APP_CHANGES = 30
+MAX_CHANGES = 10  # 최근 변경 카드에 보일 수 (카드 높이가 이만큼으로 고정, frontend의 MAX_CHANGES와 같게)
 STATUS_ORDER = ("fail", "warn", "ok", "none")
 
 
@@ -205,6 +208,7 @@ def build_view(sections: Dict[str, Dict[str, Any]], *, env: str, region: str, ap
         return (sections.get(name) or {}).get("data")
 
     resources = build_resources(data("alarms"), data("resources"), data("usage"))
+    changes = build_changes(data("changes"), app_changes, now) if show_changes else None
     collected = [s.get("collectedAt") for s in sections.values() if s.get("collectedAt")]
     return {
         "generatedAt": max(collected) if collected else None,
@@ -219,6 +223,7 @@ def build_view(sections: Dict[str, Dict[str, Any]], *, env: str, region: str, ap
         "resources": resources["rows"],
         "resourceCounts": resources["counts"],
         "resourceTotal": resources["total"],
-        "changes": build_changes(data("changes"), app_changes, now) if show_changes else None,
+        "changes": changes[:MAX_CHANGES] if changes is not None else None,
+        "changesTotal": len(changes) if changes is not None else None,
         "findings": build_findings(data("resources"), data("usage")),
     }
