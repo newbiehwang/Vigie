@@ -88,7 +88,7 @@ def build_resources(alarms: Optional[Dict[str, Any]], resources: Optional[Dict[s
 
 
 def build_findings(resources: Optional[Dict[str, Any]], usage: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """치울 것: 공개될 수 있는 S3 · 놀고 있는 EC2 · 영구 보관 로그 그룹. 누르면 대화로 보낼 질문을 함께 둔다."""
+    """치울 것: 공개될 수 있는 S3 · 놀고 있는 EC2 · 영구 보관 로그 그룹 (화면은 보기만 한다)."""
     if not resources:
         return []
     findings = []
@@ -96,20 +96,18 @@ def build_findings(resources: Optional[Dict[str, Any]], usage: Optional[Dict[str
     if open_buckets:
         findings.append({"kind": "public-s3", "status": "fail",
                          "title": f"퍼블릭 액세스 차단이 꺼진 S3 버킷 {len(open_buckets)}개",
-                         "detail": _names(open_buckets), "question": "퍼블릭 액세스 차단이 꺼진 S3 버킷 보안 점검해줘"})
+                         "detail": _names(open_buckets)})
     cpu = (usage or {}).get("ec2Cpu", {})
     idle = [i.get("name") or i["id"] for i in resources.get("ec2", [])
             if i.get("state") == "running" and cpu.get(i["id"]) is not None and cpu[i["id"]] < IDLE_CPU]
     if idle:
         findings.append({"kind": "idle-ec2", "status": "warn", "title": f"놀고 있는 EC2 {len(idle)}대",
-                         "detail": f"{_names(idle)} · 14일 CPU 평균 {IDLE_CPU:g}% 미만",
-                         "question": "놀고 있는 EC2 인스턴스 찾아줘"})
+                         "detail": f"{_names(idle)} · 14일 CPU 평균 {IDLE_CPU:g}% 미만"})
     logs = resources.get("logs") or {}
     if logs.get("neverExpire"):
         findings.append({"kind": "log-retention", "status": "warn",
                          "title": f"영구 보관 로그 그룹 {logs['neverExpire']}개",
-                         "detail": f"{_names([g['name'] for g in logs.get('groups', [])])} · 오래된 로그가 계속 쌓임",
-                         "question": "보존 기간이 영구인 로그 그룹 알려주고 줄일 만한 것 추천해줘"})
+                         "detail": f"{_names([g['name'] for g in logs.get('groups', [])])} · 오래된 로그가 계속 쌓임"})
     return findings
 
 

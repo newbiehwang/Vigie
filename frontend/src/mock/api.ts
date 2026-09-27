@@ -1707,13 +1707,13 @@ const dashboardData = (): DashboardData => {
   const changes = [...appChanges, ...cloudChanges].sort((a, b) => b.at - a.at);
 
   const findings: DashboardFinding[] = [
-    { kind: "idle-ec2", status: "warn", title: "놀고 있는 EC2 1대", detail: "wga-batch · 14일 동안 CPU 평균 1.8%", question: "놀고 있는 EC2 인스턴스 찾아줘" },
-    { kind: "public-s3", status: "fail", title: "공개될 수 있는 S3 버킷 1개", detail: "wga-reports-dev · 퍼블릭 액세스 차단 2개 꺼짐", question: "wga-reports-dev 버킷 보안 점검해줘" },
+    { kind: "idle-ec2", status: "warn", title: "놀고 있는 EC2 1대", detail: "wga-batch · 14일 동안 CPU 평균 1.8%" },
+    { kind: "public-s3", status: "fail", title: "공개될 수 있는 S3 버킷 1개", detail: "wga-reports-dev · 퍼블릭 액세스 차단 2개 꺼짐" },
     ...(longRetention
-      ? [{ kind: "log-retention" as const, status: "warn" as const, title: "보존 기간이 긴 로그 그룹 1개", detail: `${MOCK_LOG_GROUP} · ${retentionText(mockResources.retention)} 보관, 14일이면 충분`, question: `${MOCK_LOG_GROUP} 로그 보존 기간 14일로 줄여줘` }]
+      ? [{ kind: "log-retention" as const, status: "warn" as const, title: "보존 기간이 긴 로그 그룹 1개", detail: `${MOCK_LOG_GROUP} · ${retentionText(mockResources.retention)} 보관, 14일이면 충분` }]
       : []),
     ...(!mockResources.alarmActions
-      ? [{ kind: "alarm-muted" as const, status: "warn" as const, title: "알림이 꺼진 알람 1개", detail: `${MOCK_ALARM} · 울려도 메일이 가지 않음`, question: `${MOCK_ALARM} 알람 알림 다시 켜야 해?` }]
+      ? [{ kind: "alarm-muted" as const, status: "warn" as const, title: "알림이 꺼진 알람 1개", detail: `${MOCK_ALARM} · 울려도 메일이 가지 않음` }]
       : []),
   ];
 

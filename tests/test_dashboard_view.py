@@ -80,7 +80,7 @@ def test_findings(view):
     assert findings["public-s3"]["status"] == "fail" and findings["public-s3"]["detail"] == "open-bucket"
     assert findings["idle-ec2"]["title"] == "놀고 있는 EC2 1대" and findings["idle-ec2"]["detail"].startswith("batch")
     assert findings["log-retention"]["title"] == "영구 보관 로그 그룹 3개"
-    assert all(f["question"] for f in findings.values())
+    assert all("question" not in f for f in findings.values())  # 화면은 보기만 한다 (AI에게 묻지 않는다)
 
 
 def test_errors_split_last_and_previous_24_hours(view):

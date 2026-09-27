@@ -3,7 +3,8 @@
 // - 크기(비용·오류)는 한 색(파랑)의 막대로. 상태(문제·주의·정상·데이터 없음)만 상태 색을 쓰고, 늘 글자와 함께 둔다
 // - 막대는 바닥에 붙고 위 모서리만 둥글다. 막대 사이에 바탕색 틈을 둔다
 // - 막대마다 마우스를 올리면 값이 뜬다 (막대보다 넓은 자리에서 잡는다)
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+// - 처음 그릴 때 막대가 바닥에서 차례로 자란다 (--i: 막대 순서, dashboard.css의 dash-grow-y)
+import { type CSSProperties, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { HealthStatus } from '@/types/dashboard';
 
 export const usd = (value: number, digits = 2) =>
@@ -61,6 +62,7 @@ export function Sparkbars({ values, label }: { values: number[]; label: string }
                                 <path
                                     className={`dash-spark-bar${hover === i ? ' is-hover' : ''}`}
                                     d={barPath(i * step + gap / 2, height - h, step - gap, h, 2)}
+                                    style={{ '--i': i } as CSSProperties}
                                 />
                                 {/* 잡는 자리는 막대보다 넓게 (칸 전체) */}
                                 <rect x={i * step} y={0} width={step} height={height} fill="transparent" onMouseEnter={() => setHover(i)} />
@@ -122,7 +124,11 @@ export function DailyCostChart({ daily, daysInMonth }: { daily: { date: string; 
                         return (
                             <g key={i}>
                                 {known ? (
-                                    <path className={`dash-bar${hover === i ? ' is-hover' : ''}`} d={barPath(x, top + plotH - h, w, h)} />
+                                    <path
+                                        className={`dash-bar${hover === i ? ' is-hover' : ''}`}
+                                        d={barPath(x, top + plotH - h, w, h)}
+                                        style={{ '--i': i } as CSSProperties}
+                                    />
                                 ) : (
                                     // 아직 오지 않은 날: 평균 높이의 점선 칸 (예상)
                                     <rect className="dash-bar-future" x={x + 0.5} y={y(average) + 0.5} width={Math.max(w - 1, 0)} height={Math.max(plotH - (y(average) - top) - 1, 0)} rx={2} />
