@@ -1,20 +1,50 @@
-/* 디자인: AXPI(LG Entrue) 화면의 CSS를 그대로 가져오고 색만 Vigie 색(파랑·AWS 남색·차가운 회색)으로 바꿨다.
-   색 바꾸기 규칙은 PR 설명 참고. 레이아웃 공통(위쪽 내비게이션·로그인·프로필 메뉴)은 components/layout/layout.css,
-   패널·목록·확인창은 components/panel.css에 있다. */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Public+Sans:wght@500;600;700&display=swap");
+/* 디자인: AXPI(LG Entrue) 화면의 CSS를 가져와 Vigie 색(Midnight Ink)과 글꼴(Pretendard)로 바꿨다.
+   레이아웃 공통(위쪽 내비게이션·로그인·프로필 메뉴)은 components/layout/layout.css,
+   패널·목록·확인창은 components/panel.css, 상태 배지는 components/badge.css에 있다. */
+/* Pretendard(SIL OFL 1.1)를 앱 안에 넣는다. 글자 범위별로 나뉜 파일이라 화면에 나온 글자의 조각만 받는다 */
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 @import "./components/layout/layout.css";
 @import "./components/panel.css";
+@import "./components/badge.css";
 
 :root {
-  --color-primary: #007bff;
-  --color-secondary: #3d7cc9;
-  --color-tertiary: #232f3e;
-  --color-neutral: #6c757d;
-  --color-ink: #232f3e;
-  --color-line: #e1e7ef;
+  /* 색: Midnight Ink 다섯 색 + 실패·위험한 동작에만 쓰는 빨강 하나. 주황·초록은 쓰지 않는다.
+     상태는 색 대신 진하기로 나눈다 (알람: 남색 채움 · 대기: 파랑 테두리 · 정상: 회청색 아이콘).
+     글자 대비(흰 바탕 기준): ink 17.6 · ink-2 9.3 · ink-3 5.3 · primary 6.8 · danger 6.6 (모두 4.5:1 이상).
+     slate(3.2:1)는 작은 글자에 쓰지 않고 아이콘·선·차트에만 쓴다 */
+  --ink: #0a1628; /* 제목·본문 */
+  --ink-2: #37485e; /* 설명 글 (ink 6 : slate 4로 섞은 값) */
+  --ink-3: #596d87; /* 작은 글씨·캡션·축 (ink 3 : slate 7로 섞은 값. 바탕색 위에서도 4.9) */
+  --slate: #7b93b0; /* 아이콘·보조 선·정상 표시 */
+  --line: #d6dee8; /* 테두리·구분선 */
+  --line-soft: #e8edf2; /* 옅은 구분선·표 줄무늬 */
+  --canvas: #f5f7fa; /* 바탕 */
+  --surface: #ffffff; /* 카드 */
+  --primary: #1e5aa8; /* 버튼·링크·선택 상태·승인 대기 */
+  --primary-hover: #184a8c;
+  --primary-active: #15427d;
+  --primary-soft: #e9eff6; /* 선택된 줄·옅은 강조 바탕 (위의 primary 글자 대비 5.9) */
+  --primary-soft-strong: #d2deee;
+  --danger: #b42318; /* 실패한 작업·위험한 동작 버튼에만 */
+  --danger-hover: #9a1d14;
+  --danger-soft: #f9eded;
+  /* 상태 (배지·점·막대가 같이 쓴다) */
+  --status-alert: var(--ink); /* 울리는 알람·지금 확인할 것 */
+  --status-pending: var(--primary); /* 승인 대기·확인 필요 */
+  --status-ok: var(--slate); /* 정상·완료 */
+  --status-none: var(--line); /* 정보 없음 */
+  --status-fail: var(--danger); /* 실패 */
+
+  /* 예전 이름: 여러 CSS가 쓰고 있어 새 색을 가리키게만 둔다 */
+  --color-primary: var(--primary);
+  --color-secondary: var(--primary);
+  --color-tertiary: var(--ink);
+  --color-neutral: var(--ink-3);
+  --color-ink: var(--ink);
+  --color-line: var(--line);
   --color-surface: rgba(255, 255, 255, 0.84);
-  --color-canvas: #f7f9fc;
-  --color-chip: #eef4ff;
+  --color-canvas: var(--canvas);
+  --color-chip: var(--primary-soft);
   --radius-md: 12px;
   --radius-lg: 18px;
   --radius-pill: 999px;
@@ -23,21 +53,24 @@
   --space-md: 16px;
   --space-lg: 24px;
   --space-xl: 32px;
-  --font-headline: "Inter", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
-  --font-body: "Plus Jakarta Sans", "Apple SD Gothic Neo", "Noto Sans KR",
-    sans-serif;
-  --font-label: "Public Sans", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  /* 글꼴: Pretendard 하나. 예전 세 이름(제목·본문·라벨)은 그대로 두고 모두 같은 글꼴을 가리킨다 */
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Noto Sans KR", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-headline: var(--font-sans);
+  --font-body: var(--font-sans);
+  --font-label: var(--font-sans);
   --main-content-top: 132px;
   --main-content-bottom: 72px;
   --tab-panel-max-width: 1460px;
   /* 떠 있는 흰 면의 입체감 (홈 숫자 카드에서 시작한 모양. AXPI의 카드: 옅은 테두리 + 위쪽 안의 흰 빛 + 아래로 번지는 그림자).
      카드·경고 상자·승인 카드·결과물에는 --raised-shadow, 버튼·입력칸처럼 작은 것에는 --raised-shadow-sm을 쓴다.
-     바탕은 흰색이고, 상태(문제·주의)는 위쪽 3px 색 줄로 알린다 */
-  --raised-border: rgba(197, 211, 228, 0.75);
-  --raised-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 1px 2px rgba(35, 47, 62, 0.05),
-    0 10px 20px rgba(35, 47, 62, 0.06);
-  --raised-shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 1px 2px rgba(35, 47, 62, 0.06),
-    0 4px 10px rgba(35, 47, 62, 0.06);
+     그림자는 글자색(ink #0a1628 = 10, 22, 40)을 옅게 푼 것이다 */
+  --raised-border: rgba(214, 222, 232, 0.9);
+  --raised-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 1px 2px rgba(10, 22, 40, 0.05),
+    0 10px 20px rgba(10, 22, 40, 0.06);
+  --raised-shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 1px 2px rgba(10, 22, 40, 0.06),
+    0 4px 10px rgba(10, 22, 40, 0.06);
 }
 
 * {
@@ -54,17 +87,20 @@ body,
 body {
   font-family: var(--font-body);
   color: var(--color-ink);
+  /* 한글 글자 사이를 조금 좁혀 Pretendard가 촘촘하게 보이게 한다 */
+  letter-spacing: -0.01em;
+  /* 바탕: 왼쪽 위에 주 색(primary 30, 90, 168), 오른쪽 아래에 글자색(ink)이 옅게 번진다 */
   background: radial-gradient(
       80% 80% at 10% -10%,
-      rgba(0, 123, 255, 0.16) 0%,
+      rgba(30, 90, 168, 0.12) 0%,
       transparent 70%
     ),
     radial-gradient(
       70% 70% at 110% 120%,
-      rgba(35, 47, 62, 0.12) 0%,
+      rgba(10, 22, 40, 0.08) 0%,
       transparent 70%
     ),
-    linear-gradient(180deg, #ffffff 0%, var(--color-canvas) 100%);
+    linear-gradient(180deg, #ffffff 0%, var(--canvas) 100%);
 }
 
 a {
