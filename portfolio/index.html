@@ -54,8 +54,7 @@ body {
 h2 { font-size: 36px; line-height: 1.28; font-weight: 800; letter-spacing: -0.02em; }
 .lead { font-size: 18px; color: var(--ink-2); margin-top: 14px; max-width: 980px; }
 .body { flex: 1; min-height: 0; margin-top: 30px; display: flex; gap: 36px; }
-.foot { position: absolute; left: 72px; right: 72px; bottom: 22px; display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-3); }
-.foot .brand { font-weight: 700; letter-spacing: 0.04em; }
+.foot { position: absolute; left: 72px; right: 72px; bottom: 22px; display: flex; justify-content: flex-end; font-size: 12px; color: var(--ink-3); } /* 쪽 번호만 오른쪽 아래 */
 
 .col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 .col-narrow { flex: 0 0 400px; }
@@ -96,7 +95,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
 .cover h1 { font-size: 46px; line-height: 1.25; font-weight: 800; letter-spacing: -0.025em; margin-top: 52px; }
 .cover h1 em { font-style: normal; color: var(--accent); }
 .cover .sub { font-size: 19px; color: var(--ink-2); margin-top: 22px; max-width: 560px; }
-.cover .right { flex: 0 0 560px; background: linear-gradient(160deg, #e9eff6 0%, #f5f7fa 55%, #fff 100%); position: relative; }
+.cover .right { flex: 0 0 560px; position: relative; }
 .cover .right .shot { position: absolute; width: 760px; height: 475px; left: 40px; top: 120px; }
 .cover .right .shot2 { position: absolute; width: 500px; height: 343px; left: -30px; top: 350px; }
 
@@ -171,7 +170,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
       <div class="stat"><div class="v">731<small>개</small></div><div class="k">AWS 없이 도는 테스트<br>(moto 모킹)</div></div>
     </div>
   </div>
-  <div class="foot"><span class="brand">VIGIE</span><span>2</span></div>
+  <div class="foot"><span>2</span></div>
 </section>
 
 <!-- 3. 문제 -->
@@ -200,7 +199,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
       </div>
     </div>
   </div>
-  <div class="foot"><span class="brand">VIGIE</span><span>3</span></div>
+  <div class="foot"><span>3</span></div>
 </section>
 
 <!-- 4. 사용 장면 -->
@@ -217,7 +216,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
       <p class="cap">대화: "최근 보안 이벤트를 심각도 순으로" → CloudTrail·S3 점검·VPC를 모아 표로 정리</p>
     </div>
   </div>
-  <div class="foot"><span class="brand">VIGIE</span><span>4</span></div>
+  <div class="foot"><span>4</span></div>
 </section>
 
 <!-- 5. 답의 깊이 -->
@@ -236,7 +235,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
       </ul>
     </div>
   </div>
-  <div class="foot"><span class="brand">VIGIE</span><span>5</span></div>
+  <div class="foot"><span>5</span></div>
 </section>
 
 <!-- 6. 아키텍처 -->
@@ -327,7 +326,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
     </svg>
   </div>
   <p class="small muted" style="margin-top:10px">① 로그인한 토큰으로 요청 ② 요청자와 그룹 확정 ③ 가린 질문·도구 결과만 모델에게 ④ SigV4로 서명해 MCP 호출 ⑤ MCP 역할의 IAM 권한 안에서만 AWS 호출</p>
-  <div class="foot"><span class="brand">VIGIE</span><span>6</span></div>
+  <div class="foot"><span>6</span></div>
 </section>
 
 <!-- 7. 설계 원칙 -->
@@ -351,7 +350,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
       </div>
     </div>
   </div>
-  <div class="foot"><span class="brand">VIGIE</span><span>7</span></div>
+  <div class="foot"><span>7</span></div>
 </section>
 
 <!-- 8. 원칙 1: 승인 -->
@@ -375,7 +374,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
       </ul>
     </div>
   </div>
-  <div class="foot"><span class="brand">VIGIE</span><span>8</span></div>
+  <div class="foot"><span>8</span></div>
 </section>
 
 <!-- 9. 원칙 2: 권한과 가리기 -->
@@ -400,7 +399,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
       <p class="cap">일반 사용자가 보안 이벤트를 물으면: 관리자 전용이라고 안내하고, 지금 권한으로 물을 수 있는 것을 알려 줍니다.</p>
     </div>
   </div>
-  <div class="foot"><span class="brand">VIGIE</span><span>9</span></div>
+  <div class="foot"><span>9</span></div>
 </section>
 
 <!-- 10. 원칙 3: 인젝션과 감사 -->
@@ -420,7 +419,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
       <div class="shot" style="height: 450px"><img src="shots/audit-trace.png" alt="7계층 판정" style="object-position: 50% 0"></div>
     </div>
   </div>
-  <div class="foot"><span class="brand">VIGIE</span><span>10</span></div>
+  <div class="foot"><span>10</span></div>
 </section>
 
 <!-- 11. MCP on Lambda -->
@@ -453,7 +452,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
     <div class="card"><span class="tag">결과</span><p style="margin-top:8px"><b>도구가 한 목록으로 보입니다.</b> 모델에게는 공식 도구와 직접 만든 도구의 구분이 없습니다.</p></div>
     <div class="card"><span class="tag">결과</span><p style="margin-top:8px"><b>밖에서 직접 부를 수 없습니다.</b> IAM 서명이 없는 요청은 Function URL에서 거절됩니다.</p></div>
   </div>
-  <div class="foot"><span class="brand">VIGIE</span><span>11</span></div>
+  <div class="foot"><span>11</span></div>
 </section>
 
 <!-- 12. 운영과 비용 -->
@@ -483,7 +482,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
       </ul>
     </div>
   </div>
-  <div class="foot"><span class="brand">VIGIE</span><span>12</span></div>
+  <div class="foot"><span>12</span></div>
 </section>
 
 <!-- 13. 인프라와 배포 -->
@@ -514,7 +513,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
       <p class="small muted">보안 스캔은 도입 시점의 결과를 기준선으로 두고 <b>새로 생긴 문제만</b> CI를 멈춥니다.</p>
     </div>
   </div>
-  <div class="foot"><span class="brand">VIGIE</span><span>13</span></div>
+  <div class="foot"><span>13</span></div>
 </section>
 
 <!-- 15. 위협 모델과 테스트 -->
@@ -544,7 +543,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
       </div>
     </div>
   </div>
-  <div class="foot"><span class="brand">VIGIE</span><span>14</span></div>
+  <div class="foot"><span>14</span></div>
 </section>
 
 <!-- 16. 데모 -->
@@ -563,7 +562,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
       </ul>
     </div>
   </div>
-  <div class="foot"><span class="brand">VIGIE</span><span>15</span></div>
+  <div class="foot"><span>15</span></div>
 </section>
 
 <!-- 17. 돌아보며 -->
@@ -585,7 +584,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
       <div class="card"><h3>다시 만든다면</h3><p>조회 통로는 관리형 MCP로 바꾸고, 승인 · 권한 · 감사처럼 조직의 규칙이 담기는 부분에 집중하겠습니다. 변경 도구는 별도 함수와 역할로 떼어 낼 것입니다.</p></div>
     </div>
   </div>
-  <div class="foot"><span class="brand">VIGIE</span><span>16</span></div>
+  <div class="foot"><span>16</span></div>
 </section>
 
 <!-- 18. 끝 -->
@@ -599,7 +598,7 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
     <div class="card"><span class="tag">기술</span><h3 style="margin-top:10px">AWS · Python · React</h3><p class="small">Lambda · API Gateway · Cognito · DynamoDB · CloudFormation · Claude · MCP</p></div>
   </div>
   <p class="small muted" style="margin-top: 36px">데모 데이터: Splunk BOTS v3 (CC0 1.0), FinOps Foundation FOCUS 1.0 Sample Data (CC BY 4.0, 서비스별 비용 비중만 사용)</p>
-  <div class="foot"><span class="brand">VIGIE</span><span>17</span></div>
+  <div class="foot"><span>17</span></div>
 </section>
 
 </div>
