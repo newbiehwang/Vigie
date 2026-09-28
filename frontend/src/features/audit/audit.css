@@ -34,6 +34,7 @@
   font-weight: 600;
   height: 28px;
   padding: 0 10px;
+  white-space: nowrap; /* '1시간'이 좁은 자리에서 글자마다 줄바꿈되지 않게 */
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease;
 }
@@ -1563,6 +1564,41 @@
 @media (max-width: 860px) {
   .audit-table-header {
     display: none;
+  }
+
+  /* 세부 선택 창 위쪽: 휴대폰 폭에서는 오른쪽의 '필터 초기화'가 자리를 차지해 기간 버튼이 글자 하나씩 줄바꿈되었다.
+     기간·그룹 기준을 한 줄 전체 폭으로 쓰고, '필터 초기화'는 그 아래로 내린다 (✕는 '기간' 이름표 줄 오른쪽에 그대로) */
+  .audit-filter-top {
+    flex-direction: column;
+    align-items: stretch;
+    padding-right: 16px;
+  }
+
+  .audit-filter-top .audit-reset {
+    align-self: flex-start;
+  }
+
+  /* 한 단 격자의 칸 폭이 버튼 묶음의 최소 폭만큼 늘어나 창 밖으로 나가지 않게 (창 폭 안으로 묶는다) */
+  .audit-filter-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* 이름표 옆의 버튼 묶음이 줄 폭을 넘지 않게 (넘으면 이름표 아래 줄로 내려가고, 그래도 넓으면 아래처럼 옆으로 민다) */
+  .audit-filter-option > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* 기간 버튼 일곱 개가 휴대폰 폭(약 310px) 안에 들어가게 좌우 여백을 줄이고, 그래도 좁으면(320px 폭) 줄 안에서 옆으로 민다 */
+  .audit-segment {
+    max-width: 100%;
+    overflow-x: auto;
+    gap: 1px;
+  }
+
+  .audit-segment-btn {
+    flex: none;
+    padding: 0 6px;
   }
 
   .audit-row-button {
