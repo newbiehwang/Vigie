@@ -367,8 +367,7 @@
   display: grid;
   justify-items: center;
   align-content: start;
-  padding: var(--main-content-top) clamp(14px, 2.2vw, var(--space-xl))
-    var(--main-content-bottom);
+  padding: var(--main-content-top) var(--page-gutter) var(--main-content-bottom);
   overflow: hidden;
 }
 
@@ -419,12 +418,11 @@
 .nav-inner {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  /* 로고 왼쪽 끝·프로필 오른쪽 끝을 아래 흰 카드의 양 끝에 맞춘다.
-     AXPI는 내비게이션 폭(1280px)과 카드 폭(1460px), 좌우 여백이 서로 달라 로고가 카드보다 안쪽에 있었다.
-     폭은 카드와 같은 최대 폭, 좌우 여백은 .main-content와 같은 값을 쓴다 */
-  width: min(var(--tab-panel-max-width), 100%);
-  padding-left: clamp(14px, 2.2vw, var(--space-xl));
-  padding-right: clamp(14px, 2.2vw, var(--space-xl));
+  /* 로고 왼쪽 끝·프로필 오른쪽 끝을 아래 본문의 양 끝에 맞춘다: 폭은 페이지 최대 폭(맥북프로 14인치 1512px),
+     좌우 여백은 .main-content와 같은 값이라 안쪽 폭이 본문 폭과 같다 (styles.css의 --page-*) */
+  width: min(var(--page-max-width), 100%);
+  padding-left: var(--page-gutter);
+  padding-right: var(--page-gutter);
 }
 
 .brand-link {
@@ -987,8 +985,6 @@
     grid-template-columns: 1fr auto;
     align-items: center;
     row-gap: 6px;
-    padding-left: 12px;
-    padding-right: 12px;
   }
 
   .center-toolbar {
@@ -1007,14 +1003,6 @@
     top: calc(100% + 8px);
     right: -8px;
     width: min(378px, 88vw);
-  }
-
-  .main-content {
-    padding: var(--main-content-top) 12px var(--main-content-bottom);
-  }
-
-  .plan-panel {
-    padding: 14px;
   }
 
   .plan-panel-header {

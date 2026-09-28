@@ -1626,20 +1626,6 @@
   }
 }
 
-/* 앱 화면(흰 큰 카드 없이, panel.css): 목록 줄은 흰 바탕을 전제로 한 모양이라 목록만 위의 막대그래프와 같은 흰 카드로 감싼다 */
-@media (max-width: 760px), (pointer: coarse) and (max-width: 1280px) {
-  .audit-table {
-    border: 1px solid var(--raised-border);
-    border-radius: 12px;
-    background: var(--surface);
-    box-shadow: var(--raised-shadow);
-  }
-
-  .audit-table-body .audit-row:last-child {
-    border-bottom: 0;
-  }
-}
-
 /* ---------------------------------------------------------------- 서비스 진단 층 그림 (AuditDiagnosis.tsx)
    진단 도구 기록의 팝업창 맨 위 (처리 단계 고리 대신). 위 띠 L2 · 그 서비스의 길 위에 놓은 층 칸 · 아래 띠(길에 없는 층, 맨 아래 L1).
    판정은 칸 위쪽의 가는 막대와 배지로만 보인다 (빨강·노랑을 넓게 칠하지 않는다). 해당 없음은 점선 */
