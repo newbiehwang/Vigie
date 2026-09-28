@@ -1128,3 +1128,39 @@
     animation: none;
   }
 }
+
+/* ---------------------------------------------------------------- 앱 화면: 흰 큰 카드 없이
+   휴대폰 폭(760px 이하)과 폭 1280px 이하의 터치 화면(폴드를 펼친 화면·태블릿)에서는 카드 테두리·바탕·그림자를 빼고
+   내비게이션 아래부터 화면 맨 아래까지 바탕 위에 바로 그린다. 카드 안의 작은 카드(숫자·차트·승인 카드)는 그대로 흰 면이다.
+   요소(.plan-panel)는 남겨 두어 스크롤 영역·'카드 바닥까지 남은 높이'를 재는 코드(Composer·FilterMenu)는 그대로 쓴다.
+   높이는 지금 보이는 화면 높이(dvh)에서 위 여백을 뺀 만큼 (위·아래 한계 없음: 가로로 눕힌 휴대폰에서도 화면 밖으로 나가지 않게) */
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1280px) {
+  .plan-panel {
+    height: calc(100vh - var(--main-content-top));
+    height: calc(100dvh - var(--main-content-top));
+    padding: 0 0 max(12px, env(safe-area-inset-bottom));
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible; /* 카드 모서리로 자르지 않는다 (스크롤은 안쪽 목록이 한다) */
+    min-width: 0; /* 자르지 않으면 대화의 넓은 표만큼 격자 칸이 넓어져 화면 밖으로 나간다. 칸은 화면 폭을 넘지 않게 */
+  }
+
+  .main-tab-stage {
+    min-width: 0;
+  }
+
+  .plan-panel-header {
+    margin-bottom: 12px;
+  }
+}
+
+/* 터치 화면(마우스가 없는 휴대폰·폴드·태블릿): 키보드 단축키 안내('/' 검색, Tab 예시 넣기)는 누를 키가 없으므로 숨긴다 */
+@media (pointer: coarse) {
+  .search-box kbd,
+  .composer .composer-hint { /* home.css가 뒤에 읽혀 .composer-hint만으로는 덮이므로 한 단계 더 좁혀 쓴다 */
+    display: none;
+  }
+}
+
