@@ -1,9 +1,10 @@
 // API 요청 공통 설정 (예전 main.ts의 axios 설정을 옮겼다).
 // 앱의 모든 요청은 전역 axios를 쓴다: mock 모드(mock/api.ts)가 이 axios의 adapter를 바꿔 끼워 대신 응답한다.
 import axios from 'axios';
-import { idToken } from '@/auth/authClient';
+import { idToken, LOCAL, LOCAL_ROLE } from '@/auth/authClient';
 
-export const API_BASE = import.meta.env.VITE_API_DEST || 'http://localhost:8000';
+// local 모드(npm run dev:local)는 루트 .env의 배포 API 주소 대신 로컬 API 서버(python -m local.stack)에 붙는다
+export const API_BASE = LOCAL ? 'http://127.0.0.1:8787' : import.meta.env.VITE_API_DEST || 'http://localhost:8000';
 
 // 인증 없이 열려 있는 경로: Authorization 헤더를 붙이면 OPTIONS 메서드가 없는 경로의 CORS preflight가 실패한다
 const PUBLIC_API_PATHS = ['/health'];
@@ -26,6 +27,11 @@ export function setupHttp() {
 
     axios.interceptors.request.use(async (config) => {
         if (!isApiRequest(config.url)) return config;
+        // local 모드: 토큰 대신 로컬 사용자의 권한을 알린다 (로컬 API 서버가 그 사용자의 토큰 내용을 넣는다)
+        if (LOCAL) {
+            config.headers['X-Vigie-Local-Role'] = LOCAL_ROLE;
+            return config;
+        }
         // Amplify가 만료된 토큰을 refresh token으로 알아서 갱신해 준다
         const token = await idToken();
         if (token) config.headers.Authorization = token;

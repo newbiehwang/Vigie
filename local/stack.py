@@ -6,6 +6,7 @@
 
     Claude Code · MCP 클라이언트 ──POST /mcp──▶ mcp/app.py의 lambda_handler (Function URL 요청과 같은 모양으로 바꿔 부른다)
     python -m local.scenario ──/_local/scenario──▶ 정상 환경을 다시 만들고 장애를 심는다 (local/world.py)
+    화면 (npm run dev:local) ──http://127.0.0.1:8787──▶ 로컬 API 서버 (local/api.py) ──▶ 위 MCP 서버
 
 실제 AWS에 닿지 않게 하는 장치 (prepare_environment)
 - 모든 AWS 호출은 같은 프로세스 안의 moto(mock_aws)가 받는다. 별도 moto 서버를 두지 않아 네트워크로 나가는 AWS 요청이 없다
@@ -35,8 +36,11 @@ PENDING_TABLE = f"vigie-pending-actions-{ENV_NAME}"
 REFRESH_SECONDS = 10 * 60  # 지표·로그를 다시 넣는 간격 (진단 창 '최근 1시간' 안에 머물도록)
 
 DEAD_PROXY = "http://127.0.0.1:9"  # 아무도 듣지 않는 포트: 여기로 나간 요청은 곧바로 실패한다
-NO_PROXY = "127.0.0.1,localhost,docs.aws.amazon.com,.docs.aws.amazon.com"
+# 프록시를 거치지 않는 곳: 로컬 서버, AWS 문서 검색, 모델 API (AWS 계정과 무관한 주소만)
+NO_PROXY = "127.0.0.1,localhost,docs.aws.amazon.com,.docs.aws.amazon.com,api.anthropic.com"
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
+# /mcp: Claude Code 등이 직접 붙는 주소 (--admin이면 관리자 요청), /mcp/server: 로컬 API 서버(LLM 서버 코드)가 부르는 주소
+MCP_PATHS = ("/mcp", "/mcp/server")
 
 
 def prepare_environment(region: str, environ=os.environ) -> None:
@@ -78,6 +82,7 @@ class Stack:
         self.lock = threading.RLock()
         self.world: Optional[dict] = None
         self.scenario = None
+        self.on_change = None  # 환경을 다시 만든 뒤 부를 함수 (로컬 API 서버가 홈 대시보드를 다시 모은다)
 
     # ------------------------------------------------------------ 시나리오
     def apply(self, name: Optional[str] = None) -> dict:
@@ -96,6 +101,8 @@ class Stack:
             if scenario and scenario.fault:
                 scenario.fault(world)
             self.world, self.scenario = world, scenario
+            if self.on_change:
+                self.on_change()
             return self.describe()
 
     def refresh(self) -> dict:
@@ -122,11 +129,13 @@ class Stack:
                  "causes": sorted(s.causes), "symptoms": sorted(s.symptoms)} for s in w.SCENARIOS]
 
     # ------------------------------------------------------------ MCP (Streamable HTTP → Lambda Function URL 요청)
-    def mcp(self, method: str, headers: dict, body: str) -> tuple:
+    def mcp(self, method: str, headers: dict, body: str, direct: bool = True) -> tuple:
+        """direct: Claude Code 등이 직접 붙은 요청(/mcp). LLM 서버가 부르는 /mcp/server는 False로, --admin이어도
+        관리자 표시를 붙이지 않는다 (LLM 서버가 요청자의 그룹을 보고 스스로 붙인다. 일반 사용자 요청이 관리자가 되면 안 된다)."""
         headers = {k.lower(): v for k, v in headers.items()}
         # Lambda 핸들러는 content-type이 정확히 application/json이어야 받는다 (charset 따위는 뗀다)
         headers["content-type"] = headers.get("content-type", "").split(";")[0].strip()
-        if self.admin and method == "POST":
+        if self.admin and direct and method == "POST":
             body = self._as_admin(body)
         with self.lock:
             response = self.app.lambda_handler({"httpMethod": method, "headers": headers, "body": body}, None)
@@ -204,7 +213,7 @@ def _handler(stack: Stack):
         def do_GET(self):
             if not self._local_only():
                 return
-            if self.path == "/mcp":
+            if self.path in MCP_PATHS:
                 # 서버가 먼저 보내는 SSE 스트림은 없다 (규약상 405로 답하면 클라이언트가 POST만 쓴다)
                 self._send(405, "", {"Allow": "POST, DELETE"})
             elif self.path == "/_local/scenarios":
@@ -217,17 +226,17 @@ def _handler(stack: Stack):
         def do_DELETE(self):
             if not self._local_only():
                 return
-            if self.path != "/mcp":
+            if self.path not in MCP_PATHS:
                 return self._send(404, {"error": "없는 주소입니다"})
-            status, headers, body = stack.mcp("DELETE", dict(self.headers), self._body())
+            status, headers, body = stack.mcp("DELETE", dict(self.headers), self._body(), self.path == "/mcp")
             self._send(status, body, headers)
 
         def do_POST(self):
             if not self._local_only():
                 return
             body = self._body()
-            if self.path == "/mcp":
-                status, headers, response = stack.mcp("POST", dict(self.headers), body)
+            if self.path in MCP_PATHS:
+                status, headers, response = stack.mcp("POST", dict(self.headers), body, self.path == "/mcp")
                 return self._send(status, response, headers)
             if self.path != "/_local/scenario":
                 return self._send(404, {"error": "없는 주소입니다"})
@@ -254,36 +263,50 @@ def _handler(stack: Stack):
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description="가짜 AWS 위에 Vigie MCP 서버를 띄운다 (실제 AWS에 닿지 않는다)")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="MCP 서버 포트")
+    parser.add_argument("--api-port", type=int, default=8787, help="로컬 API 서버 포트 (화면이 붙는다)")
     parser.add_argument("--region", default=DEFAULT_REGION, help="가짜 AWS의 리전 (기본 서울)")
-    parser.add_argument("--admin", action="store_true", help="도구 호출을 관리자 요청으로 보낸다 (관리자 전용 도구용)")
+    parser.add_argument("--admin", action="store_true",
+                        help="/mcp로 직접 붙은 도구 호출을 관리자 요청으로 보낸다 (Claude Code를 직접 붙일 때. 화면의 요청과는 무관)")
     parser.add_argument("--scenario", help="처음에 심을 시나리오 (없으면 정상 환경)")
     args = parser.parse_args(argv)
 
     prepare_environment(args.region)
     from moto import mock_aws  # 환경 변수를 고친 뒤에 불러온다
 
+    from local import api as local_api
+    url = f"http://127.0.0.1:{args.port}/mcp"
+
     with mock_aws():
         create_tables(args.region)
-        print("MCP 서버와 공식 AWS MCP 서버를 불러오는 중…", flush=True)
+        local_api.create_api_tables(args.region)
+        local_api.api_environment(os.environ, url + "/server")
+        claims = local_api.create_user_pool(args.region)
+        print("MCP 서버와 공식 AWS MCP 서버, LLM 서버 코드를 불러오는 중…", flush=True)
         stack = Stack(load_app(), args.region, admin=args.admin)
+        api = local_api.LocalApi(args.region, url + "/server", claims, world_of=lambda: stack.world)
+        stack.on_change = api.collect_dashboard
         current = stack.apply(args.scenario)
-        server = stack.serve("127.0.0.1", args.port)
+        servers = [stack.serve("127.0.0.1", args.port), api.serve("127.0.0.1", args.api_port)]
+        threading.Thread(target=servers[1].serve_forever, name="api", daemon=True).start()
         stop = stack.keep_fresh()
-        url = f"http://127.0.0.1:{server.server_address[1]}/mcp"
         print(f"\nVigie 로컬 MCP 서버: {url}  (가짜 AWS · {args.region}{' · 관리자 요청' if args.admin else ''})")
+        print(f"로컬 API 서버:      http://127.0.0.1:{args.api_port}  (화면: npm --prefix frontend run dev:local)")
+        print(f"모델: {'Anthropic API (ANTHROPIC_API_KEY)' if api.has_model else '없음 — 대화는 안내 문구로 거절합니다'}")
         print(f"지금 환경: {current.get('scenario') or '정상'} — {current['about']}")
         print("시나리오 바꾸기: python -m local.scenario list | apply <이름> | reset")
         print("Claude Code에 바로 붙이기 (이 세션에만):")
         print(f"  claude --mcp-config '{{\"mcpServers\":{{\"vigie\":{{\"type\":\"http\",\"url\":\"{url}\"}}}}}}'")
         print("멈추기: Ctrl+C\n", flush=True)
         try:
-            server.serve_forever()
+            servers[0].serve_forever()
         except KeyboardInterrupt:
             pass
         finally:
             stop.set()
-            server.server_close()
+            servers[1].shutdown()
+            for server in servers:
+                server.server_close()
 
 
 if __name__ == "__main__":
