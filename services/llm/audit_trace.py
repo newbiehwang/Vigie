@@ -179,11 +179,11 @@ def build(events: List[Dict[str, Any]], question_rows: List[Dict[str, Any]]) -> 
                                           "이벤트가 없는지 CloudTrail에서 확인할 수 있습니다", [])
 
     if any(s["status"] == FAIL for s in steps):
-        verdict = "기록이 어긋납니다. 실패한 층부터 확인하세요"
+        verdict = "기록이 어긋납니다. 실패한 단계부터 확인하세요"
     elif any(s["status"] == WARN for s in steps):
-        verdict = "주의할 층이 있습니다. 경고가 붙은 층부터 확인하세요"
+        verdict = "주의할 단계가 있습니다. 경고가 붙은 단계부터 확인하세요"
     else:
-        verdict = "모든 층이 정상입니다. 사용자가 요청하고 사람이 결정한 변경입니다"
+        verdict = "모든 단계가 정상입니다. 사용자가 요청하고 사람이 결정한 변경입니다"
     return {"steps": steps, "verdict": verdict, "question": user_question}
 
 

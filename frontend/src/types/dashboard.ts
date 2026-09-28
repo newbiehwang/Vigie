@@ -5,7 +5,7 @@
 //   alarms·resources·changes: AWS 이벤트로 바로(몇 초~몇 분) + 5분마다 · errors: 5분마다 · usage: 1시간마다 · cost: 하루 1번
 // 한 번도 모으지 못한 구역은 null이다 (alarms·errors·cost). sections에 구역마다 모은 때·성공 여부가 있다
 
-// 상태: 문제 · 주의 · 정상 · 데이터 없음 (감사 로그 7계층의 fail·warn·ok·info와 같은 색)
+// 상태: 문제 · 주의 · 정상 · 데이터 없음 (감사 로그 처리 단계의 fail·warn·ok·info와 같은 색)
 export type HealthStatus = 'fail' | 'warn' | 'ok' | 'none';
 
 export type ResourceKind = 'Lambda' | 'EC2' | 'S3' | 'Logs' | 'Alarm';

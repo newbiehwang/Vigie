@@ -1,4 +1,4 @@
-// 감사 기록 한 건을 자세히 보이는 조각들: 항목 표(Details, 맨 위에 7계층 위치와 역추적), 결과 배지, 종류 이름, 표시 배지.
+// 감사 기록 한 건을 자세히 보이는 조각들: 항목 표(Details, 맨 위에 처리 단계와 역추적), 결과 배지, 종류 이름, 표시 배지.
 // 목록 행(AuditPage)과 기록 팝업창(AuditDetailModal)이 같이 쓴다
 import { Fragment, type ReactNode } from 'react';
 import type { AuditRecord } from '@/types/audit';
@@ -141,7 +141,7 @@ export function Details({ record }: { record: AuditRecord }) {
 
     return (
         <>
-            {/* 층: 7계층에서 이 기록의 자리를 맨 위에 (도구 호출·변경 작업. 질문·사용자 관리 행에는 층이 없다) */}
+            {/* 층: 처리 단계에서 이 기록의 자리를 맨 위에 (도구 호출·변경 작업. 질문·사용자 관리 행에는 층이 없다) */}
             {record.locus ? <AuditLayers record={record} /> : null}
             <dl className="audit-details">
                 {rows.map(([name, value]) => (

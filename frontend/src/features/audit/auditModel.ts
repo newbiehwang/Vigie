@@ -45,7 +45,7 @@ export const LOCI: { value: AuditLocus; label: string; description: string }[] =
 ];
 export const locusOf = (value?: string) => LOCI.find((locus) => locus.value === value);
 
-// 7계층: 역추적(services/llm/audit_trace.py)과 같은 차례·같은 이름. 기록마다의 층(LOCI)은 이 중 기록으로 남길 수 있는 다섯이다.
+// 처리 단계: 역추적(services/llm/audit_trace.py)과 같은 차례·같은 이름. 기록마다의 층(LOCI)은 이 중 기록으로 남길 수 있는 다섯이다.
 // recorded: 'row' 행으로 남는다 · 'flag' 행이 따로 없고 다른 행의 표시로 남는다(체류: 승인 요청 행의 taintedBy)
 //           'none' 모델 안이라 기록할 수 없다(판단) · 'outside' 앱 밖이라 대조할 단서만 남긴다(매개: CloudTrail)
 export const LAYERS: {
@@ -223,7 +223,7 @@ export const FACETS: FacetDef[] = [
     },
     {
         id: 'locus',
-        label: '층',
+        label: '처리 단계',
         // 체류층은 행이 따로 없다: 의심 결과를 읽은 뒤의 승인 요청 행 (유출층 행이기도 하다)
         valuesOf: (record) => [record.locus, record.taintedBy?.length ? 'residence' : undefined].filter((v): v is string => !!v),
         order: LOCI.map((locus) => locus.value),
