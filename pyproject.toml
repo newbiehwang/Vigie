@@ -1,6 +1,6 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["tests", "installer/core"]   # installer/core: 설치 마법사 패키지(vigie_installer)
+pythonpath = [".", "tests", "installer/core"]   # .: 로컬 실행 패키지(local), installer/core: 설치 마법사 패키지(vigie_installer)
 addopts = "-q"
 
 [tool.ruff]
