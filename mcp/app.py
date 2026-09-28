@@ -15,7 +15,7 @@
 4. EC2 조회 도구 (공식 EC2 서버가 없다)
    - 인스턴스 목록, CPU 사용률 순위, 상태 검사, 비용 낭비 찾기(연결 안 된 볼륨·오래 멈춘 인스턴스·쓰지 않는 탄력적 IP)
    - 사용자 데이터·콘솔 출력·Windows 암호는 읽지 않는다 (비밀 값이 흔히 들어 있다). IAM도 명시적으로 거부한다
-5. 진단 도구 (lambda_mcp/diagnose.py): 서비스별 진단 절차(ALB·EC2·Lambda·S3)를 정해진 차례로 돌려 L1~L7 층마다
+5. 진단 도구 (lambda_mcp/diagnose.py): 서비스별 진단 절차(ALB·EC2·Lambda·S3·RDS·VPC 연결·자격 증명 유출·비용 급증)를 정해진 차례로 돌려 L1~L7 층마다
    판정(원인·증상·주의·정상·확인 불가·해당 없음)과 근거를 돌려준다. 조회만 한다
 2. 이 파일에 직접 둔 도구 (공식 서버가 없거나 폐기된 것)
    - CloudWatch 대시보드 목록·요약 (공식 CloudWatch 서버에 대시보드 도구가 없다)
@@ -564,27 +564,35 @@ def find_ec2_waste(stopped_days: Optional[int] = None) -> Dict[str, Any]:
 
 # ---------------------------------------------------------------- 진단 (서비스별 절차, lambda_mcp/diagnose.py)
 @mcp_server.tool()
-def diagnose_service(service: str, resource: str, hours: Optional[int] = None) -> Dict[str, Any]:
+def diagnose_service(service: str, resource: str, hours: Optional[int] = None,
+                     target: Optional[str] = None) -> Dict[str, Any]:
     """
     Runs a fixed diagnosis procedure (runbook as code) on one resource and returns a verdict per layer:
     L1 AWS itself, L2 recent changes (CloudTrail), L3 network (routes, security groups, NACLs), L4 load balancer /
     gateway, L5 compute, L6 permissions and limits, L7 data and dependencies. Each layer is cause, symptom, warn,
     ok, unknown or skip, with the checks and the evidence (API or metric name) behind it.
     Use this FIRST for incident questions about one resource ("why is the ALB returning 502?", "why is this
-    Lambda failing?", "is this bucket public?", "why can't I reach this instance?"). Build the answer on its
-    verdicts: name the cause layers and quote their evidence, and do not overrule them. Use other tools only to dig
-    into a cause layer (e.g. logs of the target application). Read-only.
+    Lambda failing?", "is this bucket public?", "why can't I reach this instance?", "why is the DB slow?",
+    "why can't A reach B:5432?", "was this access key leaked / what did it do?", "why did the bill jump?").
+    Build the answer on its verdicts: name the cause layers and quote their evidence, and do not overrule them.
+    Use other tools only to dig into a cause layer (e.g. logs of the target application). Read-only.
+    The cost procedure makes one Cost Explorer request (USD 0.01).
 
     Args:
-        service: alb, ec2, lambda or s3.
-        resource: ALB name or ARN, EC2 instance ID or Name tag, Lambda function name, or S3 bucket name.
-        hours: Look-back window in hours for metrics, logs and changes (1-72, default 1).
+        service: alb, ec2, lambda, s3, rds, vpc (connectivity between two endpoints), credential (leaked access
+            key) or cost (spend spike).
+        resource: ALB name or ARN, EC2 instance ID or Name tag, Lambda function name, S3 bucket name, RDS DB
+            identifier, the source instance (vpc), an access key ID or IAM user name (credential), or "account" or a
+            service name such as "EC2" (cost).
+        hours: Look-back window in hours for metrics, logs and changes (1-72; default 1, credential 24; cost
+            always compares the last 3 days with the 14 days before).
+        target: vpc only - the destination as IP:port or instance-ID:port (e.g. 10.0.2.15:5432).
 
     Returns:
         layers (id, name, component, status, finding, checks), causes, symptoms and a summary.
     """
     try:
-        return {'status': 'success', **diagnose.run(service, resource, hours, region=aws_region)}
+        return {'status': 'success', **diagnose.run(service, resource, hours, region=aws_region, target=target)}
     except ValueError as e:
         return {'status': 'error', 'message': str(e)}
     except Exception as e:

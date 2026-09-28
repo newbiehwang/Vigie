@@ -7,6 +7,10 @@
 //                EC2     클라이언트 → L4 대상 그룹 → L3 보안 그룹·NACL → L5 인스턴스 → L7 의존성
 //                Lambda  호출 → L4 API Gateway → L7 이벤트 소스 → L5 함수 실행 → L3 VPC 경로 → AWS API·DB
 //                S3      요청자 → L4 앞단 → L3 VPC 엔드포인트 → L6 차단·정책·ACL → L5 (없음) → L7 버전 관리
+//                RDS     애플리케이션 → L4 RDS Proxy → L3 보안 그룹·NACL → L5 DB 인스턴스 → L7 복제·디스크·백업
+//                VPC     출발지 → L5 양쪽 인스턴스 → L3 보안 그룹·NACL·경로 → L6 NAT → 목적지
+//                키 유출  유출된 키 → L3 쓴 곳 → L6 권한·지속성 → L5 컴퓨팅 남용 → L7 데이터 접근
+//                비용     청구서 → L5 컴퓨팅 → L3 전송·NAT → L4 앞단 → L7 저장·로그
 //   아래 띠    길에 없는 층 (보통 L6 권한·한도) · 맨 아래 L1 AWS 자체 (모든 것이 올라탄 바닥)
 // 설명: 층마다 이 서비스에서 무엇을 묻고 무엇을 보는지 (런북의 진단 단계를 줄인 것)
 import type { DiagnosisLayerId, DiagnosisStatus } from '@/types/audit';
@@ -88,7 +92,73 @@ const S3: ServiceMap = {
     },
 };
 
-export const SERVICE_MAPS: Record<string, ServiceMap> = { alb: ALB, ec2: EC2, lambda: LAMBDA, s3: S3 };
+const RDS: ServiceMap = {
+    entry: '애플리케이션',
+    path: ['L4', 'L3', 'L5', 'L7'],
+    descriptions: {
+        L1: 'AWS 쪽 장애인가. RDS가 알린 이벤트 중 장애(failure), 장애 조치(failover)·복구·유지 관리를 봅니다. 장애 조치 동안에는 연결이 끊기고 DNS가 새 인스턴스를 가리킵니다.',
+        L2: '증상 직전에 무엇이 바뀌었나. DB 인스턴스·파라미터 그룹·보안 그룹과 관련된 CloudTrail 쓰기 이벤트입니다.',
+        L3: '애플리케이션이 DB 포트까지 오나. DB 보안 그룹이 포트를 여는지, DB 서브넷의 NACL이 들어오는 포트와 돌아가는 임시 포트를 막지 않는지 봅니다. 퍼블릭 접근이 켜진 채 인터넷에 열려 있으면 주의입니다.',
+        L4: 'RDS Proxy 같은 앞단입니다. 이 절차는 보지 않습니다.',
+        L5: 'DB가 제대로 돌고 있나. 인스턴스 상태(멈춤·파라미터 불일치·KMS 키 문제), CPU, 여유 메모리, gp2 버스트 크레딧과 버스트 인스턴스의 CPU 크레딧을 봅니다.',
+        L6: '한도에 닿았나. 여유 저장 공간이 할당의 10% 아래인지(가득 차면 쓰기가 멈춤)와 연결 수를 봅니다.',
+        L7: '데이터가 늦거나 잃을 수 있나. 읽기 복제본의 복제 지연, 디스크 읽기·쓰기 지연, 자동 백업과 Multi-AZ를 봅니다.',
+    },
+};
+
+const VPC: ServiceMap = {
+    entry: '출발지',
+    path: ['L5', 'L3', 'L6'],
+    exit: '목적지',
+    descriptions: {
+        L1: 'AWS 쪽 장애인가. 양쪽 인스턴스의 시스템 상태 검사를 봅니다.',
+        L2: '증상 직전에 무엇이 바뀌었나. 양쪽 인스턴스·보안 그룹·서브넷·NAT와 관련된 CloudTrail 쓰기 이벤트입니다.',
+        L3: '패킷이 가고 돌아오나. 출발지 보안 그룹의 나가는 규칙과 목적지 보안 그룹의 들어오는 규칙, 서브넷 경계를 넘을 때의 NACL(상태를 기억하지 않아 응답 방향의 임시 포트도 열어야 함), 라우팅 테이블에서 접두사가 가장 긴 경로(없음·blackhole·공인 IP 없는 인터넷 게이트웨이)를 봅니다. 흐름 로그가 있는지도 봅니다.',
+        L4: '로드 밸런서를 거치지 않는 인스턴스 사이의 직접 연결을 봅니다.',
+        L5: '양쪽 인스턴스가 실행 중인가를 봅니다.',
+        L6: 'NAT 게이트웨이를 거친다면 그 상태와, 같은 목적지로 동시 연결 55,000개 한도에 닿아 포트를 할당하지 못했는지(ErrorPortAllocation)를 봅니다.',
+        L7: 'DNS 해석은 흐름 로그에 남지 않습니다. 이름으로 연결이 안 되면 Route 53 Resolver 쿼리 로그로 봅니다.',
+    },
+};
+
+const CREDENTIAL: ServiceMap = {
+    entry: '유출된 키',
+    path: ['L3', 'L6', 'L5', 'L7'],
+    descriptions: {
+        L1: '자격 증명 사고는 AWS 쪽 장애가 아니라 해당 없음입니다.',
+        L2: '이 키로 무엇을 바꿨나. 이 키가 부른 쓰기 API(CloudTrail)와 감사 기록·탐지를 끄려 한 흔적(StopLogging, DeleteDetector 등)을 봅니다.',
+        L3: '어디서 썼나. 호출한 IP, 도구(userAgent), 배포 리전 밖의 리전을 봅니다. 채굴은 여러 리전에 퍼뜨리는 경우가 많습니다.',
+        L4: '앞단이 없는 API 호출이라 해당 없음입니다.',
+        L5: '컴퓨팅을 남용했나. 인스턴스·스팟·함수·컨테이너를 만든 흔적과 GuardDuty 탐지를 봅니다.',
+        L6: '권한을 넓히거나 더듬었나. 새 사용자·키·정책을 만든 지속성 확보, 권한 거부가 잇따른 탐색, 키 상태와 권한 범위를 봅니다. 활성인 키는 지우지 말고 먼저 비활성화합니다.',
+        L7: '데이터에 손댔나. 비밀 값 조회, 버킷 정책·ACL 공개, 스냅샷 공유를 봅니다. S3 객체 읽기는 데이터 이벤트라 관리 이벤트로는 보이지 않습니다.',
+    },
+};
+
+const COST: ServiceMap = {
+    entry: '청구서',
+    path: ['L5', 'L3', 'L4', 'L7'],
+    descriptions: {
+        L1: 'AWS 쪽 가격 변경·청구 오류는 이 절차가 보지 않습니다.',
+        L2: '비용을 늘리는 변경이 있었나. 인스턴스 시작, NAT·볼륨·엔드포인트 생성, 로그 구독 같은 계정 전체의 쓰기 이벤트를 봅니다. 급증이 있을 때만 계기로 봅니다.',
+        L3: '데이터 전송·NAT 처리·VPC 엔드포인트·공인 IPv4 요금이 최근 3일 동안 그 전 14일 평균보다 크게 늘었나를 봅니다.',
+        L4: '로드 밸런서(LCU)·API Gateway·CloudFront 요금이 크게 늘었나를 봅니다.',
+        L5: 'EC2·Lambda·RDS·컨테이너 같은 컴퓨팅 요금이 크게 늘었나를 봅니다. 하루 평균이 1.5배 이상이면서 5달러 이상 늘면 급증입니다.',
+        L6: '예산을 넘었거나 넘을 것으로 예측되는지, Cost Anomaly Detection 감시가 있는지, 계정 전체의 하루 평균이 어떻게 바뀌었는지를 봅니다.',
+        L7: 'S3·EBS 저장, CloudWatch 로그 수집, DynamoDB·S3 요청 요금이 크게 늘었나를 봅니다.',
+    },
+};
+
+export const SERVICE_MAPS: Record<string, ServiceMap> = {
+    alb: ALB,
+    ec2: EC2,
+    lambda: LAMBDA,
+    s3: S3,
+    rds: RDS,
+    vpc: VPC,
+    credential: CREDENTIAL,
+    cost: COST,
+};
 
 // 모르는 서비스(나중에 더한 서비스를 옛 화면이 받을 때): 층 차례대로 한 줄
 export const FALLBACK_MAP: ServiceMap = {

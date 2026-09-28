@@ -93,7 +93,8 @@ export interface Diagnosis {
     service: string; // alb, ec2, lambda, s3
     serviceName: string;
     resource: string;
-    hours: number; // 본 시간 (지표·로그·변경)
+    target?: string; // VPC 연결의 목적지 (IP:포트)
+    hours: number; // 본 시간 (지표·로그·변경). 비용은 최근 3일(72)
     summary: string;
     causes: DiagnosisLayerId[];
     layers: DiagnosisLayer[];

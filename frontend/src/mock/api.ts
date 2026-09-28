@@ -33,7 +33,7 @@ import type {
 import type { PendingAction } from "../types/actions";
 import type { Artifact } from "../types/artifacts";
 import type { AdminEvent, AuditQuery, AuditRecord, Diagnosis, TraceStep } from "../types/audit";
-import { publicWebcodeDiagnosis, webAlbDiagnosis } from "./diagnoses";
+import { leakedKeyDiagnosis, publicWebcodeDiagnosis, webAlbDiagnosis } from "./diagnoses";
 import type { ManagedGroup, ManagedUser, UserRole } from "../types/users";
 import type {
   DashboardChange,
@@ -1393,6 +1393,23 @@ function seedScenarios(): AuditRecord[] {
       "- 네트워크(L3)·연결 한도(L6)·응답 시간(L7)은 정상입니다",
       "",
       "Auto Scaling 그룹이 새 인스턴스를 띄우는지 확인하고, 종료가 의도한 것인지 bstoll에게 확인해 주세요.",
+    ].join("\n"));
+    out.push(...q.records);
+  }
+
+  {
+    // 9 유출된 키: 외부 IP 세 곳의 거부 4건 뒤, bstoll이 키를 끄기(-20348) 전에 관리자가 확인했다
+    const q = scenarioQuestion(kim, "web_admin 키가 유출된 것 같아. 이 키로 뭘 했는지 봐줘", [
+      { tool_name: "diagnoseService", input: { service: "credential", resource: "web_admin" }, status: "ok",
+        diagnosis: leakedKeyDiagnosis(clock) },
+    ], incidentTime(-20700), [
+      "**아직 바뀐 것은 없지만, 누군가 이 키로 권한을 더듬고 있습니다.**",
+      "",
+      `- **증상 (L6 권한)**: ${clock(-21542)}부터 11분 동안 IAM·S3·EC2에 부른 4건이 모두 거부됐습니다 (ListAccessKeys, ListBuckets, DescribeAccountAttributes, GetUser)`,
+      "- **증상 (L3 쓴 곳)**: 서로 다른 IP 세 곳에서 썼습니다",
+      "- 쓰기·컴퓨팅 생성·데이터 접근 흔적은 없습니다 (S3 객체 읽기는 관리 이벤트로 보이지 않습니다)",
+      "",
+      "키가 아직 **활성**입니다. 지우지 말고 먼저 비활성화하고(조사 기록을 남기려고), 키가 어디에 노출됐는지 찾아 주세요.",
     ].join("\n"));
     out.push(...q.records);
   }

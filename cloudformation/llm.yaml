@@ -191,7 +191,7 @@ Resources:
                   - ec2:DescribeVolumes
                   - ec2:DescribeAddresses
                 Resource: '*'
-              # 진단 도구 (lambda_mcp/diagnose.py): ALB·대상 그룹·Lambda 설정·Auto Scaling 활동·함수 로그를 읽는다 (조회만).
+              # 진단 도구 (lambda_mcp/diagnose.py): ALB·대상 그룹·Lambda·RDS 설정, Auto Scaling 활동, 함수 로그, 키·예산을 읽는다 (조회만).
               # 보안 그룹·NACL·라우팅은 위의 네트워크 권한, 지표는 GetMetricData, 변경 기록은 LookupEvents로 읽는다.
               # ELB·Auto Scaling·Lambda의 Describe*/Get*/List*는 리소스 수준 권한을 받지 않거나 모든 자원이 대상이라 '*'
               - Effect: Allow
@@ -208,6 +208,18 @@ Resources:
                   - lambda:GetFunctionConcurrency
                   - lambda:ListEventSourceMappings
                   - s3:GetAccountPublicAccessBlock
+                  # RDS 진단: 인스턴스 설정과 RDS 이벤트(장애·장애 조치·유지 관리)
+                  - rds:DescribeDBInstances
+                  - rds:DescribeEvents
+                  # 자격 증명 유출 진단: 키의 주인, 붙은 정책(관리자 권한인지), GuardDuty 탐지
+                  - iam:GetAccessKeyLastUsed
+                  - iam:GetPolicy
+                  - guardduty:ListDetectors
+                  - guardduty:ListFindings
+                  - guardduty:GetFindings
+                  # 비용 급증 진단: 예산과 이상 탐지 감시 (비용 조회는 위의 ce:GetCostAndUsage)
+                  - budgets:ViewBudget
+                  - ce:GetAnomalyMonitors
                 Resource: '*'
               # 함수 로그에서 시간 초과·메모리 부족·권한 거부 줄만 센다 (FilterLogEvents, Lambda 로그 그룹만)
               - Effect: Allow

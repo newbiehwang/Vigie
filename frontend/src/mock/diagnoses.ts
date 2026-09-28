@@ -2,8 +2,10 @@
 // 데모 계정(Frothly, demo/frothly.ts)의 실제 CloudTrail 사건에 맞췄다:
 //   - frothlywebcode: bstoll이 PutBucketAcl로 모든 사용자(AllUsers)에게 READ·WRITE를 준 뒤(-8014), 되돌리기 전(-4646)에 진단
 //   - 웹 ALB: bstoll이 웹 서버 대상 세 대를 직접 종료한(-3332) 직후에 진단
+//   - web_admin 키: 외부 IP 세 곳에서 권한을 더듬은 거부 4건(-21542~-20893) 뒤, bstoll이 키를 끄기(-20348) 전에 진단
 // 만든 값: ALB 이름(frothly-web-alb)·대상 그룹 이름, 지표 값, 버전 관리 상태. 사건(누가·언제·무엇을)은 실제 기록이다
 import type { Diagnosis, DiagnosisCheck, DiagnosisLayer, DiagnosisLayerId, DiagnosisStatus } from '@/types/audit';
+import { DEMO_REGION, events } from './demo/frothly';
 
 const NAMES: Record<DiagnosisLayerId, string> = {
     L1: 'AWS 자체',
@@ -43,11 +45,12 @@ const diagnosis = (
     resource: string,
     summary: string,
     layers: DiagnosisLayer[],
+    hours = 1, // 서버처럼 서비스마다 기본값 (자격 증명은 24시간)
 ): Diagnosis => ({
     service,
     serviceName,
     resource,
-    hours: 1,
+    hours,
     summary,
     causes: layers.filter((l) => l.status === 'cause').map((l) => l.id),
     layers,
@@ -110,3 +113,40 @@ export const webAlbDiagnosis = (clock: (offset: number) => string) => diagnosis(
         ]),
     ],
 );
+
+// 유출된 web_admin 키: 쓰기는 없고 거부된 조회만 있다 (정찰). 배포 리전은 데모 계정의 리전(DEMO_REGION)이고,
+// 거부된 호출이 간 리전은 기록에서 읽는다 (IAM처럼 전역 서비스는 서버 절차처럼 빼고 센다)
+const reconRegion = () =>
+    events(['ListBuckets', 'DescribeAccountAttributes']).find((e) => e.actor === 'web_admin')?.region ?? DEMO_REGION;
+
+export const leakedKeyDiagnosis = (clock: (offset: number) => string) =>
+    diagnosis(
+        'credential',
+        '자격 증명 유출',
+        'web_admin',
+        `원인 층을 특정하지 못했습니다. 증상 — L3 입구·네트워크: 배포 리전(${DEMO_REGION}) 밖 1곳에서 호출했습니다: ${reconRegion()} (채굴은 여러 리전에 퍼뜨리는 경우가 많습니다) / L6 권한·한도: 권한 거부 4건: ListAccessKeys 1건, ListBuckets 1건, DescribeAccountAttributes 1건, GetUser 1건 (권한을 더듬어 본 흔적)`,
+        [
+            layer('L1', 'AWS 자체 (해당 없음)', [check('해당 없음', 'skip', 'AWS 쪽 장애가 아니라 자격 증명 사고입니다')]),
+            layer('L2', '이 키가 바꾼 것 (쓰기 이벤트·기록 끄기)', [
+                check('키가 바꾼 것', 'ok', '최근 24시간 동안 성공한 쓰기가 없습니다 (호출 4건)', 'cloudtrail:LookupEvents AccessKeyId'),
+            ]),
+            layer('L3', '쓴 곳 (IP · 도구 · 리전)', [
+                check('쓴 리전', 'symptom', `배포 리전(${DEMO_REGION}) 밖 1곳에서 호출했습니다: ${reconRegion()} (채굴은 여러 리전에 퍼뜨리는 경우가 많습니다)`, 'cloudtrail awsRegion'),
+                check('쓴 IP', 'symptom', 'IP 3곳에서 썼습니다: 139.198.18.205, 209.107.196.112, 82.102.18.111 …', 'cloudtrail sourceIPAddress'),
+            ]),
+            layer('L4', '앞단 (해당 없음)', [check('해당 없음', 'skip', '앞단이 없는 API 호출입니다')]),
+            layer('L5', '컴퓨팅 남용 (채굴 흔적 · GuardDuty)', [
+                check('GuardDuty', 'unknown', 'GuardDuty를 조회하지 못했습니다 (AccessDeniedException)', 'guardduty:ListFindings'),
+                check('컴퓨팅 생성', 'ok', '인스턴스·함수·컨테이너를 만든 흔적이 없습니다', 'cloudtrail:LookupEvents'),
+            ]),
+            layer('L6', '지속성 확보 · 권한 더듬기 · 키 상태', [
+                check('거부된 시도', 'symptom', `권한 거부 4건: ListAccessKeys 1건, ListBuckets 1건, DescribeAccountAttributes 1건, GetUser 1건 (권한을 더듬어 본 흔적, 처음 ${clock(-21542)})`, 'cloudtrail errorCode AccessDenied'),
+                check('키 상태', 'ok', 'web_admin의 키 1개 활성', 'iam:ListAccessKeys'),
+            ]),
+            layer('L7', '데이터 접근 (비밀 값 · 버킷 공개 · 스냅샷 공유)', [
+                check('데이터 접근', 'ok', '비밀 값 조회·버킷 공개·스냅샷 공유 흔적이 없습니다', 'cloudtrail:LookupEvents'),
+                check('S3 객체 읽기', 'unknown', 'S3 GetObject는 데이터 이벤트라 관리 이벤트 조회로 보이지 않습니다 (데이터 이벤트 추적·S3 서버 액세스 로그로 확인)', 'cloudtrail 데이터 이벤트'),
+            ]),
+        ],
+        24,
+    );
