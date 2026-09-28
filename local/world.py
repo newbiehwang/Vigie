@@ -223,10 +223,37 @@ def reset_world() -> None:
             backend.reset()
 
 
+# 변경 이벤트가 어느 서비스의 API인가 (홈의 '최근 변경'에 보이는 CloudTrail eventSource)
+EVENT_SOURCES = {"PutBucketPublicAccessBlock": "s3", "PutBucketPolicy": "s3", "StopDBInstance": "rds",
+                 "PutFunctionConcurrency20171031": "lambda"}
+
+
 def change(world: dict, event: str, resource: str, user: str = "deploy-bot") -> None:
-    """자원 변경 기록(CloudTrail 쓰기 이벤트) 하나를 심는다 (diagnose.recent_changes가 돌려주는 모양)."""
-    world["trail"].append({"time": _clock(datetime.now(timezone.utc) - timedelta(minutes=12)), "event": event,
-                           "user": user, "resource": resource})
+    """자원 변경 기록(CloudTrail 쓰기 이벤트) 하나를 심는다 (diagnose.recent_changes가 돌려주는 모양 + 시각 epoch)."""
+    moment = datetime.now(timezone.utc) - timedelta(minutes=12)
+    world["trail"].append({"time": _clock(moment), "event": event, "user": user, "resource": resource,
+                           "epoch": int(moment.timestamp())})
+
+
+class TrailLookup:
+    """moto에 없는 CloudTrail LookupEvents 대신 world에 심은 변경 기록을 CloudTrail 응답 모양으로 돌려준다.
+    홈 대시보드 수집(services/dashboard/collector.collect_changes)이 get_paginator('lookup_events')로 부른다."""
+
+    def __init__(self, world_of: Callable[[], Optional[dict]]):
+        self.world_of = world_of
+
+    def get_paginator(self, operation: str):
+        assert operation == "lookup_events"
+        return self
+
+    def paginate(self, StartTime: datetime, EndTime: datetime, **_) -> list:  # noqa: N803 (boto3 인자 이름)
+        world = self.world_of() or {"trail": []}
+        events = [{"EventTime": datetime.fromtimestamp(change["epoch"], timezone.utc), "EventName": change["event"],
+                   "Username": change["user"],
+                   "EventSource": f"{EVENT_SOURCES.get(change['event'], 'ec2')}.amazonaws.com",
+                   "Resources": [{"ResourceName": change["resource"]}]}
+                  for change in world["trail"] if StartTime.timestamp() <= change["epoch"] <= EndTime.timestamp()]
+        return [{"Events": sorted(events, key=lambda e: e["EventTime"], reverse=True)}]
 
 
 def act(world: dict, event: str, *, read_only: bool = False, error: str = "", region: str = "", source: str = "",

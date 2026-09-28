@@ -8,6 +8,7 @@
 // http://localhost:5173/redirect가 모두 등록되어 있어(cloudformation/base.yaml) 배포·로컬 어디서나 맞다.
 //
 // mock 모드(npm run dev:mock, 시연용 정적 배포 npm run build:demo)에서는 Cognito 없이 '체험하기'를 누르면 바로 들어간다.
+// local 모드(npm run dev:local, 로컬 장애 재현)는 Cognito 없이 로컬 사용자로 바로 들어가고, API는 로컬 API 서버가 받는다.
 import { Amplify } from 'aws-amplify';
 import { fetchAuthSession, signInWithRedirect, signOut } from 'aws-amplify/auth';
 // /redirect로 돌아왔을 때 code를 토큰으로 바꾸는 처리를 켠다 (Amplify.configure 때 동작)
@@ -38,16 +39,35 @@ function groupsOf(value: unknown): string[] {
     return [];
 }
 
-const MOCK = import.meta.env.MODE === 'mock';
+// local 모드: 로컬 API 서버(local/api.py)의 로컬 사용자 세 명 중 하나. 주소에 ?local-role=member(또는 decider, admin)를
+// 붙여 열면 그 사용자로 들어가고, 그 탭에서는 다른 주소로 옮겨도 유지된다 (기본 관리자).
+// 서버가 요청의 X-Vigie-Local-Role 머리글로 사용자를 고른다
+export const LOCAL = import.meta.env.MODE === 'localdev'; // 'local'은 Vite가 모드 이름으로 받지 않는다 (.env.local과 겹친다)
+const LOCAL_ROLES = { admin: [ADMIN_GROUP, 'approvers'], decider: ['approvers'], member: [] as string[] };
+type LocalRole = keyof typeof LOCAL_ROLES;
+const LOCAL_ROLE_KEY = 'vigie-local-role';
+function pickLocalRole(): LocalRole {
+    const valid = (role: string | null): role is LocalRole => !!role && role in LOCAL_ROLES;
+    const requested = new URLSearchParams(window.location.search).get('local-role');
+    try {
+        if (valid(requested)) window.sessionStorage.setItem(LOCAL_ROLE_KEY, requested);
+        const saved = window.sessionStorage.getItem(LOCAL_ROLE_KEY);
+        return valid(saved) ? saved : 'admin';
+    } catch {
+        return valid(requested) ? requested : 'admin'; // 저장소를 쓸 수 없으면 주소로만 고른다
+    }
+}
+export const LOCAL_ROLE: LocalRole = LOCAL ? pickLocalRole() : 'admin';
+
+// mock·local 모드는 Cognito를 쓰지 않는다 (로그인·로그아웃이 페이지를 옮기지 않는다)
+const MOCK = import.meta.env.MODE === 'mock' || LOCAL;
 // 시연(데모) 화면인가: mock 모드가 곧 데모다. 안내 화면의 버튼이 '체험하기'가 되고, 누르면 전환 화면 없이 바로 들어간다
-export const IS_DEMO = MOCK;
+export const IS_DEMO = import.meta.env.MODE === 'mock';
 // mock 사용자는 관리자다. 주소에 ?mock-role=member를 붙여 열면 일반 사용자로 화면을 확인한다 (mock 모드에서만)
-const MOCK_MEMBER = MOCK && new URLSearchParams(window.location.search).get('mock-role') === 'member';
-const MOCK_USER: AuthUser = {
-    email: 'demo@example.com',
-    displayName: 'Demo',
-    groups: MOCK_MEMBER ? [] : [ADMIN_GROUP, 'approvers'],
-};
+const MOCK_MEMBER = IS_DEMO && new URLSearchParams(window.location.search).get('mock-role') === 'member';
+const MOCK_USER: AuthUser = LOCAL
+    ? { email: `${LOCAL_ROLE}@vigie.local`, displayName: LOCAL_ROLE, groups: LOCAL_ROLES[LOCAL_ROLE] }
+    : { email: 'demo@example.com', displayName: 'Demo', groups: MOCK_MEMBER ? [] : [ADMIN_GROUP, 'approvers'] };
 export const mockIsAdmin = () => isAdmin(MOCK_USER); // mock API가 GET /audit에 403을 흉내 낼 때 쓴다
 // mock 모드(데모)는 안내 화면에서 시작한다. '체험하기'를 누르면 들어가고, 새로 고쳐도 그 탭에서는 들어간 채로 둔다
 // (sessionStorage. 로그아웃하면 지운다). 화면만 고칠 때는 ?mock-auth=signed-in을 붙여 열면 바로 들어간다
@@ -67,8 +87,9 @@ function writeDemoSession(signedIn: boolean) {
         // 저장하지 못해도 이번 화면에서는 들어간 상태다
     }
 }
+// local 모드는 처음부터 들어간 상태다 (로그아웃하면 안내 화면, 로그인을 누르면 다시 들어간다)
 let mockSignedIn =
-    MOCK && (new URLSearchParams(window.location.search).get('mock-auth') === 'signed-in' || readDemoSession());
+    LOCAL || (MOCK && (new URLSearchParams(window.location.search).get('mock-auth') === 'signed-in' || readDemoSession()));
 
 const USER_POOL_ID = import.meta.env.USER_POOL_ID;
 const CLIENT_ID = import.meta.env.COGNITO_CLIENT_ID;

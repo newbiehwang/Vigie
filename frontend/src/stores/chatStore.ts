@@ -13,6 +13,7 @@
 // /llm1은 답이 다 만들어진 뒤에 한 번만 응답하므로, 기다리는 동안 진행 상황을 1초마다 따로 가져와 보여 준다
 import axios, { type CancelTokenSource } from 'axios';
 import { create } from 'zustand';
+import { LOCAL } from '@/auth/authClient';
 import type { BotResponse, ChatMessageType, ChatSession } from '@/types/chat';
 
 const newId = () => Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -232,10 +233,14 @@ export const useChatStore = create<ChatState>((set, get) => {
             typeOut(sessionId, botMessage.id, answer.text);
         } catch (error) {
             const cancelled = axios.isCancel(error);
+            // 로컬 장애 재현(npm run dev:local)에서는 서버의 안내를 그대로 보인다 (예: 모델이 연결되지 않았다)
+            const localNotice = LOCAL
+                ? (error as { response?: { data?: { error?: string } } })?.response?.data?.error
+                : undefined;
             const notice: ChatMessageType = {
                 id: newId(),
                 sender: 'assistant',
-                text: cancelled ? CANCEL_ANSWER : ERROR_ANSWER,
+                text: cancelled ? CANCEL_ANSWER : (localNotice ?? ERROR_ANSWER),
                 timestamp: new Date().toISOString(),
                 animationState: 'appear',
             };
