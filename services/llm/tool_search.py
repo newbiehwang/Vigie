@@ -42,7 +42,7 @@ SYSTEM_HINT = """
 <Tool search>
 Only these tools are loaded at first: """ + ", ".join(ALWAYS_LOADED) + """.
 Every other tool named above (metrics, dashboards, documentation, cost, CloudTrail, Pricing, IAM, network, S3, EC2,
-charts/diagrams and change tools) is loaded on demand: call tool_search_tool_regex with a pattern made of the exact
+diagnosis, charts/diagrams and change tools) is loaded on demand: call tool_search_tool_regex with a pattern made of the exact
 tool names you need (e.g. "lookup_events" or "listEc2Instances|getEc2CpuRanking|getEc2StatusChecks"), then call the
 tools it returns. Search once for all the tools a task needs instead of one by one. Searching does not run anything.
 </Tool search>

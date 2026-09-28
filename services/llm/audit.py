@@ -7,6 +7,8 @@
 
 기록 단위
 - 도구 호출 한 번 = 항목 하나 (kind "tool"): 도구, 입력, 성공·실패, 오류, 걸린 시간, 결과 크기
+  진단 도구(diagnoseService)는 층별 판정(diagnosis)도 남긴다: 서비스, 자원, 층마다 판정·찾은 것·확인 항목.
+  감사 로그 화면이 이것으로 그 서비스의 진단 층 그림을 그린다 (도구 결과 전체는 남기지 않으므로 판정만 따로 떼어 둔다)
 - 질문 하나 = 항목 하나 (kind "request"): 질문, 모델, 성공·실패, 도구 호출 수, 가린 값의 수, 걸린 시간,
   답변 미리보기(answerPreview)와 답변 글자 수(answerChars), 쓴 토큰(tokens·modelCalls)과 예상 비용(costMicroUsd·price)
 - 질문 하나의 답변 = 항목 하나 (kind "answer"): 사용자가 받은 답변 전체. 아래 '답변' 참고
@@ -82,6 +84,9 @@ ANSWER_PREVIEW = 200  # 질문 항목(목록)에 두는 답변 앞부분
 # 조회 제한
 DEFAULT_DAYS = 7  # 기간을 주지 않으면 최근 7일
 MAX_DAYS = 31  # 전체 사용자 조회는 날짜마다 따로 읽으므로 기간을 제한한다
+DIAGNOSIS_TOOL = "diagnoseService"  # 층별 판정을 남기는 도구 (mcp/lambda_mcp/diagnose.py)
+DIAGNOSIS_TEXT_LIMIT = 400  # 판정의 글 하나 (찾은 것·요약)
+DIAGNOSIS_CHECKS = 12  # 층 하나에 남길 확인 항목의 최대 수
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 MAX_MODEL_CALLS = 50  # 질문 행에 남기는 모델 호출별 토큰의 최대 개수 (도구 반복 상한보다 넉넉하게)
@@ -96,6 +101,37 @@ def _trail_of(result: Optional[str]) -> Optional[Dict[str, Any]]:
     except (ValueError, AttributeError):
         return None
     return trail if isinstance(trail, dict) and trail.get("request_id") else None
+
+
+def diagnosis_of(name: str, result: Any) -> Optional[Dict[str, Any]]:
+    """진단 도구 결과에서 감사 로그에 남길 층별 판정만 떼어 낸다. 다른 도구·실패한 진단이면 None.
+    result: MCP tools/call의 결과 ({"content": [{"type": "text", "text": "<JSON>"}]})."""
+    if name != DIAGNOSIS_TOOL:
+        return None
+    try:
+        body = json.loads(result["content"][0]["text"])
+    except (TypeError, KeyError, IndexError, ValueError):
+        return None
+    if not isinstance(body, dict) or body.get("status") != "success" or not isinstance(body.get("layers"), list):
+        return None
+
+    def text(value: Any) -> str:
+        return _clip(str(value or ""), DIAGNOSIS_TEXT_LIMIT)
+
+    return {
+        "service": text(body.get("service")),
+        "serviceName": text(body.get("service_name")),
+        "resource": text(body.get("resource")),
+        "hours": int(body.get("hours") or 0),
+        "summary": text(body.get("summary")),
+        "causes": [text(layer) for layer in body.get("causes", [])],
+        "layers": [{
+            "id": text(layer.get("id")), "name": text(layer.get("name")), "component": text(layer.get("component")),
+            "status": text(layer.get("status")), "finding": text(layer.get("finding")),
+            "checks": [{key: text(check.get(key)) for key in ("name", "status", "finding", "evidence")}
+                       for check in layer.get("checks", [])[:DIAGNOSIS_CHECKS]],
+        } for layer in body["layers"] if isinstance(layer, dict)],
+    }
 
 
 def _clip(text: str, limit: int) -> str:
@@ -167,7 +203,9 @@ class AuditLog:
         self._tools[tool_id] = (_now(), name, actual, locus)
 
     def tool_finished(self, tool_id: str, ok: bool, error: Optional[str] = None,
-                      result_chars: Optional[int] = None, suspicious: Optional[List[str]] = None) -> None:
+                      result_chars: Optional[int] = None, suspicious: Optional[List[str]] = None,
+                      diagnosis: Optional[Dict[str, Any]] = None) -> None:
+        """diagnosis: 진단 도구의 층별 판정 (diagnosis_of). 비밀 값만 가린 뒤 남긴다."""
         started, name, tool_input, locus = self._tools.pop(tool_id, (_now(), "unknown", {}, "ingress"))
         self.tool_count += 1
         record = {
@@ -186,6 +224,8 @@ class AuditLog:
         if suspicious:
             record["injectionSuspected"] = list(suspicious)
             self.suspicious_count += 1
+        if diagnosis:
+            record["diagnosis"] = self._redactor.secrets_only(diagnosis)
         self._write(started, tool_id, record)
 
     # ---------------------------------------------------------------- 요청이 끝날 때 (llm_service)

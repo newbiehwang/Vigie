@@ -26,6 +26,7 @@ ADMIN_TOOLS = {
     "get_path_trace_methodology", "find_ip_address", "get_eni_details", "list_vpcs", "get_vpc_network",
     "get_vpc_flow_logs",
     "checkS3BucketSecurity", "listS3Objects",
+    "diagnoseService",
 }
 
 CALL_CLOUDTRAIL = {"type": "tool_use", "id": "toolu_1", "name": "lookup_events", "input": {}}

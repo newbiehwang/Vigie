@@ -3,6 +3,7 @@
 import { Fragment, type ReactNode } from 'react';
 import type { AuditRecord } from '@/types/audit';
 import { labelOf } from '@/utils/toolTrace';
+import { AuditDiagnosis } from './AuditDiagnosis';
 import { AuditLayers } from './AuditLayers';
 import {
     ACTION_EVENTS,
@@ -31,6 +32,15 @@ export function Details({ record }: { record: AuditRecord }) {
             </pre>,
         ]);
         if (record.resultChars !== undefined) rows.push(['결과 크기', `${record.resultChars.toLocaleString()}자`]);
+        if (record.diagnosis)
+            rows.push([
+                '원인 층',
+                record.diagnosis.causes.length
+                    ? record.diagnosis.causes
+                          .map((id) => `${id} ${record.diagnosis?.layers.find((layer) => layer.id === id)?.name ?? ''}`)
+                          .join(', ')
+                    : '없음',
+            ]);
         if (Array.isArray(record.injectionSuspected) && record.injectionSuspected.length)
             rows.push(['의심 문구', `지시문처럼 보이는 문구 (${record.injectionSuspected.join(', ')}). 데이터로만 다뤘습니다`]);
     } else if (record.kind === 'action') {
@@ -141,8 +151,13 @@ export function Details({ record }: { record: AuditRecord }) {
 
     return (
         <>
-            {/* 층: 처리 단계에서 이 기록의 자리를 맨 위에 (도구 호출·변경 작업. 질문·사용자 관리 행에는 층이 없다) */}
-            {record.locus ? <AuditLayers record={record} /> : null}
+            {/* 맨 위 그림: 진단 도구 기록은 그 서비스의 진단 층(판정), 나머지 도구 호출·변경 작업은 처리 단계에서 이 기록의 자리.
+                질문·사용자 관리 행에는 층이 없다 */}
+            {record.diagnosis ? (
+                <AuditDiagnosis diagnosis={record.diagnosis} />
+            ) : record.locus ? (
+                <AuditLayers record={record} />
+            ) : null}
             <dl className="audit-details">
                 {rows.map(([name, value]) => (
                     <Fragment key={name}>

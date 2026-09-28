@@ -15,6 +15,8 @@
 4. EC2 조회 도구 (공식 EC2 서버가 없다)
    - 인스턴스 목록, CPU 사용률 순위, 상태 검사, 비용 낭비 찾기(연결 안 된 볼륨·오래 멈춘 인스턴스·쓰지 않는 탄력적 IP)
    - 사용자 데이터·콘솔 출력·Windows 암호는 읽지 않는다 (비밀 값이 흔히 들어 있다). IAM도 명시적으로 거부한다
+5. 진단 도구 (lambda_mcp/diagnose.py): 서비스별 진단 절차(ALB·EC2·Lambda·S3)를 정해진 차례로 돌려 L1~L7 층마다
+   판정(원인·증상·주의·정상·확인 불가·해당 없음)과 근거를 돌려준다. 조회만 한다
 2. 이 파일에 직접 둔 도구 (공식 서버가 없거나 폐기된 것)
    - CloudWatch 대시보드 목록·요약 (공식 CloudWatch 서버에 대시보드 도구가 없다)
    - 아키텍처 다이어그램 (공식 diagram 서버는 PyPI에서 폐기되었다. 폐기 전 공식 서버를 옮겨 온 코드)
@@ -36,6 +38,7 @@ import boto3
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 from botocore.exceptions import ClientError
+from lambda_mcp import diagnose
 from lambda_mcp.approval import ApprovalGate
 from lambda_mcp.lambda_mcp import LambdaMCPServer
 from lambda_mcp.official import OfficialTools
@@ -557,6 +560,35 @@ def find_ec2_waste(stopped_days: Optional[int] = None) -> Dict[str, Any]:
                 'note': '금액은 Pricing 도구(get_pricing)나 Cost Explorer로 확인하세요. 지우기 전에 스냅샷·용도를 확인하세요'}
     except Exception as e:
         return {'status': 'error', 'message': str(e)}
+
+
+# ---------------------------------------------------------------- 진단 (서비스별 절차, lambda_mcp/diagnose.py)
+@mcp_server.tool()
+def diagnose_service(service: str, resource: str, hours: Optional[int] = None) -> Dict[str, Any]:
+    """
+    Runs a fixed diagnosis procedure (runbook as code) on one resource and returns a verdict per layer:
+    L1 AWS itself, L2 recent changes (CloudTrail), L3 network (routes, security groups, NACLs), L4 load balancer /
+    gateway, L5 compute, L6 permissions and limits, L7 data and dependencies. Each layer is cause, symptom, warn,
+    ok, unknown or skip, with the checks and the evidence (API or metric name) behind it.
+    Use this FIRST for incident questions about one resource ("why is the ALB returning 502?", "why is this
+    Lambda failing?", "is this bucket public?", "why can't I reach this instance?"). Build the answer on its
+    verdicts: name the cause layers and quote their evidence, and do not overrule them. Use other tools only to dig
+    into a cause layer (e.g. logs of the target application). Read-only.
+
+    Args:
+        service: alb, ec2, lambda or s3.
+        resource: ALB name or ARN, EC2 instance ID or Name tag, Lambda function name, or S3 bucket name.
+        hours: Look-back window in hours for metrics, logs and changes (1-72, default 1).
+
+    Returns:
+        layers (id, name, component, status, finding, checks), causes, symptoms and a summary.
+    """
+    try:
+        return {'status': 'success', **diagnose.run(service, resource, hours, region=aws_region)}
+    except ValueError as e:
+        return {'status': 'error', 'message': str(e)}
+    except Exception as e:
+        return {'status': 'error', 'message': f'진단 중 오류: {e}'}
 
 
 # ---------------------------------------------------------------- 변경 도구 (승인 필요)

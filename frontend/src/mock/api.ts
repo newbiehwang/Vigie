@@ -32,7 +32,8 @@ import type {
 } from "axios";
 import type { PendingAction } from "../types/actions";
 import type { Artifact } from "../types/artifacts";
-import type { AdminEvent, AuditQuery, AuditRecord, TraceStep } from "../types/audit";
+import type { AdminEvent, AuditQuery, AuditRecord, Diagnosis, TraceStep } from "../types/audit";
+import { publicWebcodeDiagnosis, webAlbDiagnosis } from "./diagnoses";
 import type { ManagedGroup, ManagedUser, UserRole } from "../types/users";
 import type {
   DashboardChange,
@@ -78,6 +79,7 @@ interface MockTool {
   suspicious?: string[]; // 결과에 지시문처럼 보이는 문구가 있었다 (services/llm/injection.py)
   id?: string; // 도구 호출 ID를 정해 둘 때 (승인 요청의 taintedBy가 가리킨다)
   unregistered?: boolean; // 위험도 등록부에 없는 도구 (감사 로그의 층이 경계다. 변경 도구로 다룬다)
+  diagnosis?: Diagnosis; // 진단 도구의 층별 판정 (services/llm/audit.py의 diagnosis_of, mock/diagnoses.ts)
 }
 
 // 변경 도구 (감사 로그의 층이 유출이다). 나머지는 유입
@@ -910,6 +912,7 @@ const auditRecordsOf = (
       status: tool.status,
       ...(tool.error && { error: tool.error }),
       ...(tool.suspicious && { injectionSuspected: tool.suspicious }),
+      ...(tool.diagnosis && { diagnosis: tool.diagnosis }),
       ms: TOOL_MS,
       resultChars:
         tool.status === "ok" ? 1800 + tool.tool_name.length * 97 : 120,
@@ -1352,6 +1355,46 @@ function seedScenarios(): AuditRecord[] {
     };
     out.push(scenarioEvent(action, "executed", kim, t, undefined,
       trail("s3.amazonaws.com", "PutPublicAccessBlock", "c4b8e1d2-6f0a-4b3c-9d7e-1f2a3b4c5d06")));
+  }
+
+  // 7·8 서비스 진단 (diagnoseService): 정해진 절차가 층마다 판정을 내고, 팝업창은 그 서비스의 진단 층 그림을 그린다
+  // 진단 기록의 변경 시각은 데모 기록의 시각에서 (서버처럼 한국 시간 월-일 시:분)
+  const clock = (offset: number) => {
+    const kst = new Date(incidentTime(offset).getTime() + 9 * 60 * MIN);
+    return `${kst.toISOString().slice(5, 10)} ${kst.toISOString().slice(11, 16)}`;
+  };
+  {
+    // 7 공개 버킷: ACL을 되돌리기(-4646) 전에 관리자가 확인했다
+    const q = scenarioQuestion(kim, "frothlywebcode 버킷이 공개된 거 맞아? 원인도 알려줘", [
+      { tool_name: "diagnoseService", input: { service: "s3", resource: "frothlywebcode" }, status: "ok",
+        diagnosis: publicWebcodeDiagnosis(clock) },
+    ], incidentTime(-7600), [
+      "네, **공개되어 있습니다.** 진단 절차의 판정입니다.",
+      "",
+      "- **원인 (L6 권한·한도)**: 버킷 ACL이 모든 사용자(AllUsers)에게 READ와 WRITE를 줍니다. 누구나 객체를 읽고 올릴 수 있습니다",
+      `- **계기 (L2 변경)**: ${clock(-8014)}에 bstoll이 콘솔에서 PutBucketAcl을 불렀습니다`,
+      "- **주의 (L7)**: 버전 관리가 꺼져 있어 덮어쓴 파일은 되돌릴 수 없습니다",
+      "",
+      "먼저 ACL을 비공개로 되돌리고, 퍼블릭 액세스 차단을 켜는 것을 권합니다. 차단 켜기는 제가 승인 요청으로 만들 수 있습니다.",
+    ].join("\n"));
+    out.push(...q.records);
+  }
+  {
+    // 8 웹 ALB 5xx: bstoll이 웹 서버 대상 세 대를 직접 종료한(-3332) 직후
+    const q = scenarioQuestion(demo, "웹 사이트가 502, 503을 내요. frothly-web-alb 진단해줘", [
+      { tool_name: "diagnoseService", input: { service: "alb", resource: "frothly-web-alb" }, status: "ok",
+        diagnosis: webAlbDiagnosis(clock) },
+    ], incidentTime(-3180), [
+      "**대상 웹 서버 세 대가 모두 종료 중이라** ALB가 보낼 곳이 없습니다.",
+      "",
+      "- **원인 (L5 컴퓨팅)**: 대상 EC2 3대가 모두 shutting-down 상태입니다 (사용자가 시작한 종료)",
+      `- **계기 (L2 변경)**: ${clock(-3332)}에 bstoll이 TerminateInstances를 불렀습니다`,
+      "- **증상 (L4 로드 밸런서)**: 대상이 모두 Target.InvalidState이고, ALB가 만든 5xx가 212건입니다",
+      "- 네트워크(L3)·연결 한도(L6)·응답 시간(L7)은 정상입니다",
+      "",
+      "Auto Scaling 그룹이 새 인스턴스를 띄우는지 확인하고, 종료가 의도한 것인지 bstoll에게 확인해 주세요.",
+    ].join("\n"));
+    out.push(...q.records);
   }
 
   // 사용자 관리 (대상은 사용자 관리 탭의 예시 사용자)

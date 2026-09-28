@@ -1,0 +1,167 @@
+// 서비스 진단 층 그림: 진단 도구(diagnoseService) 기록의 팝업창 맨 위에, 처리 단계 고리 대신 보인다.
+// 판정은 서버의 진단 절차(mcp/lambda_mcp/diagnose.py)가 낸 그대로이고, 여기서는 그 서비스의 길 위에 층을 놓아 그린다.
+//
+//   진단 층  Application Load Balancer · web-alb · 최근 1시간        ● 원인 2  ● 증상 1  ● 정상 3  ● 확인 불가 1
+//   원인 — L5 컴퓨팅: 인스턴스 2대 모두가 실행 중이 아닙니다 … / 계기 L2 변경: StopInstances (alice)
+//   ┌ L2 변경 · CloudTrail 쓰기 이벤트                                   ● 원인 ┐   ← 위 띠 (시간 축)
+//   사용자 › [L3 입구·네트워크] › [L4 로드 밸런서] › [L5 컴퓨팅] › [L7 데이터·의존성]  ← 그 서비스의 길 (diagnosisModel)
+//   ├ L6 권한·한도 · 연결 한도                                           ● 정상 ┤   ← 길에 없는 층
+//   └ L1 AWS 자체 · 리전·AZ · 대상 EC2 호스트                              ● 정상 ┘   ← 바닥
+//   [설명 칸] L5 컴퓨팅 · 대상 EC2  ● 원인
+//             이 서비스에서 이 층이 묻는 것 (diagnosisModel의 설명)
+//             찾은 것 / 확인한 항목: ● 판정 이름 — 찾은 것 (근거 API·지표)
+//
+// - 층(칸·띠)의 판정은 위쪽 가는 막대와 배지로 보인다 (빨강·노랑은 작은 표시에만: 칸 전체를 칠하지 않는다)
+// - 해당 없음 층은 점선 테두리와 옅은 글자
+// - 처음 고른 층: 원인 중 L2가 아닌 것(무엇이 고장 났나) → L2 → 증상 → 길의 첫 층. 누르면 그 층의 설명
+// - 키보드: 칸·띠는 버튼이라 Tab으로 옮기고 Enter·Space로 고른다
+import { useState } from 'react';
+import type { Diagnosis, DiagnosisLayer, DiagnosisLayerId } from '@/types/audit';
+import { bandsOf, DIAGNOSIS_STATUS, FALLBACK_MAP, SERVICE_MAPS, STATUS_ORDER } from './diagnosisModel';
+
+// 처음 고를 층
+function firstPick(diagnosis: Diagnosis, path: DiagnosisLayerId[]): DiagnosisLayerId {
+    const byStatus = (status: string) => diagnosis.layers.filter((layer) => layer.status === status).map((layer) => layer.id);
+    const causes = byStatus('cause');
+    return causes.find((id) => id !== 'L2') ?? causes[0] ?? byStatus('symptom')[0] ?? path[0] ?? 'L1';
+}
+
+function StatusBadge({ layer }: { layer: Pick<DiagnosisLayer, 'status'> }) {
+    const status = DIAGNOSIS_STATUS[layer.status] ?? DIAGNOSIS_STATUS.unknown;
+    return (
+        <span className={`badge ${status.badge}`} title={status.hint}>
+            {status.label}
+        </span>
+    );
+}
+
+// 칸(길 위의 층)과 띠(길에 없는 층)가 같이 쓰는 버튼
+function LayerButton({
+    layer,
+    variant,
+    selected,
+    onPick,
+}: {
+    layer: DiagnosisLayer;
+    variant: 'node' | 'band';
+    selected: boolean;
+    onPick: () => void;
+}) {
+    return (
+        <button
+            type="button"
+            className={`audit-diag-${variant} is-${layer.status}${selected ? ' is-selected' : ''}`}
+            aria-pressed={selected}
+            aria-label={`${layer.id} ${layer.name}, ${layer.component}, ${DIAGNOSIS_STATUS[layer.status]?.label ?? layer.status}`}
+            onClick={onPick}
+        >
+            <span className="audit-diag-id">{layer.id}</span>
+            <span className="audit-diag-names">
+                <span className="audit-diag-name">{layer.name}</span>
+                <span className="audit-diag-component">{layer.component}</span>
+            </span>
+            <StatusBadge layer={layer} />
+        </button>
+    );
+}
+
+function Arrow() {
+    return (
+        <svg className="audit-diag-arrow" viewBox="0 0 8 12" width="8" height="12" aria-hidden="true">
+            <path d="M1.5 1.5L6 6l-4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
+export function AuditDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
+    const map = SERVICE_MAPS[diagnosis.service] ?? FALLBACK_MAP;
+    const layerOf = (id: DiagnosisLayerId) => diagnosis.layers.find((layer) => layer.id === id);
+    const [picked, setPicked] = useState<DiagnosisLayerId>(() => firstPick(diagnosis, map.path));
+    const selected = layerOf(picked);
+    const bands = bandsOf(map);
+    const counts = STATUS_ORDER.map((status) => ({
+        status,
+        n: diagnosis.layers.filter((layer) => layer.status === status).length,
+    })).filter((count) => count.n && count.status !== 'skip');
+
+    const button = (id: DiagnosisLayerId, variant: 'node' | 'band') => {
+        const layer = layerOf(id);
+        return layer ? (
+            <LayerButton key={id} layer={layer} variant={variant} selected={picked === id} onPick={() => setPicked(id)} />
+        ) : null;
+    };
+
+    return (
+        <section className="audit-layers audit-diag" aria-labelledby="audit-diag-title">
+            <div className="audit-layers-head">
+                <h4 id="audit-diag-title" className="audit-layers-title">
+                    진단 층
+                    <span className="audit-diag-target">
+                        {diagnosis.serviceName} · <code>{diagnosis.resource}</code> · 최근 {diagnosis.hours}시간
+                    </span>
+                </h4>
+                <ul className="audit-counts" aria-label="층별 판정 개수">
+                    {counts.map(({ status, n }) => (
+                        <li key={status} className={`is-diag-${status}`}>
+                            <span className="audit-counts-dot" aria-hidden="true" />
+                            {DIAGNOSIS_STATUS[status].label} <strong>{n}</strong>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+            {diagnosis.summary ? <p className="audit-diag-summary">{diagnosis.summary}</p> : null}
+
+            {/* 그 서비스의 길 위에 놓은 층들 */}
+            <div className="audit-diag-map" role="group" aria-label={`${diagnosis.serviceName} 진단 층. 층을 누르면 설명이 나옵니다`}>
+                {button(bands.top, 'band')}
+                <ol className="audit-diag-path">
+                    <li className="audit-diag-end" aria-hidden="true">
+                        {map.entry}
+                    </li>
+                    {map.path.map((id) => (
+                        <li key={id} className="audit-diag-step">
+                            <Arrow />
+                            {button(id, 'node')}
+                        </li>
+                    ))}
+                    {map.exit ? (
+                        <li className="audit-diag-step" aria-hidden="true">
+                            <Arrow />
+                            <span className="audit-diag-end">{map.exit}</span>
+                        </li>
+                    ) : null}
+                </ol>
+                {bands.below.map((id) => button(id, 'band'))}
+            </div>
+
+            {/* 설명 칸 (aria-live: 다른 층을 고르면 새 설명을 읽는다) */}
+            {selected ? (
+                <div className="audit-diag-panel" aria-live="polite" key={selected.id}>
+                    <div className="audit-cycle-panel-head">
+                        <span className="audit-cycle-panel-no">{selected.id}</span>
+                        <strong>{selected.name}</strong>
+                        <span className="audit-cycle-en">{selected.component}</span>
+                        <StatusBadge layer={selected} />
+                    </div>
+                    {map.descriptions[selected.id] ? (
+                        <p className="audit-cycle-panel-text">{map.descriptions[selected.id]}</p>
+                    ) : null}
+                    {selected.checks.length ? (
+                        <ul className="audit-diag-checks" aria-label="확인한 항목">
+                            {selected.checks.map((check, index) => (
+                                <li key={`${check.name}-${index}`} className={`is-${check.status}`}>
+                                    <StatusBadge layer={check} />
+                                    <div className="audit-diag-check-body">
+                                        <strong>{check.name}</strong>
+                                        <span>{check.finding}</span>
+                                        {check.evidence ? <code>{check.evidence}</code> : null}
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : null}
+                </div>
+            ) : null}
+        </section>
+    );
+}

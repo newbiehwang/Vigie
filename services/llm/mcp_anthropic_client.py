@@ -8,6 +8,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from mcp_client import MCPClient
 from redaction import Redactor
 from approvals import PREVIEW_META, is_registered, risk_of
+from audit import diagnosis_of
 import injection
 import tool_access
 import tool_search
@@ -1240,7 +1241,8 @@ class AnthropicMCPClient:
         suspicious = [] if is_write else injection.scan(json.dumps(result, ensure_ascii=False))
         self._report("tool_finished", prepared["id"], not failed,
                      self._tool_error_text(result) if failed else None,
-                     len(json.dumps(result, ensure_ascii=False, default=str)), suspicious)
+                     len(json.dumps(result, ensure_ascii=False, default=str)), suspicious,
+                     None if failed else diagnosis_of(prepared["name"], result))
         self.debug_log.append({"type": "tool_result", "tool_name": prepared["name"], "input": prepared["input"],
                                "output": result, "timestamp": time.time()})
         return {"tool_id": prepared["id"], "name": prepared["name"], "result": result, "suspicious": suspicious,

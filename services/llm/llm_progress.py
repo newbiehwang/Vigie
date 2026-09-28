@@ -119,8 +119,10 @@ class ProgressReporter:
         self._save()
 
     def tool_finished(self, tool_id: str, ok: bool, error: Optional[str] = None,
-                      result_chars: Optional[int] = None, suspicious: Optional[List[str]] = None) -> None:
-        """도구가 끝났다. result_chars(결과 크기)는 감사 로그(audit.py)가 쓰고 진행 상황에는 남기지 않는다.
+                      result_chars: Optional[int] = None, suspicious: Optional[List[str]] = None,
+                      diagnosis: Optional[Dict[str, Any]] = None) -> None:
+        """도구가 끝났다. result_chars(결과 크기)와 diagnosis(진단 도구의 층별 판정)는 감사 로그(audit.py)가 쓰고
+        진행 상황에는 남기지 않는다.
         suspicious: 결과에 든 지시문처럼 보이는 문구의 종류 (injection.py). 화면에 '의심 문구'로 보인다."""
         for step in reversed(self.steps):
             if step["type"] == "tool" and step["id"] == tool_id:

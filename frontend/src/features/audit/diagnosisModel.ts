@@ -1,0 +1,104 @@
+// 서비스 진단 층 그림의 모양과 설명 (AuditDiagnosis.tsx). 판정은 서버(mcp/lambda_mcp/diagnose.py)가 내고, 여기에는 그리는 법만 둔다.
+//
+// 서비스마다 요청이 지나가는 길이 다르다. 그래서 층 일곱 개를 한 줄로 늘어놓지 않고 그 서비스의 길 위에 놓는다
+//   위 띠      L2 변경 (시간 축: 증상 직전에 무엇이 바뀌었나)
+//   가운데 길  들어오는 쪽 → 그 서비스의 차례로 놓은 층들 → 나가는 쪽
+//                ALB     사용자 → L3 입구 → L4 ALB → L5 대상 EC2 → L7 DB·외부 API
+//                EC2     클라이언트 → L4 대상 그룹 → L3 보안 그룹·NACL → L5 인스턴스 → L7 의존성
+//                Lambda  호출 → L4 API Gateway → L7 이벤트 소스 → L5 함수 실행 → L3 VPC 경로 → AWS API·DB
+//                S3      요청자 → L4 앞단 → L3 VPC 엔드포인트 → L6 차단·정책·ACL → L5 (없음) → L7 버전 관리
+//   아래 띠    길에 없는 층 (보통 L6 권한·한도) · 맨 아래 L1 AWS 자체 (모든 것이 올라탄 바닥)
+// 설명: 층마다 이 서비스에서 무엇을 묻고 무엇을 보는지 (런북의 진단 단계를 줄인 것)
+import type { DiagnosisLayerId, DiagnosisStatus } from '@/types/audit';
+
+export interface ServiceMap {
+    entry: string; // 들어오는 쪽 (층이 아닌 글자)
+    path: DiagnosisLayerId[]; // 길 위의 층 (그 서비스의 차례)
+    exit?: string; // 나가는 쪽
+    descriptions: Record<DiagnosisLayerId, string>;
+}
+
+// 판정의 이름과 배지 (공통 배지 components/badge.css). 원인 빨강 · 증상 노랑 · 정상 파랑 · 나머지 옅은 점
+export const DIAGNOSIS_STATUS: Record<DiagnosisStatus, { label: string; badge: string; hint: string }> = {
+    cause: { label: '원인', badge: 'is-fail', hint: '이 층에서 장애를 설명하는 것을 찾았습니다' },
+    symptom: { label: '증상', badge: 'is-warn', hint: '이상이 보이지만 다른 층의 결과입니다' },
+    warn: { label: '주의', badge: 'is-quiet', hint: '지금 장애의 원인은 아니지만 위험한 설정입니다' },
+    ok: { label: '정상', badge: 'is-ok', hint: '확인한 항목이 모두 정상입니다' },
+    unknown: { label: '확인 불가', badge: 'is-quiet is-empty', hint: '볼 수 없었습니다. 사람이 확인해야 합니다' },
+    skip: { label: '해당 없음', badge: 'is-quiet is-empty', hint: '이 서비스에는 없는 층입니다' },
+};
+
+// 판정 개수의 차례 (무거운 것부터)
+export const STATUS_ORDER: DiagnosisStatus[] = ['cause', 'symptom', 'warn', 'ok', 'unknown', 'skip'];
+
+const ALB: ServiceMap = {
+    entry: '사용자',
+    path: ['L3', 'L4', 'L5', 'L7'],
+    descriptions: {
+        L1: 'AWS 쪽 장애인가. 대상 EC2의 시스템 상태 검사(호스트·네트워크)와 예정 이벤트를 봅니다. AWS Health는 지원 플랜에 묶여 있어 사람이 확인합니다.',
+        L2: '증상 직전에 무엇이 바뀌었나. ALB·대상 그룹·보안 그룹·대상 인스턴스와 관련된 CloudTrail 쓰기 이벤트입니다. 다른 층에 이상이 있을 때만 계기로 봅니다.',
+        L3: '요청이 ALB와 대상까지 가나. 인터넷용이면 서브넷의 인터넷 게이트웨이 경로, ALB 보안 그룹의 리스너 포트, 대상 보안 그룹이 ALB에서 오는 포트를 여는지, 양쪽 서브넷의 NACL을 봅니다.',
+        L4: 'ALB가 뒤에 닿나. 리스너·대상 그룹·등록된 대상, 대상 헬스와 사유 코드(Elb.*는 ALB 쪽, Target.*는 대상 쪽), ALB가 만든 5xx를 봅니다. 대상이 모두 unhealthy면 ALB는 헬스와 무관하게 모든 대상으로 보냅니다(fail-open).',
+        L5: '대상이 실행되나. 인스턴스 상태, OS 상태 검사, CPU와 CPU 크레딧, 헬스체크 사유(Target.Timeout 등), 대상이 만든 5xx를 봅니다.',
+        L6: '막혔나. 연결 한도에 닿아 거부한 연결(RejectedConnectionCount)을 봅니다.',
+        L7: '대상 뒤가 느린가. 대상 응답 시간이 유휴 타임아웃에 닿으면 DB·외부 API 지연을 의심합니다.',
+    },
+};
+
+const EC2: ServiceMap = {
+    entry: '클라이언트',
+    path: ['L4', 'L3', 'L5', 'L7'],
+    descriptions: {
+        L1: 'AWS 쪽 장애인가. 시스템 상태 검사(호스트 하드웨어·네트워크)와 AWS가 예정한 이벤트(퇴역·재부팅)를 봅니다.',
+        L2: '증상 직전에 무엇이 바뀌었나. 인스턴스·보안 그룹·Auto Scaling 그룹과 관련된 CloudTrail 쓰기 이벤트입니다.',
+        L3: '요청이 인스턴스까지 가나. 보안 그룹이 연 포트를 서브넷 NACL이 막지 않는지, 공인 IP가 있으면 인터넷 게이트웨이 경로가 있는지 봅니다.',
+        L4: '로드 밸런서 뒤에 있다면, 그 대상 그룹에서 이 인스턴스가 healthy인지와 사유 코드를 봅니다.',
+        L5: '인스턴스가 실행되나. 상태와 멈춘 이유, OS 상태 검사, CPU, 버스트 인스턴스의 CPU 크레딧, Auto Scaling 헬스체크 유예 시간을 봅니다.',
+        L6: 'Auto Scaling 그룹이 새 인스턴스를 띄우지 못하나. 실패한 활동(용량 부족·vCPU 한도·시작 템플릿 오류)을 봅니다.',
+        L7: '인스턴스 안 애플리케이션의 의존성(DB·외부 API)은 애플리케이션 로그와 다른 서비스의 진단으로 봅니다.',
+    },
+};
+
+const LAMBDA: ServiceMap = {
+    entry: '호출',
+    path: ['L4', 'L7', 'L5', 'L3'],
+    exit: 'AWS API·DB',
+    descriptions: {
+        L1: 'AWS 쪽 장애인가. Lambda 서비스 장애는 AWS Health로 봐야 해서 사람이 확인합니다.',
+        L2: '증상 직전에 무엇이 바뀌었나. 함수 코드·설정·동시성 변경과 실행 역할에 관련된 CloudTrail 쓰기 이벤트입니다.',
+        L3: '함수가 밖으로 나가나. VPC에 붙은 함수는 NAT 경로가 없으면 인터넷과 엔드포인트 없는 AWS API를 부르지 못하고 시간 초과로 끝납니다.',
+        L4: 'API Gateway·함수 URL 앞단입니다. 이 절차는 아직 보지 않습니다. API Gateway 뒤라면 함수의 스로틀이 클라이언트에 500으로 보입니다.',
+        L5: '함수가 제대로 끝나나. 함수 상태와 마지막 배포, 오류 수, 실행 시간이 제한에 닿았는지, 로그의 시간 초과·메모리 부족 줄을 봅니다.',
+        L6: '막혔나. 예약 동시성(0이면 모든 호출이 스로틀), 스로틀 수, 로그의 권한 거부(AccessDenied)를 봅니다.',
+        L7: '이벤트가 들어오고 나가나. 이벤트 소스 매핑의 상태와 마지막 처리 결과, 스트림 처리 지연(IteratorAge), 버린 비동기 이벤트를 봅니다.',
+    },
+};
+
+const S3: ServiceMap = {
+    entry: '요청자',
+    path: ['L4', 'L3', 'L6', 'L5', 'L7'],
+    descriptions: {
+        L1: 'AWS 쪽 장애인가. S3 서비스 장애는 AWS Health로 봐야 해서 사람이 확인합니다.',
+        L2: '증상 직전에 무엇이 바뀌었나. 버킷 정책·ACL·퍼블릭 액세스 차단 설정과 관련된 CloudTrail 쓰기 이벤트입니다.',
+        L3: 'VPC 엔드포인트 정책입니다. 이 절차는 보지 않습니다. VPC 안에서만 403이면 엔드포인트 정책을 확인합니다.',
+        L4: 'CloudFront 같은 앞단입니다. 이 절차는 보지 않습니다.',
+        L5: 'S3는 관리형 저장소라 컴퓨팅 층이 없습니다.',
+        L6: '누가 읽을 수 있나. 계정·버킷의 퍼블릭 액세스 차단, 조건 없이 모두에게 허용하거나 거부하는 정책 문장, 모든 사람에게 준 ACL, 4xx·5xx 요청 오류를 봅니다.',
+        L7: '잘못 지우거나 덮어써도 되돌릴 수 있나. 버전 관리를 봅니다.',
+    },
+};
+
+export const SERVICE_MAPS: Record<string, ServiceMap> = { alb: ALB, ec2: EC2, lambda: LAMBDA, s3: S3 };
+
+// 모르는 서비스(나중에 더한 서비스를 옛 화면이 받을 때): 층 차례대로 한 줄
+export const FALLBACK_MAP: ServiceMap = {
+    entry: '요청',
+    path: ['L3', 'L4', 'L5', 'L7'],
+    descriptions: { L1: '', L2: '', L3: '', L4: '', L5: '', L6: '', L7: '' },
+};
+
+// 띠: 위는 L2, 아래는 길에 없는 층(L2·L1 말고)과 맨 아래 L1
+export const bandsOf = (map: ServiceMap) => {
+    const below = (['L6', 'L3', 'L4', 'L5', 'L7'] as DiagnosisLayerId[]).filter((id) => !map.path.includes(id));
+    return { top: 'L2' as DiagnosisLayerId, below: [...below, 'L1' as DiagnosisLayerId] };
+};

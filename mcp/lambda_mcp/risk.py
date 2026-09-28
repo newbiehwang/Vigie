@@ -96,6 +96,8 @@ TOOL_RISK: Dict[str, str] = {
     "getEc2CpuRanking": READ,
     "getEc2StatusChecks": READ,
     "findEc2Waste": READ,
+    # 서비스별 진단 절차 (lambda_mcp/diagnose.py). 조회 API만 부른다
+    "diagnoseService": READ,
     "getDiagramCodeExamples": READ,
     "listAvailableDiagramIcons": READ,
     "generateArchitectureDiagram": ARTIFACT,  # 다이어그램 버킷에 이미지를 올린다
@@ -135,6 +137,8 @@ ADMIN_ONLY = frozenset({
     "get_vpc_flow_logs",
     # S3: 어느 버킷이 공개인지(약점 목록)와 버킷 안 파일 이름
     "checkS3BucketSecurity", "listS3Objects",
+    # 진단: 위의 CloudTrail·보안 그룹·NACL·버킷 공개 여부를 한꺼번에 읽는다
+    "diagnoseService",
 })
 
 # MCP 표준 annotations (2025-03-26 이후). 클라이언트에게 주는 힌트이고, 실제 통제는 승인 확인과 IAM이 한다
