@@ -5,8 +5,10 @@
    빨강·노랑은 점·배지·상태 막대 칸·알람 숫자에만 쓰고, 카드 테두리·제목에는 쓰지 않는다.
    상태는 늘 글자(배지·범례)와 함께 둔다 */
 
+/* 흰 바탕에 바로 그리므로(panel.css) 안쪽 여백이 없다. 스크롤 영역은 화면 양 끝까지 넓혀 스크롤 막대가 화면 가장자리에 오게 한다
+   (본문 좌우 여백 --page-gutter만큼, styles.css) */
 .home-panel {
-  padding: 22px 22px 0;
+  padding: 0;
 }
 
 .dash {
@@ -83,8 +85,8 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  margin: 0 -22px;
-  padding: 2px 22px 22px;
+  margin: 0 calc(-1 * var(--page-gutter));
+  padding: 2px var(--page-gutter) 16px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -1011,15 +1013,6 @@
 }
 
 @media (max-width: 760px) {
-  .home-panel {
-    padding: 16px 16px 0;
-  }
-
-  .dash-body {
-    margin: 0 -16px;
-    padding: 2px 16px 16px;
-  }
-
   .dash-kpi {
     padding: 12px;
   }
@@ -1106,23 +1099,4 @@
   }
 }
 
-/* 앱 화면(흰 큰 카드 없이, panel.css): 카드 안쪽 여백이 없어지므로 홈도 안쪽 여백을 빼고,
-   스크롤 영역은 화면 양 끝까지 넓혀 스크롤 막대가 화면 가장자리에 오게 한다 (본문 좌우 여백 --page-gutter만큼) */
-@media (max-width: 760px), (pointer: coarse) and (max-width: 1280px) {
-  .home-panel {
-    --page-gutter: clamp(14px, 2.2vw, var(--space-xl)); /* .main-content의 좌우 여백과 같게 (layout.css) */
-    padding: 0;
-  }
-
-  .dash-body {
-    margin: 0 calc(-1 * var(--page-gutter));
-    padding: 2px var(--page-gutter) 16px;
-  }
-}
-
-@media (max-width: 760px) {
-  .home-panel {
-    --page-gutter: 12px;
-  }
-}
 

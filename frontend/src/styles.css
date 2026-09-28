@@ -75,9 +75,17 @@
   --font-headline: var(--font-sans);
   --font-body: var(--font-sans);
   --font-label: var(--font-sans);
-  --main-content-top: 132px;
-  --main-content-bottom: 72px;
-  --tab-panel-max-width: 1460px;
+  /* 앱 화면의 폭: 맥북프로 14인치 기본 화면(CSS 폭 1512px)까지는 좌우 여백만 두고 꽉 채우고,
+     그보다 넓은 화면에서는 이 폭을 유지한 채 가운데에 둔다 (내비게이션의 로고·프로필 끝도 같은 폭에 맞춘다, layout.css)
+       화면 폭 ≤ 1512   본문 = 화면 폭 − 좌우 여백
+       화면 폭 > 1512   본문 = 1512 − 좌우 여백 × 2 = 1448px, 가운데 */
+  --page-max-width: 1512px;
+  --page-gutter: clamp(14px, 2.2vw, var(--space-xl)); /* 좌우 여백 (1512px에서 32px) */
+  --tab-panel-max-width: calc(var(--page-max-width) - 2 * var(--space-xl));
+  /* 본문 위 여백: 내비게이션(약 77px) 바로 아래. 흰 큰 카드가 없어 카드 윗부분이 채우던 자리를 줄였다.
+     아래 여백은 0: 본문이 화면 맨 아래까지 닿고, 홈 막대 자리는 본문 안쪽 아래에 둔다 (panel.css) */
+  --main-content-top: 96px;
+  --main-content-bottom: 0px;
   /* 떠 있는 흰 면의 입체감 (홈 숫자 카드에서 시작한 모양. AXPI의 카드: 옅은 테두리 + 위쪽 안의 흰 빛 + 아래로 번지는 그림자).
      카드·경고 상자·승인 카드·결과물에는 --raised-shadow, 버튼·입력칸처럼 작은 것에는 --raised-shadow-sm을 쓴다.
      그림자는 글자색(ink #0a1628 = 10, 22, 40)을 옅게 푼 것이다 */
@@ -88,30 +96,12 @@
     0 4px 10px rgba(10, 22, 40, 0.06);
 }
 
-/* 좁은 화면(휴대폰): 내비게이션이 두 줄(로고·프로필 / 탭)이 되어 위 여백을 그 높이에 맞추고, 아래 여백은 줄여 카드를 화면 끝까지 쓴다.
+/* 좁은 화면(휴대폰): 내비게이션이 두 줄(로고·프로필 / 탭)이 되어 위 여백을 그 높이에 맞춘다.
    위의 기본값보다 뒤에 있어야 적용된다 (layout.css는 맨 위 @import로 먼저 읽혀 거기 두면 기본값에 덮인다) */
 @media (max-width: 760px) {
   :root {
     --main-content-top: 116px;
-    --main-content-bottom: 16px;
-  }
-}
-
-/* 앱 화면(흰 큰 카드 없이 바탕 위에 바로): 휴대폰 폭(760px 이하), 그리고 폭 1280px 이하의 터치 화면
-   (갤럭시 Z 폴드8을 펼친 화면 약 1224×924, 폴드8 울트라를 펼친 화면 약 1128×1252, 태블릿).
-   내용이 화면 맨 아래까지 닿으므로 아래 여백은 0이고, 대신 카드 안쪽 아래(panel.css)에 홈 막대 자리를 둔다.
-   같은 조건을 panel.css·dashboard.css·chat.css·audit.css에서도 쓴다 (CSS 변수는 @media 조건에 쓸 수 없어 되풀이한다) */
-@media (max-width: 760px), (pointer: coarse) and (max-width: 1280px) {
-  :root {
-    --main-content-bottom: 0px;
-  }
-}
-
-/* 앱 화면 중 내비게이션이 한 줄인 넓은 터치 화면(폴드를 펼친 화면·태블릿): 카드 테두리가 없어 위 빈칸이 도드라지므로
-   내비게이션(약 76px) 바로 아래로 올린다 */
-@media (pointer: coarse) and (min-width: 761px) and (max-width: 1280px) {
-  :root {
-    --main-content-top: 92px;
+    --page-gutter: 12px;
   }
 }
 
@@ -149,8 +139,10 @@ a {
   color: inherit;
 }
 
+/* 로그인한 앱 화면은 흰 바탕에 바로 그린다 (흰 큰 카드 없이). 랜딩·로그인 화면은 위의 body 그라데이션 그대로 */
 .app-shell {
   min-height: 100vh;
+  background: var(--surface);
   position: relative;
   isolation: isolate;
 }
