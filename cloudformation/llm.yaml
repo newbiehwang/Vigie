@@ -191,6 +191,29 @@ Resources:
                   - ec2:DescribeVolumes
                   - ec2:DescribeAddresses
                 Resource: '*'
+              # 진단 도구 (lambda_mcp/diagnose.py): ALB·대상 그룹·Lambda 설정·Auto Scaling 활동·함수 로그를 읽는다 (조회만).
+              # 보안 그룹·NACL·라우팅은 위의 네트워크 권한, 지표는 GetMetricData, 변경 기록은 LookupEvents로 읽는다.
+              # ELB·Auto Scaling·Lambda의 Describe*/Get*/List*는 리소스 수준 권한을 받지 않거나 모든 자원이 대상이라 '*'
+              - Effect: Allow
+                Action:
+                  - elasticloadbalancing:DescribeLoadBalancers
+                  - elasticloadbalancing:DescribeLoadBalancerAttributes
+                  - elasticloadbalancing:DescribeListeners
+                  - elasticloadbalancing:DescribeTargetGroups
+                  - elasticloadbalancing:DescribeTargetHealth
+                  - autoscaling:DescribeAutoScalingInstances
+                  - autoscaling:DescribeAutoScalingGroups
+                  - autoscaling:DescribeScalingActivities
+                  - lambda:GetFunctionConfiguration
+                  - lambda:GetFunctionConcurrency
+                  - lambda:ListEventSourceMappings
+                  - s3:GetAccountPublicAccessBlock
+                Resource: '*'
+              # 함수 로그에서 시간 초과·메모리 부족·권한 거부 줄만 센다 (FilterLogEvents, Lambda 로그 그룹만)
+              - Effect: Allow
+                Action:
+                  - logs:FilterLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
               # 사용자 데이터·콘솔 출력·Windows 암호·시작 템플릿 데이터는 비밀 값이 흔히 들어 있어 명시적으로 거부한다
               # (DescribeInstanceAttribute는 userData를, 시작 템플릿 조회는 UserData를 돌려준다). 누가 나중에 넓은 Allow를 더해도 Deny가 우선한다
               - Effect: Deny
@@ -259,6 +282,8 @@ Resources:
                   - s3:ListBucket
                   - s3:GetBucketPublicAccessBlock
                   - s3:GetBucketPolicyStatus
+                  - s3:GetBucketPolicy      # 진단: 조건 없이 모두에게 허용·거부하는 문장 찾기
+                  - s3:GetBucketAcl         # 진단: AllUsers·AuthenticatedUsers에게 준 ACL 찾기
                   - s3:GetEncryptionConfiguration
                   - s3:GetBucketVersioning
                   - s3:GetBucketOwnershipControls

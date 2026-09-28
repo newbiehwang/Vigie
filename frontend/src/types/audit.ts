@@ -35,6 +35,7 @@ export interface AuditRecord {
     toolUseId?: string;
     input?: Record<string, unknown> | string; // 길어서 잘린 입력은 글자로 온다
     resultChars?: number;
+    diagnosis?: Diagnosis; // 진단 도구(diagnoseService)의 층별 판정. 팝업창이 처리 단계 대신 서비스 진단 층을 그린다
     // 지시문처럼 보이는 문구 (services/llm/injection.py). 도구 호출은 종류 목록, 질문은 그런 도구 결과의 수
     injectionSuspected?: string[] | number;
     // 질문 (kind: 'request')
@@ -65,6 +66,37 @@ export interface AuditRecord {
     group?: string; // admins, approvers (예전 기록)
     fromRole?: string; // 권한 변경: 전 (member, decider, admin)
     toRole?: string; // 권한 변경: 후
+}
+
+// 진단 (mcp/lambda_mcp/diagnose.py → services/llm/audit.py의 diagnosis_of): 자원 하나를 정해진 절차로 확인한 층별 판정
+export type DiagnosisLayerId = 'L1' | 'L2' | 'L3' | 'L4' | 'L5' | 'L6' | 'L7';
+// 원인 · 증상(다른 층의 결과) · 주의(위험한 설정) · 정상 · 확인 불가 · 해당 없음
+export type DiagnosisStatus = 'cause' | 'symptom' | 'warn' | 'ok' | 'unknown' | 'skip';
+
+export interface DiagnosisCheck {
+    name: string;
+    status: DiagnosisStatus;
+    finding: string;
+    evidence: string; // 본 API·지표 이름
+}
+
+export interface DiagnosisLayer {
+    id: DiagnosisLayerId;
+    name: string; // 층의 이름 (예: 컴퓨팅)
+    component: string; // 이 서비스에서 그 층이 가리키는 부품 (예: 대상 EC2)
+    status: DiagnosisStatus; // 항목 중 가장 무거운 판정
+    finding: string; // 층의 판정을 정한 항목의 찾은 것
+    checks: DiagnosisCheck[];
+}
+
+export interface Diagnosis {
+    service: string; // alb, ec2, lambda, s3
+    serviceName: string;
+    resource: string;
+    hours: number; // 본 시간 (지표·로그·변경)
+    summary: string;
+    causes: DiagnosisLayerId[];
+    layers: DiagnosisLayer[];
 }
 
 export interface AuditPage {

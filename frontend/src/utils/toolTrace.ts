@@ -76,6 +76,7 @@ const LABELS: Record<string, string> = {
     get_ec2_cpu_ranking: 'EC2 CPU 사용률 순위',
     get_ec2_status_checks: 'EC2 상태 검사',
     find_ec2_waste: 'EC2 비용 낭비 찾기',
+    diagnose_service: '서비스 진단',
     generate_architecture_diagram: '아키텍처 다이어그램 생성',
     get_diagram_code_examples: '다이어그램 예시',
     list_available_diagram_icons: '다이어그램 아이콘 목록',
