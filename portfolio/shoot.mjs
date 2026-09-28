@@ -71,7 +71,7 @@ await c.viewport(1440, 900);
 await c.goto(`${B}/?mock-auth=signed-in`, 4500);
 await c.shot(OUT + 'home.png');
 
-// 감사 로그: 의심 뒤 요청 기록의 7계층 판정
+// 감사 로그: 의심 뒤 요청 기록의 처리 단계 판정
 await c.goto(`${B}/audit?mock-auth=signed-in&q=%22%EC%9D%98%EC%8B%AC%20%EB%92%A4%20%EC%9A%94%EC%B2%AD%22`, 4000);
 await c.eval(`document.querySelector('.audit-row-button')?.click(); 'ok'`);
 await c.sleep(3000);

@@ -50,7 +50,7 @@ def test_trace_of_a_change_that_followed_an_injected_log(env, monkeypatch):
     assert "최근 오류 로그 보여줘" in steps["deliberation"]["answer"]  # 사용자의 질문과 비교하라고
     assert "change_command_ko" in steps["ingress"]["answer"]
     assert "PutRetentionPolicy" in steps["mediation"]["answer"]  # CloudTrail과 대조할 단서
-    assert result["verdict"].startswith("주의할 층")
+    assert result["verdict"].startswith("주의할 단계")
     assert [step["layer"] for step in result["steps"]] == ["effect", "egress", "residence", "deliberation",
                                                           "ingress", "interface", "mediation"]
 
@@ -68,7 +68,7 @@ def test_trace_of_an_ordinary_change_is_clean(env, monkeypatch):
     decide(env, action["actionId"], "approve", "alice", groups="approvers")
     result = trace(env, action["actionId"])
     assert {layer for layer, status in statuses(result).items() if status != "ok"} == {"mediation"}
-    assert result["verdict"].startswith("모든 층이 정상")
+    assert result["verdict"].startswith("모든 단계가 정상")
 
 
 def test_denied_and_undecided_changes(env, monkeypatch):

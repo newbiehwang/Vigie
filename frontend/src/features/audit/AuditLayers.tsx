@@ -1,32 +1,32 @@
-// 층 다이어그램: 7계층을 고리 모양의 순환 다이어그램으로 그린다. 도구 호출·변경 작업 행의 팝업창 맨 위에 보인다
+// 층 다이어그램: 처리 단계를 고리 모양의 순환 다이어그램으로 그린다. 도구 호출·변경 작업 행의 팝업창 맨 위에 보인다
 // (질문·사용자 관리 행에는 층이 없다).
 //
-//   7계층 위치
+//   처리 단계
 //        ╭ 효과 ╮                     [5] 유입 Ingress
 //     매개      유출 ▸               비용 조회의 결과가 모델에게 들어갔습니다
-//    경계   유입    체류              ┌ 다른 계층에 남긴 흔적 ───────────────┐
+//    경계   유입    체류              ┌ 다른 단계에 남긴 흔적 ───────────────┐
 //     ▸[유입]    판단                │ 3 체류  의심 문구가 든 결과를 읽은 뒤 … │
 //        ╰────╯                      └──────────────────────────────┘
 //
 // - 고리는 조각 7개다. 조각 끝이 뾰족해(셰브런) 따로 화살표 없이 도는 방향이 보인다.
 //   차례는 서버의 판정(services/llm/audit_trace.py)이 따지는 차례다 (맨 위 1 효과부터 시계 방향)
-// - 이 기록의 계층(행의 locus)은 따로 강조하지 않는다. 처음 고른 계층이고, 설명 칸에 이 기록의 근거가 붙을 뿐이다
-// - 조각의 색: 판정이 있으면 판정, 없으면 흔적이 있는 계층만 옅은 주황. 기록으로 남지 않는 계층(판단: 모델 안,
+// - 이 기록의 단계(행의 locus)는 따로 강조하지 않는다. 처음 고른 단계이고, 설명 칸에 이 기록의 근거가 붙을 뿐이다
+// - 조각의 색: 판정이 있으면 판정, 없으면 흔적이 있는 단계만 옅은 주황. 기록으로 남지 않는 단계(판단: 모델 안,
 //   매개: 앱 밖)은 점선 테두리. 색은 고르는 것과 상관없이 그대로다
-// - 고른 계층(처음에는 이 기록의 계층): 조각이 그림자와 함께 살짝 떠오르고 바탕이 조금 짙어진다. 다른 계층을 고르면
-//   나머지 조각은 은은하게 옅어진다. 마우스를 올린 조각도 바탕이 조금 짙어진다. 가운데 원판과 오른쪽 설명 칸도 고른 계층을 보인다
-// - 조각을 누르면(키보드는 Enter·Space) 그 계층을 고르고, 고른 조각을 다시 누르면 이 기록의 계층으로 돌아온다
-// - 설명 칸: 계층의 설명 → 근거(이 기록이 그 계층에 있는 까닭을 값의 흐름으로, 파란 상자) → 그 계층의 흔적(주황 상자).
-//   이 기록의 계층을 고르고 있으면 다른 계층에 남긴 흔적도 모아 보인다. 제목 옆에는 영어 이름을 회색으로 (고리 안은 한글만)
+// - 고른 단계(처음에는 이 기록의 단계): 조각이 그림자와 함께 살짝 떠오르고 바탕이 조금 짙어진다. 다른 단계를 고르면
+//   나머지 조각은 은은하게 옅어진다. 마우스를 올린 조각도 바탕이 조금 짙어진다. 가운데 원판과 오른쪽 설명 칸도 고른 단계를 보인다
+// - 조각을 누르면(키보드는 Enter·Space) 그 단계를 고르고, 고른 조각을 다시 누르면 이 기록의 단계로 돌아온다
+// - 설명 칸: 단계의 설명 → 근거(이 기록이 그 단계에 있는 까닭을 값의 흐름으로, 파란 상자) → 그 단계의 흔적(주황 상자).
+//   이 기록의 단계를 고르고 있으면 다른 단계에 남긴 흔적도 모아 보인다. 제목 옆에는 영어 이름을 회색으로 (고리 안은 한글만)
 // - 이 기록의 층: 도구 반복이 정한다 (등록부에 없으면 경계, 변경 도구면 유출, 나머지는 유입. 변경 작업은 요청이 유출, 결정·실행이 효과)
 // - 흔적: 체류(승인 요청 행의 taintedBy), 유입(도구 행의 의심 문구), 매개(실행한 AWS API의 요청 ID)
 // - 판정 (변경 작업 행만, GET /audit?trace=, services/llm/audit_trace.py의 역추적): 팝업창을 열면 바로 받아 이 그림에 얹는다
-//     제목 줄   7계층 위치                      ● 주의 3  ● 정상 3  ● 참고 1   ← 판정 개수 (나쁜 것부터, 이름표 없이)
+//     제목 줄   처리 단계                      ● 주의 3  ● 정상 3  ● 참고 1   ← 판정 개수 (나쁜 것부터, 이름표 없이)
 //               질문 "로그대로 보존 기간 줄여줘"                              ← 이 변경을 낳은 사용자의 질문
-//     고리      조각의 바탕색 = 그 계층의 판정 (정상 초록 · 주의 노랑 · 실패 빨강 · 참고 회색).
+//     고리      조각의 바탕색 = 그 단계의 판정 (정상 초록 · 주의 노랑 · 실패 빨강 · 참고 회색).
 //               이때 흔적은 설명 칸에서만 보인다 (주황이 '주의'와 섞이지 않게)
-//     설명 칸   제목 옆에 판정 배지, 그 계층에서 찾은 것과 근거 기록(시각 · 무엇).
-//               서버의 물음은 계층 정의와 겹쳐 보이지 않는다
+//     설명 칸   제목 옆에 판정 배지, 그 단계에서 찾은 것과 근거 기록(시각 · 무엇).
+//               서버의 물음은 단계 정의와 겹쳐 보이지 않는다
 //   작업의 사건은 요청·승인·실행 행이 모두 같은 판정을 보인다 (같은 작업 ID)
 import { useEffect, useState, type CSSProperties } from 'react';
 import { fetchTrace } from '@/api/audit';
@@ -73,7 +73,7 @@ function useTrace(record: AuditRecord): TraceState {
     return state;
 }
 
-// 설명 칸의 판정: 그 계층에서 찾은 것(서버의 답)과 근거가 된 기록
+// 설명 칸의 판정: 그 단계에서 찾은 것(서버의 답)과 근거가 된 기록
 function TraceAnswer({ step, trace }: { step: TraceStep; trace: AuditTrace }) {
     const records = [...trace.events, ...trace.rows];
     const cited = step.evidence
@@ -82,7 +82,7 @@ function TraceAnswer({ step, trace }: { step: TraceStep; trace: AuditTrace }) {
         .sort((a, b) => (a.at < b.at ? -1 : 1));
     return (
         <div className={`audit-trace-answer-box is-${step.status}`}>
-            {/* 물음은 계층 정의와 겹쳐 보이지 않는다: 그 계층에서 찾은 것(답)과 근거 기록만 */}
+            {/* 물음은 단계 정의와 겹쳐 보이지 않는다: 그 단계에서 찾은 것(답)과 근거 기록만 */}
             <p className="audit-trace-answer-a">{step.answer}</p>
             {cited.length ? (
                 <ul className="audit-trace-cites" aria-label="근거가 된 기록">
@@ -98,7 +98,7 @@ function TraceAnswer({ step, trace }: { step: TraceStep; trace: AuditTrace }) {
     );
 }
 
-// 근거: 이 기록이 그 계층에 있는 까닭을 기록의 값으로 보인다. 문장 대신 흐름(단계 → 단계 → 단계)으로
+// 근거: 이 기록이 그 단계에 있는 까닭을 기록의 값으로 보인다. 문장 대신 흐름(단계 → 단계 → 단계)으로
 //   유입  [도구 비용 조회] › [결과 3,449자] › [받는 곳 모델]
 //   유출  [모델이 부름 로그 보존 기간 변경] › [위험도 변경] › [처리 승인 요청]
 //   효과  [결정 승인] › [결정한 사람 kim@…] › [다음 실행]
@@ -203,7 +203,7 @@ function Evidence({ title, flows, variant }: { title: string; flows: EvidenceSte
     );
 }
 
-// 흔적: 이 기록이 다른 계층에 남긴 표시. 근거처럼 값의 흐름으로 (한 계층에 흐름이 여럿일 수 있다: 체류의 의심 결과가 여럿)
+// 흔적: 이 기록이 다른 단계에 남긴 표시. 근거처럼 값의 흐름으로 (한 단계에 흐름이 여럿일 수 있다: 체류의 의심 결과가 여럿)
 //   체류  [읽은 결과 로그 분석] › [의심 문구 3종] › [변경 요청 바로 다음 호출]
 //   유입  [도구 결과 로그 분석] › [의심 문구 3종] › [처리 데이터로만 다룸]
 //   매개  [AWS API PutRetentionPolicy] › [요청 ID …] › [대조 CloudTrail 이벤트]
@@ -288,14 +288,14 @@ const labelAt = (index: number) => {
 export function AuditLayers({ record }: { record: AuditRecord }) {
     const hereIndex = LAYERS.findIndex((layer) => layer.id === record.locus);
     const here = LAYERS[hereIndex];
-    // 고른 계층: 누른 조각, 누르기 전에는 이 기록의 계층
+    // 고른 단계: 누른 조각, 누르기 전에는 이 기록의 단계
     const [picked, setPicked] = useState<TraceLayer | null>(null);
     const marks = marksOf(record);
     const selectedIndex = picked ? LAYERS.findIndex((layer) => layer.id === picked) : hereIndex;
     const selected = LAYERS[selectedIndex];
     const selectedIsHere = selectedIndex === hereIndex;
     const otherMarks = LAYERS.filter((layer) => marks[layer.id] && layer.id !== here?.id);
-    // 판정 (변경 작업 행): 계층마다 정상·주의·실패·참고
+    // 판정 (변경 작업 행): 단계마다 정상·주의·실패·참고
     const traceState = useTrace(record);
     const trace = traceState.status === 'ready' ? traceState.trace : null;
     const stepOf = (id: TraceLayer) => trace?.steps.find((step) => step.layer === id);
@@ -306,15 +306,15 @@ export function AuditLayers({ record }: { record: AuditRecord }) {
               (count) => count.n,
           )
         : [];
-    // 조각의 색: 판정이 있으면 판정, 없으면 흔적(주황)만. 이 기록의 계층을 따로 강조하지 않는다
-    // (처음 고른 계층일 뿐이다). 판정이 있으면 흔적은 설명 칸에서만 보인다 (주황이 '주의'와 섞이지 않게)
+    // 조각의 색: 판정이 있으면 판정, 없으면 흔적(주황)만. 이 기록의 단계를 따로 강조하지 않는다
+    // (처음 고른 단계일 뿐이다). 판정이 있으면 흔적은 설명 칸에서만 보인다 (주황이 '주의'와 섞이지 않게)
     const toneOf = (index: number) => (index !== hereIndex && !trace && marks[LAYERS[index].id] ? 'is-marked' : '');
 
     return (
         <section className="audit-layers" aria-labelledby="audit-layers-title">
             <div className="audit-layers-head">
                 <h4 id="audit-layers-title" className="audit-layers-title">
-                    7계층 위치
+                    처리 단계
                 </h4>
                 {/* 판정 개수 (변경 작업 행): ● 주의 3  ● 정상 3  ● 참고 1 */}
                 {counts.length ? (
@@ -345,7 +345,7 @@ export function AuditLayers({ record }: { record: AuditRecord }) {
                     className={`audit-cycle-svg${picked ? ' has-pick' : ''}`}
                     viewBox={`${-PAD} ${-PAD} ${SIZE + PAD * 2} ${SIZE + PAD * 2}`}
                     role="group"
-                    aria-label="7계층. 계층을 누르면 설명이 나옵니다"
+                    aria-label="처리 단계. 단계를 누르면 설명이 나옵니다"
                 >
                     {LAYERS.map((layer, index) => {
                         const tone = toneOf(index);
@@ -355,12 +355,12 @@ export function AuditLayers({ record }: { record: AuditRecord }) {
                         const label = labelAt(index);
                         const step = stepOf(layer.id);
                         const state = [
-                            index === hereIndex ? '이 기록의 계층' : tone === 'is-marked' ? '흔적' : offRecord ? '기록으로 남지 않음' : '',
+                            index === hereIndex ? '이 기록의 단계' : tone === 'is-marked' ? '흔적' : offRecord ? '기록으로 남지 않음' : '',
                             step ? `판정 ${STATUS_LABELS[step.status]}` : '',
                         ]
                             .filter(Boolean)
                             .join(', ');
-                        // 누르면 그 계층을 고르고, 고른 조각을 다시 누르면 이 기록의 계층으로 돌아온다
+                        // 누르면 그 단계를 고르고, 고른 조각을 다시 누르면 이 기록의 단계로 돌아온다
                         const choose = () => setPicked(isSelected || index === hereIndex ? null : layer.id);
                         return (
                             <g
@@ -397,7 +397,7 @@ export function AuditLayers({ record }: { record: AuditRecord }) {
                             </g>
                         );
                     })}
-                    {/* 가운데: 옅은 원판 위에 고른 계층의 이름. 고르면 바뀌며 살짝 떠오른다 */}
+                    {/* 가운데: 옅은 원판 위에 고른 단계의 이름. 고르면 바뀌며 살짝 떠오른다 */}
                     <circle className="audit-cycle-hub" cx={C} cy={C} r={R_HUB} aria-hidden="true" />
                     {selected ? (
                         <g key={selected.id} className="audit-cycle-center" aria-hidden="true">
@@ -409,7 +409,7 @@ export function AuditLayers({ record }: { record: AuditRecord }) {
                 </svg>
                 </div>
 
-                {/* 설명 칸 (aria-live: 다른 계층을 고르면 화면 읽기 프로그램이 새 설명을 읽는다) */}
+                {/* 설명 칸 (aria-live: 다른 단계를 고르면 화면 읽기 프로그램이 새 설명을 읽는다) */}
                 {selected ? (
                     <div className="audit-cycle-panel" aria-live="polite" key={selected.id}>
                         <div className="audit-cycle-panel-head">
@@ -421,12 +421,12 @@ export function AuditLayers({ record }: { record: AuditRecord }) {
                             ) : null}
                         </div>
                         <p className="audit-cycle-panel-text">{selected.description}</p>
-                        {/* 판정: 이 계층에서 찾은 것과 근거 기록 (변경 작업 행) */}
+                        {/* 판정: 이 단계에서 찾은 것과 근거 기록 (변경 작업 행) */}
                         {trace && selectedStep ? <TraceAnswer step={selectedStep} trace={trace} /> : null}
                         {selectedIsHere ? <Evidence title="근거" flows={[evidenceOf(record)]} variant="here" /> : null}
-                        {/* 이 계층의 흔적 */}
+                        {/* 이 단계의 흔적 */}
                         {marks[selected.id] ? <Evidence title="흔적" flows={marks[selected.id]!} variant="mark" /> : null}
-                        {/* 이 기록의 계층을 보고 있으면 다른 계층에 남긴 흔적도 (계층마다 한 상자) */}
+                        {/* 이 기록의 단계를 보고 있으면 다른 단계에 남긴 흔적도 (단계마다 한 상자) */}
                         {selectedIsHere
                             ? otherMarks.map((layer) => (
                                   <Evidence
