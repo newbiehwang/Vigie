@@ -19,6 +19,9 @@ import { useState } from 'react';
 import type { Diagnosis, DiagnosisLayer, DiagnosisLayerId } from '@/types/audit';
 import { bandsOf, DIAGNOSIS_STATUS, FALLBACK_MAP, SERVICE_MAPS, STATUS_ORDER } from './diagnosisModel';
 
+// 본 시간: 하루 단위면 날로 (자격 증명 24시간 → 1일, 비용 72시간 → 3일)
+const periodText = (hours: number) => (hours >= 24 && hours % 24 === 0 ? `${hours / 24}일` : `${hours}시간`);
+
 // 처음 고를 층
 function firstPick(diagnosis: Diagnosis, path: DiagnosisLayerId[]): DiagnosisLayerId {
     const byStatus = (status: string) => diagnosis.layers.filter((layer) => layer.status === status).map((layer) => layer.id);
@@ -97,7 +100,14 @@ export function AuditDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
                 <h4 id="audit-diag-title" className="audit-layers-title">
                     진단 층
                     <span className="audit-diag-target">
-                        {diagnosis.serviceName} · <code>{diagnosis.resource}</code> · 최근 {diagnosis.hours}시간
+                        {diagnosis.serviceName} · <code>{diagnosis.resource}</code>
+                        {diagnosis.target ? (
+                            <>
+                                {' → '}
+                                <code>{diagnosis.target}</code>
+                            </>
+                        ) : null}{' '}
+                        · 최근 {periodText(diagnosis.hours)}
                     </span>
                 </h4>
                 <ul className="audit-counts" aria-label="층별 판정 개수">
@@ -125,7 +135,7 @@ export function AuditDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
                         </li>
                     ))}
                     {map.exit ? (
-                        <li className="audit-diag-step" aria-hidden="true">
+                        <li className="audit-diag-step is-end" aria-hidden="true">
                             <Arrow />
                             <span className="audit-diag-end">{map.exit}</span>
                         </li>

@@ -1819,6 +1819,11 @@
   min-width: 0;
 }
 
+/* 나가는 쪽(층이 아닌 글자)만 있는 칸은 글자 폭만 (층 칸들이 남은 폭을 나눈다) */
+.audit-diag-step.is-end {
+  flex: none;
+}
+
 .audit-diag-end {
   flex: none;
   align-self: center;

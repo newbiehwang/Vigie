@@ -122,6 +122,7 @@ def diagnosis_of(name: str, result: Any) -> Optional[Dict[str, Any]]:
         "service": text(body.get("service")),
         "serviceName": text(body.get("service_name")),
         "resource": text(body.get("resource")),
+        **({"target": text(body["target"])} if body.get("target") else {}),  # VPC 연결의 목적지
         "hours": int(body.get("hours") or 0),
         "summary": text(body.get("summary")),
         "causes": [text(layer) for layer in body.get("causes", [])],
