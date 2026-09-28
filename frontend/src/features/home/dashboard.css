@@ -1105,3 +1105,24 @@
     transition: none;
   }
 }
+
+/* 앱 화면(흰 큰 카드 없이, panel.css): 카드 안쪽 여백이 없어지므로 홈도 안쪽 여백을 빼고,
+   스크롤 영역은 화면 양 끝까지 넓혀 스크롤 막대가 화면 가장자리에 오게 한다 (본문 좌우 여백 --page-gutter만큼) */
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1280px) {
+  .home-panel {
+    --page-gutter: clamp(14px, 2.2vw, var(--space-xl)); /* .main-content의 좌우 여백과 같게 (layout.css) */
+    padding: 0;
+  }
+
+  .dash-body {
+    margin: 0 calc(-1 * var(--page-gutter));
+    padding: 2px var(--page-gutter) 16px;
+  }
+}
+
+@media (max-width: 760px) {
+  .home-panel {
+    --page-gutter: 12px;
+  }
+}
+

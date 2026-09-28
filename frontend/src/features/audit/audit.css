@@ -1625,3 +1625,17 @@
     margin-bottom: 8px;
   }
 }
+
+/* 앱 화면(흰 큰 카드 없이, panel.css): 목록 줄은 흰 바탕을 전제로 한 모양이라 목록만 위의 막대그래프와 같은 흰 카드로 감싼다 */
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1280px) {
+  .audit-table {
+    border: 1px solid var(--raised-border);
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: var(--raised-shadow);
+  }
+
+  .audit-table-body .audit-row:last-child {
+    border-bottom: 0;
+  }
+}
