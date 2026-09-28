@@ -13,6 +13,7 @@ on:
       - '**.md'
       - 'images/**'
       - 'tests/**'
+      - 'local/**'     # 로컬 장애 재현 서버 (배포되지 않는다)
   workflow_dispatch:
 
 permissions:

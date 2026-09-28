@@ -1,52 +1,9 @@
 """서비스별 진단 절차 채점 (mcp/lambda_mcp/diagnose.py, mcp/app.py의 diagnoseService, services/llm/audit.py)
 
-moto 위에 정상인 환경(ALB → EC2 두 대, Lambda 함수, 비공개 버킷)을 만들고, 장애를 하나씩 심은 뒤
-절차가 원인 층을 맞히는지 본다. 원인 층이 기대와 정확히 같아야 하고(더 많이 짚어도 틀림), 기대한 증상 층도 있어야 한다.
-
-    시나리오                                  심은 장애                                  원인 층        증상 층
-    alb-healthy                               없음                                       없음
-    alb-targets-stopped                       대상 두 대 중지 + StopInstances 기록          L2 · L5        L4
-    alb-target-sg-blocked                     대상 보안 그룹에서 ALB 출처 규칙 삭제 + 기록   L2 · L3
-    alb-no-registered-targets                 대상 등록 해제                              L4
-    alb-subnet-without-igw                    ALB 서브넷의 인터넷 게이트웨이 경로 삭제        L3
-    alb-target-5xx-after-deploy               대상 5xx 급증 + 직전 배포(시작 템플릿) 기록     L2             L5
-    ec2-healthy                               없음                                       없음
-    ec2-stopped                               인스턴스 중지 + 기록                          L2 · L5        L4
-    ec2-nacl-blocks-ssh                       NACL이 보안 그룹이 연 22번을 거부              L3
-    ec2-cpu-credits-exhausted                 CPU 크레딧 0 · CPU 100%                     L5
-    lambda-healthy                            없음                                       없음
-    lambda-reserved-concurrency-zero          예약 동시성 0 + 스로틀 + 기록                 L2 · L6
-    lambda-timeout                            실행 시간이 제한에 닿음 + 'Task timed out'     L5
-    lambda-vpc-without-nat                    NAT 없는 VPC에 붙이고 시간 초과                L3             L5
-    lambda-access-denied                      로그에 AccessDenied                          L6             L5
-    s3-private-healthy                        없음                                       없음
-    s3-public-policy                          차단 해제 + 공개 정책 + PutBucketPolicy 기록    L2 · L6
-    s3-public-acl                             차단 해제 + public-read ACL                  L6
-    s3-deny-all-policy                        모든 주체 거부 정책                           L6
-    s3-public-policy-but-restricted           공개 정책이지만 RestrictPublicBuckets가 막음   없음 (L6 주의)
-    rds-healthy                               없음                                       없음
-    rds-stopped                               DB 중지 + StopDBInstance 기록                 L2 · L5
-    rds-security-group-closed                 DB 보안 그룹의 3306 규칙 삭제 + 기록           L2 · L3
-    rds-storage-almost-full                   여유 저장 공간 0.8GiB / 20GiB                 L6
-    rds-burst-balance-drained                 gp2 버스트 크레딧 0 · 읽기 지연 320ms          L5             L7
-    vpc-healthy                               web-1 → web-2:22                            없음
-    vpc-destination-port-closed               web-1 → web-2:5432 (목적지 보안 그룹이 막음)    L3
-    vpc-nacl-blocks-replies                   NACL이 나가는 임시 포트를 거부                  L3
-    vpc-destination-stopped                   목적지 중지 + 기록                             L2 · L5
-    vpc-no-route-to-internet                  기본 경로 없는 사설 서브넷 → 인터넷             L3
-    vpc-igw-without-public-ip                 공인 IP 없이 인터넷 게이트웨이 경로             L3
-    vpc-nat-port-exhaustion                   NAT ErrorPortAllocation                     L6
-    credential-quiet                          키 사용 없음                                 없음
-    credential-persistence                    CreateUser·CreateAccessKey·AttachUserPolicy   L2 · L6
-    credential-mining                         다른 리전 두 곳에 RunInstances                 L2 · L5        L3
-    credential-secrets                        GetSecretValue + PutBucketPolicy             L2 · L7
-    credential-recon-only                     권한 거부 6건                                 없음           L6
-    credential-logging-stopped                StopLogging                                 L2
-    credential-bots-v3-recon                  BOTS v3의 유출 키 그대로: IP 3곳 · 거부 4건      없음           L3 · L6
-    cost-flat                                 비용 그대로                                   없음
-    cost-nat-bytes-spike                      NAT 처리 요금 $0.8 → $46/일 + CreateNatGateway  L2 · L3
-    cost-gpu-instances                        p3.2xlarge $0 → $147/일 + RunInstances         L2 · L5        L6
-    cost-log-ingestion-spike                  CloudWatch 로그 수집 $2.1 → $38/일              L7
+moto 위에 정상인 환경(ALB → EC2 두 대, Lambda 함수, 비공개 버킷, RDS, IAM 사용자와 키, 평소 비용)을 만들고,
+장애를 하나씩 심은 뒤 절차가 원인 층을 맞히는지 본다. 원인 층이 기대와 정확히 같아야 하고(더 많이 짚어도 틀림),
+기대한 증상 층도 있어야 한다. 정상 환경과 시나리오 43개(심은 장애 · 기대 원인 층 · 기대 증상 층)는 local/world.py에 있고,
+로컬 실행(local/stack.py)이 대화창에서 재현할 때도 같은 코드를 쓴다.
 
 CloudTrail 조회(LookupEvents)는 moto가 지원하지 않아 diagnose.recent_changes·key_activity·account_changes를 가짜로 바꿔
 변경 기록과 키 사용 기록을 심는다. Cost Explorer의 날짜별 비용도 moto에 넣을 수 없어 _daily_costs를 가짜로 바꾸고,
@@ -54,21 +11,18 @@ CloudTrail 조회(LookupEvents)는 moto가 지원하지 않아 diagnose.recent_c
 가짜는 절차가 넘긴 관련 자원 이름·ID에 든 기록만 돌려주므로, 절차가 어떤 자원을 관련 있다고 보는지도 함께 확인한다.
 """
 import copy
-import io
 import json
-import time
-import zipfile
-from datetime import datetime, timedelta, timezone
 
 import boto3
 import pytest
 
 from conftest import load_service_module
+from local import world as w
+from local.world import (SCENARIOS, block_target_sg, change, gpu_instances, leak_evasion, leak_persistence,
+                         log_ingestion_spike, stop_targets)
 from test_approvals import ORIGIN, FakeResponse, env  # noqa: F401 (env는 fixture)
 
 REGION = boto3.session.Session().region_name
-NOW = datetime.now(timezone.utc)
-RECENT = NOW - timedelta(minutes=10)
 
 
 @pytest.fixture
@@ -76,313 +30,44 @@ def diagnose(aws):
     return load_service_module("mcp", "lambda_mcp.diagnose")
 
 
-def put_metric(namespace, name, value, dimensions, unit="Count"):
-    boto3.client("cloudwatch").put_metric_data(Namespace=namespace, MetricData=[
-        {"MetricName": name, "Timestamp": RECENT, "Value": value, "Unit": unit,
-         "Dimensions": [{"Name": k, "Value": v} for k, v in dimensions.items()]}])
-
-
-def put_logs(group, lines):
-    logs = boto3.client("logs")
-    stamp = int(time.time() * 1000) - 5 * 60 * 1000
-    logs.put_log_events(logGroupName=group, logStreamName="2026/09/28/[$LATEST]abc",
-                        logEvents=[{"timestamp": stamp + index, "message": line} for index, line in enumerate(lines)])
-
-
-# ---------------------------------------------------------------- 정상인 환경
+# ---------------------------------------------------------------- 정상인 환경 (local/world.py)
 @pytest.fixture
 def world(diagnose, monkeypatch):
-    ec2, elb = boto3.client("ec2"), boto3.client("elbv2")
-    vpc = ec2.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])["Vpcs"][0]
-    vpc_id = vpc["VpcId"]
-    subnets = [s for s in ec2.describe_subnets(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])["Subnets"]][:2]
-    # 인터넷 게이트웨이 경로를 기본 라우팅 테이블에 둔다 (moto의 기본 VPC에는 로컬 경로뿐이다)
-    igw = ec2.create_internet_gateway()["InternetGateway"]["InternetGatewayId"]
-    ec2.attach_internet_gateway(InternetGatewayId=igw, VpcId=vpc_id)
-    main = ec2.describe_route_tables(Filters=[{"Name": "vpc-id", "Values": [vpc_id]},
-                                              {"Name": "association.main", "Values": ["true"]}])["RouteTables"][0]
-    ec2.create_route(RouteTableId=main["RouteTableId"], DestinationCidrBlock="0.0.0.0/0", GatewayId=igw)
-
-    alb_sg = ec2.create_security_group(GroupName="web-alb", Description="alb", VpcId=vpc_id)["GroupId"]
-    ec2.authorize_security_group_ingress(GroupId=alb_sg, IpPermissions=[
-        {"IpProtocol": "tcp", "FromPort": 80, "ToPort": 80, "IpRanges": [{"CidrIp": "0.0.0.0/0"}]}])
-    web_sg = ec2.create_security_group(GroupName="web", Description="web", VpcId=vpc_id)["GroupId"]
-    ec2.authorize_security_group_ingress(GroupId=web_sg, IpPermissions=[
-        {"IpProtocol": "tcp", "FromPort": 80, "ToPort": 80, "UserIdGroupPairs": [{"GroupId": alb_sg}]},
-        {"IpProtocol": "tcp", "FromPort": 22, "ToPort": 22, "IpRanges": [{"CidrIp": vpc["CidrBlock"]}]}])
-
-    image = ec2.describe_images(Owners=["amazon"])["Images"][0]["ImageId"]
-    instances = {}
-    for index, subnet in enumerate(subnets, start=1):
-        instances[f"web-{index}"] = ec2.run_instances(
-            ImageId=image, MinCount=1, MaxCount=1, InstanceType="t3.micro", SubnetId=subnet["SubnetId"],
-            SecurityGroupIds=[web_sg], TagSpecifications=[{"ResourceType": "instance", "Tags": [
-                {"Key": "Name", "Value": f"web-{index}"}]}])["Instances"][0]["InstanceId"]
-
-    lb = elb.create_load_balancer(Name="web-alb", Subnets=[s["SubnetId"] for s in subnets],
-                                  SecurityGroups=[alb_sg], Scheme="internet-facing")["LoadBalancers"][0]
-    tg = elb.create_target_group(Name="web-tg", Protocol="HTTP", Port=80, VpcId=vpc_id,
-                                 HealthCheckPath="/health")["TargetGroups"][0]
-    elb.register_targets(TargetGroupArn=tg["TargetGroupArn"], Targets=[{"Id": i} for i in instances.values()])
-    elb.create_listener(LoadBalancerArn=lb["LoadBalancerArn"], Protocol="HTTP", Port=80,
-                        DefaultActions=[{"Type": "forward", "TargetGroupArn": tg["TargetGroupArn"]}])
-    lb_dimension = {"LoadBalancer": lb["LoadBalancerArn"].split(":loadbalancer/")[-1]}
-    put_metric("AWS/ApplicationELB", "RequestCount", 1200, lb_dimension)
-    put_metric("AWS/ApplicationELB", "TargetResponseTime", 0.21, lb_dimension, unit="Seconds")
-    for instance_id in instances.values():
-        put_metric("AWS/EC2", "CPUUtilization", 35, {"InstanceId": instance_id}, unit="Percent")
-        put_metric("AWS/EC2", "CPUCreditBalance", 120, {"InstanceId": instance_id})
-
-    role = boto3.client("iam").create_role(RoleName="orders-api-role", AssumeRolePolicyDocument="{}")["Role"]["Arn"]
-    package = io.BytesIO()
-    with zipfile.ZipFile(package, "w") as archive:
-        archive.writestr("handler.py", "def handle(event, context):\n    return {}\n")
-    boto3.client("lambda").create_function(FunctionName="orders-api", Runtime="python3.13", Role=role,
-                                           Handler="handler.handle", Code={"ZipFile": package.getvalue()},
-                                           Timeout=3, MemorySize=256)
-    logs = boto3.client("logs")
-    logs.create_log_group(logGroupName="/aws/lambda/orders-api")
-    logs.create_log_stream(logGroupName="/aws/lambda/orders-api", logStreamName="2026/09/28/[$LATEST]abc")
-    put_logs("/aws/lambda/orders-api", ["START RequestId: 1", "REPORT RequestId: 1 Duration: 812.40 ms"])
-    put_metric("AWS/Lambda", "Invocations", 500, {"FunctionName": "orders-api"})
-    put_metric("AWS/Lambda", "Duration", 812.4, {"FunctionName": "orders-api"}, unit="Milliseconds")
-
-    s3 = boto3.client("s3")
-    bucket = "vigie-diag-private"
-    s3.create_bucket(Bucket=bucket, **({} if REGION == "us-east-1" else
-                                       {"CreateBucketConfiguration": {"LocationConstraint": REGION}}))
-    s3.put_public_access_block(Bucket=bucket, PublicAccessBlockConfiguration={
-        key: True for key in ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")})
-    s3.put_bucket_versioning(Bucket=bucket, VersioningConfiguration={"Status": "Enabled"})
-
-    # RDS: 웹 서버 보안 그룹에서만 3306을 받는 MySQL (Multi-AZ, 백업 7일)
-    db_sg = ec2.create_security_group(GroupName="orders-db", Description="db", VpcId=vpc_id)["GroupId"]
-    ec2.authorize_security_group_ingress(GroupId=db_sg, IpPermissions=[
-        {"IpProtocol": "tcp", "FromPort": 3306, "ToPort": 3306, "UserIdGroupPairs": [{"GroupId": web_sg}]}])
-    boto3.client("rds").create_db_instance(
-        DBInstanceIdentifier="orders-db", DBInstanceClass="db.t3.micro", Engine="mysql", AllocatedStorage=20,
-        MasterUsername="admin", MasterUserPassword="not-a-real-password", VpcSecurityGroupIds=[db_sg],
-        StorageType="gp2", MultiAZ=True, BackupRetentionPeriod=7)
-    db_dimension = {"DBInstanceIdentifier": "orders-db"}
-    put_metric("AWS/RDS", "CPUUtilization", 22, db_dimension, unit="Percent")
-    put_metric("AWS/RDS", "FreeStorageSpace", 15 * 1024 ** 3, db_dimension, unit="Bytes")
-    put_metric("AWS/RDS", "FreeableMemory", 400 * 1024 ** 2, db_dimension, unit="Bytes")
-    put_metric("AWS/RDS", "BurstBalance", 98, db_dimension, unit="Percent")
-    put_metric("AWS/RDS", "DatabaseConnections", 12, db_dimension)
-
-    # 자격 증명: 배포용 IAM 사용자와 키 (키 값은 moto가 실행할 때 만든다)
-    iam = boto3.client("iam")
-    iam.create_user(UserName="ci-deployer")
-    access_key = iam.create_access_key(UserName="ci-deployer")["AccessKey"]["AccessKeyId"]
-
-    trail = []  # 심은 CloudTrail 쓰기 이벤트 (자원 변경)
-    activity = []  # 심은 키 사용 기록 (자격 증명)
-    cost_changes = []  # 심은 비용을 늘리는 변경
-    costs = {"base": {}, "recent": {}}  # (서비스, 사용 유형) → 하루 금액
-
-    def fake_changes(clients, identifiers, start, end):
-        wanted = set(identifiers)
-        return [event for event in trail if event["resource"] in wanted]
-
-    monkeypatch.setattr(diagnose, "recent_changes", fake_changes)
-    monkeypatch.setattr(diagnose, "key_activity",
-                        lambda clients, key, start, end: [e for e in activity if e.get("key", access_key) == key])
-    monkeypatch.setattr(diagnose, "account_changes", lambda clients, start, end: list(cost_changes))
-    monkeypatch.setattr(diagnose, "_daily_costs", lambda ce, start, end: cost_rows(costs))
-    for service, usage, daily in BASELINE_COSTS:
-        costs["base"][(service, usage)] = daily
-        costs["recent"][(service, usage)] = daily
-    return {"vpc": vpc_id, "subnets": [s["SubnetId"] for s in subnets], "main_route_table": main["RouteTableId"],
-            "alb_sg": alb_sg, "web_sg": web_sg, "db_sg": db_sg, "instances": instances, "lb": lb, "tg": tg,
-            "lb_dimension": lb_dimension, "db_dimension": db_dimension, "bucket": bucket, "trail": trail,
-            "access_key": access_key, "activity": activity, "cost_changes": cost_changes, "costs": costs,
-            "igw": igw, "image": image}
-
-
-# 비용: 평소의 하루 금액 (서비스, 사용 유형, USD)
-BASELINE_COSTS = [
-    ("Amazon Elastic Compute Cloud - Compute", "APN2-BoxUsage:t3.micro", 6.2),
-    ("EC2 - Other", "APN2-NatGateway-Hours", 1.4),
-    ("EC2 - Other", "APN2-NatGateway-Bytes", 0.8),
-    ("AmazonCloudWatch", "APN2-DataProcessing-Bytes", 2.1),
-    ("Amazon Relational Database Service", "APN2-InstanceUsage:db.t3.micro", 4.9),
-    ("Amazon Simple Storage Service", "APN2-TimedStorage-ByteHrs", 0.6),
-]
-
-
-def cost_rows(costs):
-    """Cost Explorer의 날짜별 행 (_daily_costs와 같은 모양): 앞 14일은 base, 최근 3일은 recent의 하루 금액."""
-    today = datetime.now(timezone.utc).date()
-    rows = []
-    for back in range(1, 18):
-        day = (today - timedelta(days=back)).isoformat()
-        amounts = costs["recent"] if back <= 3 else costs["base"]
-        rows += [(day, service, usage, amount) for (service, usage), amount in amounts.items()]
-    return rows
-
-
-def change(world, event, resource, user="deploy-bot"):
-    world["trail"].append({"time": "09-28 20:55", "event": event, "user": user, "resource": resource})
-
-
-# ---------------------------------------------------------------- 심을 장애
-def stop_targets(world):
-    ec2 = boto3.client("ec2")
-    ec2.stop_instances(InstanceIds=list(world["instances"].values()))
-    for instance_id in world["instances"].values():
-        change(world, "StopInstances", instance_id, user="alice")
-    put_metric("AWS/ApplicationELB", "HTTPCode_ELB_5XX_Count", 340, world["lb_dimension"])
-    put_metric("AWS/ApplicationELB", "HTTPCode_ELB_503_Count", 340, world["lb_dimension"])
-
-
-def block_target_sg(world):
-    ec2 = boto3.client("ec2")
-    ec2.revoke_security_group_ingress(GroupId=world["web_sg"], IpPermissions=[
-        {"IpProtocol": "tcp", "FromPort": 80, "ToPort": 80, "UserIdGroupPairs": [{"GroupId": world["alb_sg"]}]}])
-    change(world, "RevokeSecurityGroupIngress", world["web_sg"], user="alice")
-    put_metric("AWS/ApplicationELB", "HTTPCode_ELB_5XX_Count", 120, world["lb_dimension"])
-    put_metric("AWS/ApplicationELB", "HTTPCode_ELB_504_Count", 120, world["lb_dimension"])
-
-
-def deregister_targets(world):
-    boto3.client("elbv2").deregister_targets(TargetGroupArn=world["tg"]["TargetGroupArn"],
-                                             Targets=[{"Id": i} for i in world["instances"].values()])
-
-
-def remove_igw_route(world):
-    boto3.client("ec2").delete_route(RouteTableId=world["main_route_table"], DestinationCidrBlock="0.0.0.0/0")
-
-
-def target_5xx_after_deploy(world):
-    put_metric("AWS/ApplicationELB", "HTTPCode_Target_5XX_Count", 410, world["lb_dimension"])
-    for instance_id in world["instances"].values():
-        change(world, "CreateLaunchTemplateVersion", instance_id)
-
-
-def stop_web_1(world):
-    boto3.client("ec2").stop_instances(InstanceIds=[world["instances"]["web-1"]])
-    change(world, "StopInstances", world["instances"]["web-1"], user="alice")
-
-
-def nacl_denies_ssh(world):
-    ec2 = boto3.client("ec2")
-    acl = ec2.describe_network_acls(Filters=[{"Name": "vpc-id", "Values": [world["vpc"]]},
-                                             {"Name": "default", "Values": ["true"]}])["NetworkAcls"][0]
-    ec2.create_network_acl_entry(NetworkAclId=acl["NetworkAclId"], RuleNumber=50, Protocol="6", RuleAction="deny",
-                                 Egress=False, CidrBlock="0.0.0.0/0", PortRange={"From": 22, "To": 22})
-
-
-def exhaust_cpu_credits(world):
-    instance_id = world["instances"]["web-1"]
-    put_metric("AWS/EC2", "CPUCreditBalance", 0, {"InstanceId": instance_id})
-    put_metric("AWS/EC2", "CPUUtilization", 100, {"InstanceId": instance_id}, unit="Percent")
-
-
-def zero_reserved_concurrency(world):
-    boto3.client("lambda").put_function_concurrency(FunctionName="orders-api", ReservedConcurrentExecutions=0)
-    put_metric("AWS/Lambda", "Throttles", 230, {"FunctionName": "orders-api"})
-    change(world, "PutFunctionConcurrency20171031", "orders-api", user="alice")
-
-
-def lambda_timeouts(world):
-    put_metric("AWS/Lambda", "Duration", 3000, {"FunctionName": "orders-api"}, unit="Milliseconds")
-    put_metric("AWS/Lambda", "Errors", 42, {"FunctionName": "orders-api"})
-    put_logs("/aws/lambda/orders-api", ["2026-09-28T11:55:00Z 1 Task timed out after 3.00 seconds",
-                                        "REPORT RequestId: 2 Duration: 3000.00 ms Status: timeout"])
-
-
-def lambda_in_vpc_without_nat(world):
-    ec2 = boto3.client("ec2")
-    # NAT 없는 사설 서브넷 (인터넷 게이트웨이 경로만 있는 기본 라우팅 테이블도 Lambda에는 쓸모가 없지만,
-    # 여기서는 경로가 로컬뿐인 전용 라우팅 테이블을 붙여 흔한 '사설 서브넷' 모양을 만든다)
-    subnet = ec2.create_subnet(VpcId=world["vpc"], CidrBlock="172.31.200.0/24")["Subnet"]["SubnetId"]
-    table = ec2.create_route_table(VpcId=world["vpc"])["RouteTable"]["RouteTableId"]
-    ec2.associate_route_table(RouteTableId=table, SubnetId=subnet)
-    boto3.client("lambda").update_function_configuration(
-        FunctionName="orders-api", VpcConfig={"SubnetIds": [subnet], "SecurityGroupIds": [world["web_sg"]]})
-    lambda_timeouts(world)
-
-
-def lambda_access_denied(world):
-    put_metric("AWS/Lambda", "Errors", 17, {"FunctionName": "orders-api"})
-    put_logs("/aws/lambda/orders-api", [
-        "[ERROR] ClientError: An error occurred (AccessDeniedException) when calling the GetItem operation: "
-        "User: arn:aws:sts::123456789012:assumed-role/orders-api-role/orders-api is not authorized to perform: "
-        "dynamodb:GetItem"])
-
-
-def make_public_policy(world, restrict=False):
-    s3 = boto3.client("s3")
-    s3.put_public_access_block(Bucket=world["bucket"], PublicAccessBlockConfiguration={
-        "BlockPublicAcls": False, "IgnorePublicAcls": False, "BlockPublicPolicy": False,
-        "RestrictPublicBuckets": restrict})
-    s3.put_bucket_policy(Bucket=world["bucket"], Policy=json.dumps({"Version": "2012-10-17", "Statement": [
-        {"Sid": "PublicRead", "Effect": "Allow", "Principal": "*", "Action": "s3:GetObject",
-         "Resource": f"arn:aws:s3:::{world['bucket']}/*"}]}))
-    if not restrict:
-        change(world, "PutBucketPublicAccessBlock", world["bucket"], user="alice")
-        change(world, "PutBucketPolicy", world["bucket"], user="alice")
-
-
-def make_public_acl(world):
-    s3 = boto3.client("s3")
-    s3.delete_public_access_block(Bucket=world["bucket"])
-    s3.put_bucket_acl(Bucket=world["bucket"], ACL="public-read")
-
-
-def deny_everyone(world):
-    boto3.client("s3").put_bucket_policy(Bucket=world["bucket"], Policy=json.dumps({
-        "Version": "2012-10-17", "Statement": [{"Sid": "LockDown", "Effect": "Deny", "Principal": "*",
-                                                "Action": "s3:*", "Resource": f"arn:aws:s3:::{world['bucket']}/*"}]}))
-
-
-# (시나리오, 서비스, 자원 → world에서 고른다, 장애, 기대 원인 층, 기대 증상 층)
-SCENARIOS = [
-    ("alb-healthy", "alb", "web-alb", None, set(), set()),
-    ("alb-targets-stopped", "alb", "web-alb", stop_targets, {"L2", "L5"}, {"L4"}),
-    ("alb-target-sg-blocked", "alb", "web-alb", block_target_sg, {"L2", "L3"}, set()),
-    ("alb-no-registered-targets", "alb", "web-alb", deregister_targets, {"L4"}, set()),
-    ("alb-subnet-without-igw", "alb", "web-alb", remove_igw_route, {"L3"}, set()),
-    ("alb-target-5xx-after-deploy", "alb", "web-alb", target_5xx_after_deploy, {"L2"}, {"L5"}),
-    ("ec2-healthy", "ec2", "web-1", None, set(), set()),
-    ("ec2-stopped", "ec2", "web-1", stop_web_1, {"L2", "L5"}, {"L4"}),
-    ("ec2-nacl-blocks-ssh", "ec2", "web-1", nacl_denies_ssh, {"L3"}, set()),
-    ("ec2-cpu-credits-exhausted", "ec2", "web-1", exhaust_cpu_credits, {"L5"}, set()),
-    ("lambda-healthy", "lambda", "orders-api", None, set(), set()),
-    ("lambda-reserved-concurrency-zero", "lambda", "orders-api", zero_reserved_concurrency, {"L2", "L6"}, set()),
-    ("lambda-timeout", "lambda", "orders-api", lambda_timeouts, {"L5"}, set()),
-    ("lambda-vpc-without-nat", "lambda", "orders-api", lambda_in_vpc_without_nat, {"L3"}, {"L5"}),
-    ("lambda-access-denied", "lambda", "orders-api", lambda_access_denied, {"L6"}, {"L5"}),
-    ("s3-private-healthy", "s3", "vigie-diag-private", None, set(), set()),
-    ("s3-public-policy", "s3", "vigie-diag-private", make_public_policy, {"L2", "L6"}, set()),
-    ("s3-public-acl", "s3", "vigie-diag-private", make_public_acl, {"L6"}, set()),
-    ("s3-deny-all-policy", "s3", "vigie-diag-private", deny_everyone, {"L6"}, set()),
-    ("s3-public-policy-but-restricted", "s3", "vigie-diag-private",
-     lambda world: make_public_policy(world, restrict=True), set(), set()),
-]
+    world = w.build_world(REGION)
+    w.install_fakes(diagnose, world, monkeypatch.setattr)
+    return world
 
 
 def layer(result, layer_id):
     return next(item for item in result["layers"] if item["id"] == layer_id)
 
 
-@pytest.mark.parametrize("name,service,resource,fault,causes,symptoms", SCENARIOS, ids=[s[0] for s in SCENARIOS])
-def test_procedure_finds_the_planted_cause(diagnose, world, name, service, resource, fault, causes, symptoms):
-    if fault:
-        fault(world)
-    resource = world["instances"].get(resource, resource)  # EC2는 Name 태그 대신 ID로도 한 번씩 확인한다
-    result = diagnose.run(service, resource if name != "ec2-healthy" else "web-1", hours=1, region=REGION)
-    got = set(result["causes"])
-    assert got == causes, f"{name}: 원인 층 {sorted(got)} (기대 {sorted(causes)})\n{result['summary']}"
-    assert symptoms <= set(result["symptoms"]), f"{name}: 증상 층 {result['symptoms']} (기대 {sorted(symptoms)})"
+@pytest.mark.parametrize("scenario", SCENARIOS, ids=[s.name for s in SCENARIOS])
+def test_procedure_finds_the_planted_cause(diagnose, world, scenario):
+    if scenario.fault:
+        scenario.fault(world)
+    # EC2는 Name 태그로도, ID로도 확인한다 (ec2-healthy는 web-1, 나머지는 {id:web-1})
+    result = diagnose.run(scenario.service, w.fill(scenario.resource, world), region=REGION,
+                          target=w.fill(scenario.target, world))
+    got, name = set(result["causes"]), scenario.name
+    assert got == scenario.causes, f"{name}: 원인 층 {sorted(got)} (기대 {sorted(scenario.causes)})\n{result['summary']}"
+    assert scenario.symptoms <= set(result["symptoms"]), (
+        f"{name}: 증상 층 {result['symptoms']} (기대 {sorted(scenario.symptoms)})")
     # 요약은 원인이 있으면 원인부터, 없으면 이상 없음이나 증상
-    assert result["summary"].startswith("원인 —") == bool(causes)
+    assert result["summary"].startswith("원인 —") == bool(scenario.causes)
     # 모든 층이 판정과 근거를 가진다 (해당 없음 말고는 어느 API·지표를 봤는지)
     assert [item["id"] for item in result["layers"]] == ["L1", "L2", "L3", "L4", "L5", "L6", "L7"]
     for item in result["layers"]:
         assert item["status"] in diagnose.WEIGHT and item["component"] and item["checks"]
         for check in item["checks"]:
             assert check["status"] == "skip" or check["evidence"], (item["id"], check)
+
+
+def test_scenarios_have_unique_names_and_filled_questions(world):
+    """로컬 재현(local/scenario.py)이 이름으로 고르고, 질문의 자리 표시를 채워 보여 준다."""
+    assert len(SCENARIOS) == len(w.BY_NAME) == 43
+    for scenario in SCENARIOS:
+        assert "{" not in w.fill(scenario.ask, world) and "{" not in w.fill(scenario.resource, world)
 
 
 def test_scenarios_with_details(diagnose, world):
@@ -454,189 +139,6 @@ def test_bad_input_is_a_clear_error(diagnose, world, service, resource, message)
         diagnose.run(service, resource, region=REGION)
 
 
-# ---------------------------------------------------------------- RDS · VPC 연결 · 자격 증명 · 비용
-def stop_db(world):
-    boto3.client("rds").stop_db_instance(DBInstanceIdentifier="orders-db")
-    change(world, "StopDBInstance", "orders-db", user="alice")
-
-
-def close_db_sg(world):
-    boto3.client("ec2").revoke_security_group_ingress(GroupId=world["db_sg"], IpPermissions=[
-        {"IpProtocol": "tcp", "FromPort": 3306, "ToPort": 3306, "UserIdGroupPairs": [{"GroupId": world["web_sg"]}]}])
-    change(world, "RevokeSecurityGroupIngress", world["db_sg"], user="alice")
-
-
-def fill_db_storage(world):
-    put_metric("AWS/RDS", "FreeStorageSpace", 0.8 * 1024 ** 3, world["db_dimension"], unit="Bytes")
-
-
-def drain_burst_balance(world):
-    put_metric("AWS/RDS", "BurstBalance", 0, world["db_dimension"], unit="Percent")
-    put_metric("AWS/RDS", "ReadLatency", 0.32, world["db_dimension"], unit="Seconds")
-
-
-def stop_web_2(world):
-    boto3.client("ec2").stop_instances(InstanceIds=[world["instances"]["web-2"]])
-    change(world, "StopInstances", world["instances"]["web-2"], user="alice")
-
-
-def nacl_blocks_replies(world):
-    ec2 = boto3.client("ec2")
-    acl = ec2.describe_network_acls(Filters=[{"Name": "vpc-id", "Values": [world["vpc"]]},
-                                             {"Name": "default", "Values": ["true"]}])["NetworkAcls"][0]
-    ec2.create_network_acl_entry(NetworkAclId=acl["NetworkAclId"], RuleNumber=50, Protocol="6", RuleAction="deny",
-                                 Egress=True, CidrBlock="0.0.0.0/0", PortRange={"From": 1024, "To": 65535})
-
-
-def private_worker(world, *, route=None, public_ip=False):
-    """사설 서브넷(전용 라우팅 테이블)에 worker 인스턴스 하나. route: 0.0.0.0/0의 대상 {'NatGatewayId': …} 등."""
-    ec2 = boto3.client("ec2")
-    subnet = ec2.create_subnet(VpcId=world["vpc"], CidrBlock="172.31.210.0/24")["Subnet"]["SubnetId"]
-    ec2.modify_subnet_attribute(SubnetId=subnet, MapPublicIpOnLaunch={"Value": public_ip})
-    table = ec2.create_route_table(VpcId=world["vpc"])["RouteTable"]["RouteTableId"]
-    ec2.associate_route_table(RouteTableId=table, SubnetId=subnet)
-    if route:
-        ec2.create_route(RouteTableId=table, DestinationCidrBlock="0.0.0.0/0", **route)
-    ec2.run_instances(ImageId=world["image"], MinCount=1, MaxCount=1, InstanceType="t3.micro", SubnetId=subnet,
-                      SecurityGroupIds=[world["web_sg"]],
-                      TagSpecifications=[{"ResourceType": "instance", "Tags": [{"Key": "Name", "Value": "worker"}]}])
-
-
-def worker_without_route(world):
-    private_worker(world)
-
-
-def worker_igw_without_public_ip(world):
-    private_worker(world, route={"GatewayId": world["igw"]})
-
-
-def worker_nat_port_exhaustion(world):
-    ec2 = boto3.client("ec2")
-    allocation = ec2.allocate_address(Domain="vpc")["AllocationId"]
-    nat = ec2.create_nat_gateway(SubnetId=world["subnets"][0], AllocationId=allocation)["NatGateway"]["NatGatewayId"]
-    private_worker(world, route={"NatGatewayId": nat})
-    put_metric("AWS/NATGateway", "ErrorPortAllocation", 5120, {"NatGatewayId": nat})
-    put_metric("AWS/NATGateway", "PacketsDropCount", 830, {"NatGatewayId": nat})
-
-
-def act(world, event, *, read_only=False, error="", region="", source="", ip="198.51.100.23", times=1):
-    """키 사용 기록 하나를 심는다 (key_activity가 돌려주는 모양)."""
-    for _ in range(times):
-        world["activity"].append({"time": "09-28 03:12", "event": event, "source": source or "ec2.amazonaws.com",
-                                  "ip": ip, "agent": "aws-cli/2.17.0", "region": region or REGION,
-                                  "error": error, "read_only": read_only})
-
-
-def leak_persistence(world):
-    for event in ("CreateUser", "CreateAccessKey", "AttachUserPolicy"):
-        act(world, event, source="iam.amazonaws.com")
-    act(world, "GetCallerIdentity", read_only=True, source="sts.amazonaws.com")
-
-
-def leak_mining(world):
-    act(world, "RunInstances", region="ap-south-1", times=2)
-    act(world, "RunInstances", region="sa-east-1", times=2)
-    act(world, "DescribeRegions", read_only=True)
-
-
-def leak_secrets(world):
-    act(world, "GetSecretValue", read_only=True, source="secretsmanager.amazonaws.com", times=2)
-    act(world, "PutBucketPolicy", source="s3.amazonaws.com")
-
-
-def leak_recon_only(world):
-    for event in ("ListBuckets", "ListUsers", "DescribeInstances", "ListRoles", "GetAccountAuthorizationDetails",
-                  "ListSecrets"):
-        act(world, event, read_only=True, error="AccessDenied")
-
-
-def leak_bots_v3_recon(world):
-    """Splunk BOTS v3(Frothly)의 유출 키 web_admin: 11분 동안 IP 세 곳에서 서비스 네 곳을 더듬었고 모두 거부됐다."""
-    for event, source, ip, error in (("ListAccessKeys", "iam.amazonaws.com", "209.107.196.112", "AccessDenied"),
-                                     ("ListBuckets", "s3.amazonaws.com", "139.198.18.205", "AccessDenied"),
-                                     ("DescribeAccountAttributes", "ec2.amazonaws.com", "82.102.18.111",
-                                      "Client.UnauthorizedOperation"),
-                                     ("GetUser", "iam.amazonaws.com", "82.102.18.111", "AccessDenied")):
-        act(world, event, read_only=True, error=error, source=source, ip=ip)
-
-
-def leak_evasion(world):
-    act(world, "StopLogging", source="cloudtrail.amazonaws.com")
-
-
-def spike(world, service, usage, recent):
-    world["costs"]["recent"][(service, usage)] = recent
-
-
-def nat_bytes_spike(world):
-    spike(world, "EC2 - Other", "APN2-NatGateway-Bytes", 46.0)
-    world["cost_changes"].append({"time": "09-25 14:02", "event": "CreateNatGateway", "user": "alice",
-                                  "resource": "nat-0a1b2c3d4e5f"})
-
-
-def gpu_instances(world):
-    spike(world, "Amazon Elastic Compute Cloud - Compute", "APN2-BoxUsage:p3.2xlarge", 146.9)
-    world["cost_changes"].append({"time": "09-25 02:40", "event": "RunInstances", "user": "ci-deployer",
-                                  "resource": "i-0f00ba4"})
-
-
-def log_ingestion_spike(world):
-    spike(world, "AmazonCloudWatch", "APN2-DataProcessing-Bytes", 38.4)
-
-
-# (시나리오, 서비스, 자원, 목적지, 장애, 기대 원인 층, 기대 증상 층). 자원·목적지의 {web-2} 따위는 world에서 채운다
-SCENARIOS_MORE = [
-    ("rds-healthy", "rds", "orders-db", None, None, set(), set()),
-    ("rds-stopped", "rds", "orders-db", None, stop_db, {"L2", "L5"}, set()),
-    ("rds-security-group-closed", "rds", "orders-db", None, close_db_sg, {"L2", "L3"}, set()),
-    ("rds-storage-almost-full", "rds", "orders-db", None, fill_db_storage, {"L6"}, set()),
-    ("rds-burst-balance-drained", "rds", "orders-db", None, drain_burst_balance, {"L5"}, {"L7"}),
-    ("vpc-healthy", "vpc", "web-1", "{web-2}:22", None, set(), set()),
-    ("vpc-destination-port-closed", "vpc", "web-1", "{web-2}:5432", None, {"L3"}, set()),
-    ("vpc-nacl-blocks-replies", "vpc", "web-1", "{web-2}:22", nacl_blocks_replies, {"L3"}, set()),
-    ("vpc-destination-stopped", "vpc", "web-1", "{web-2}:22", stop_web_2, {"L2", "L5"}, set()),
-    ("vpc-no-route-to-internet", "vpc", "worker", "52.95.110.1:443", worker_without_route, {"L3"}, set()),
-    ("vpc-igw-without-public-ip", "vpc", "worker", "52.95.110.1:443", worker_igw_without_public_ip, {"L3"}, set()),
-    ("vpc-nat-port-exhaustion", "vpc", "worker", "52.95.110.1:443", worker_nat_port_exhaustion, {"L6"}, set()),
-    ("credential-quiet", "credential", "{key}", None, None, set(), set()),
-    ("credential-persistence", "credential", "{key}", None, leak_persistence, {"L2", "L6"}, set()),
-    ("credential-mining", "credential", "ci-deployer", None, leak_mining, {"L2", "L5"}, {"L3"}),
-    ("credential-secrets", "credential", "{key}", None, leak_secrets, {"L2", "L7"}, set()),
-    ("credential-recon-only", "credential", "{key}", None, leak_recon_only, set(), {"L6"}),
-    ("credential-logging-stopped", "credential", "{key}", None, leak_evasion, {"L2"}, set()),
-    ("credential-bots-v3-recon", "credential", "{key}", None, leak_bots_v3_recon, set(), {"L3", "L6"}),
-    ("cost-flat", "cost", "account", None, None, set(), set()),
-    ("cost-nat-bytes-spike", "cost", "account", None, nat_bytes_spike, {"L2", "L3"}, set()),
-    ("cost-gpu-instances", "cost", "account", None, gpu_instances, {"L2", "L5"}, {"L6"}),
-    ("cost-log-ingestion-spike", "cost", "account", None, log_ingestion_spike, {"L7"}, set()),
-]
-
-
-def fill(text, world):
-    if text is None:
-        return None
-    ips = {name: boto3.client("ec2").describe_instances(InstanceIds=[instance_id])["Reservations"][0]["Instances"][0]
-           ["PrivateIpAddress"] for name, instance_id in world["instances"].items()}
-    return text.replace("{key}", world["access_key"]).replace("{web-2}", ips["web-2"])
-
-
-@pytest.mark.parametrize("name,service,resource,target,fault,causes,symptoms", SCENARIOS_MORE,
-                         ids=[s[0] for s in SCENARIOS_MORE])
-def test_more_procedures_find_the_planted_cause(diagnose, world, name, service, resource, target, fault, causes,
-                                                symptoms):
-    if fault:
-        fault(world)
-    result = diagnose.run(service, fill(resource, world), region=REGION, target=fill(target, world))
-    got = set(result["causes"])
-    assert got == causes, f"{name}: 원인 층 {sorted(got)} (기대 {sorted(causes)})\n{result['summary']}"
-    assert symptoms <= set(result["symptoms"]), f"{name}: 증상 층 {result['symptoms']} (기대 {sorted(symptoms)})"
-    assert result["summary"].startswith("원인 —") == bool(causes)
-    for item in result["layers"]:
-        assert item["status"] in diagnose.WEIGHT and item["component"] and item["checks"]
-        for check in item["checks"]:
-            assert check["status"] == "skip" or check["evidence"], (item["id"], check)
-
-
 def test_logging_stopped_alone_reads_as_the_cause(diagnose, world):
     leak_evasion(world)
     assert diagnose.run("credential", world["access_key"], region=REGION)["summary"] == (
@@ -658,7 +160,7 @@ def test_vpc_needs_a_target_and_explains_same_subnet(diagnose, world):
         diagnose.run("vpc", "web-1", region=REGION)
     with pytest.raises(ValueError, match="DNS"):
         diagnose.run("vpc", "web-1", region=REGION, target="db.internal:5432")
-    result = diagnose.run("vpc", "web-1", region=REGION, target=fill("{web-2}:22", world))
+    result = diagnose.run("vpc", "web-1", region=REGION, target=w.fill("{web-2}:22", world))
     assert result["target"].endswith(":22") and layer(result, "L6")["status"] == "skip"
 
 
