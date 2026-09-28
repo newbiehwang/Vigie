@@ -1039,6 +1039,56 @@
   .dash-attention-text {
     display: grid;
   }
+
+  /* 리소스 표: 휴대폰 폭(표 약 340px)에서는 이름 칸의 최소 폭(220px)이 상태 칸까지 밀고 들어가 배지가 이름 위에 겹쳤다.
+     최소 폭을 풀고 칸 사이 여백·종류 표시를 줄여, 이름은 남는 폭 안에서 …로 잘리게 한다.
+     상태 칸은 '● 문제'·'● 정상'이 들어가는 폭, 배지는 바탕이 없으니 좌우 여백을 뺀다 */
+  .dash-table th,
+  .dash-table td {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .dash-table th.is-status { width: 68px; }
+  .dash-table th.is-errors { width: 64px; } /* 마지막 칸이면 오른쪽 여백 16px + 정렬 표시 + '오류' */
+  .dash-table th.is-cost { width: 88px; }
+
+  /* '이번 달 비용'은 좁은 칸에서 두 줄로 */
+  .dash-table th.is-cost {
+    white-space: normal;
+    line-height: 1.2;
+  }
+
+  /* 드문 '데이터 없음'은 두 줄로 (칸을 그 폭에 맞추면 이름 자리가 줄어든다) */
+  .dash-table td.is-status .badge {
+    height: auto;
+    min-height: 22px;
+    padding: 0;
+    white-space: normal;
+    line-height: 1.25;
+  }
+
+  .dash-name-cell {
+    min-width: 0;
+    gap: 8px;
+  }
+
+  .dash-kind {
+    width: 44px;
+    font-size: 10px;
+  }
+
+  /* 아주 좁은 화면(320px 폭 등)에서는 종류 표시를 빼 이름 자리를 남긴다 */
+  @media (max-width: 360px) {
+    .dash-kind {
+      display: none;
+    }
+  }
+
+  /* 비용 칸까지 있으면 이름 자리가 너무 좁아진다. 표를 휴대폰 폭보다 넓게 두고 옆으로 밀어 비용을 본다 */
+  .dash-table:has(th.is-cost) {
+    min-width: 440px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -980,11 +980,8 @@
 }
 
 @media (max-width: 760px) {
-  :root {
-    --main-content-top: 116px;
-    --main-content-bottom: 16px;
-  }
-
+  /* 본문 위아래 여백(--main-content-top/bottom)의 좁은 화면 값은 styles.css에 둔다.
+     여기(@import로 먼저 읽힌다)에 두면 뒤에 오는 styles.css의 기본값이 덮어써 적용되지 않았다 */
   .nav-inner {
     display: grid;
     grid-template-columns: 1fr auto;

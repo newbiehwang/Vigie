@@ -88,6 +88,15 @@
     0 4px 10px rgba(10, 22, 40, 0.06);
 }
 
+/* 좁은 화면(휴대폰): 내비게이션이 두 줄(로고·프로필 / 탭)이 되어 위 여백을 그 높이에 맞추고, 아래 여백은 줄여 카드를 화면 끝까지 쓴다.
+   위의 기본값보다 뒤에 있어야 적용된다 (layout.css는 맨 위 @import로 먼저 읽혀 거기 두면 기본값에 덮인다) */
+@media (max-width: 760px) {
+  :root {
+    --main-content-top: 116px;
+    --main-content-bottom: 16px;
+  }
+}
+
 * {
   box-sizing: border-box;
 }

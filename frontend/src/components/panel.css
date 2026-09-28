@@ -7,6 +7,13 @@
     calc(100vh - var(--main-content-top) - var(--main-content-bottom)),
     860px
   );
+  /* 휴대폰 브라우저에서 100vh는 주소창이 접힌 높이라, 주소창·아래 도구 막대가 보일 때 카드 아래(대화 입력칸)가 가려진다.
+     지금 보이는 높이(dvh)를 아는 브라우저는 그것을 쓴다 (모르면 위의 vh 값이 남는다) */
+  height: clamp(
+    360px,
+    calc(100dvh - var(--main-content-top) - var(--main-content-bottom)),
+    860px
+  );
   border-radius: 16px;
   border: 1px solid var(--color-line);
   background: rgba(255, 255, 255, 0.92);
