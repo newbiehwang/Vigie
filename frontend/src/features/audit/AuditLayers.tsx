@@ -30,7 +30,7 @@
 //   작업의 사건은 요청·승인·실행 행이 모두 같은 판정을 보인다 (같은 작업 ID)
 import { useEffect, useState, type CSSProperties } from 'react';
 import { fetchTrace } from '@/api/audit';
-import type { AuditRecord, AuditTrace, TraceLayer, TraceStatus, TraceStep } from '@/types/audit';
+import type { AuditRecord, AuditTrace, TraceBasis, TraceLayer, TraceStatus, TraceStep } from '@/types/audit';
 import { KST } from './timeWindow';
 import { ACTION_EVENTS, LAYERS, requesterOf, toolLabelOf } from './auditModel';
 
@@ -73,7 +73,16 @@ function useTrace(record: AuditRecord): TraceState {
     return state;
 }
 
-// 설명 칸의 판정: 그 단계에서 찾은 것(서버의 답)과 근거가 된 기록
+// 판정의 근거 (services/llm/audit_trace.py 모듈 설명): 기록은 코드가 확정하는 사실, 탐지는 문구 패턴이라 놓칠 수 있다
+const BASIS_LABELS: Record<TraceBasis, string> = { record: '기록', detection: '탐지', outside: '앱 밖' };
+const BASIS_HINTS: Record<TraceBasis, string> = {
+    record: '코드가 확정하는 사실 (승인 · 실행 · 요청 기록, 도구 등록부)',
+    detection: '도구 결과의 문구 패턴 탐지. 패턴에 없는 표현은 놓칠 수 있습니다',
+    outside: '앱에서는 확인할 수 없습니다 (CloudTrail과 대조)',
+};
+
+// 설명 칸의 판정: 그 단계에서 찾은 것(서버의 답), 판정의 근거, 근거가 된 기록
+//   탐지를 근거로 한 '정상'은 '탐지된 것이 없다'는 뜻이라 한 줄을 덧붙인다
 function TraceAnswer({ step, trace }: { step: TraceStep; trace: AuditTrace }) {
     const records = [...trace.events, ...trace.rows];
     const cited = step.evidence
@@ -84,6 +93,19 @@ function TraceAnswer({ step, trace }: { step: TraceStep; trace: AuditTrace }) {
         <div className={`audit-trace-answer-box is-${step.status}`}>
             {/* 물음은 단계 정의와 겹쳐 보이지 않는다: 그 단계에서 찾은 것(답)과 근거 기록만 */}
             <p className="audit-trace-answer-a">{step.answer}</p>
+            {step.basis?.length ? (
+                <p className="audit-trace-basis">
+                    <span className="audit-trace-basis-title">근거</span>
+                    {step.basis.map((basis) => (
+                        <span key={basis} className={`audit-trace-basis-chip is-${basis}`} title={BASIS_HINTS[basis]}>
+                            {BASIS_LABELS[basis]}
+                        </span>
+                    ))}
+                    {step.status === 'ok' && step.basis.includes('detection') ? (
+                        <span className="audit-trace-basis-note">탐지가 놓친 표현은 여기에 드러나지 않습니다</span>
+                    ) : null}
+                </p>
+            ) : null}
             {cited.length ? (
                 <ul className="audit-trace-cites" aria-label="근거가 된 기록">
                     {cited.map((record) => (

@@ -122,6 +122,7 @@ Vigie는 사용자가 자연어로 AWS 계정을 조회하고 일부를 바꾸�
 | # | 위협 | 방어 | 테스트 |
 |:--|:--|:--|:--|
 | T41 | 가입만 한 사용자(A2)가 계정 전체의 CloudTrail(누가·언제·어느 IP에서·무엇을), IAM 권한 구조, 네트워크 구성, 공개 버킷 목록을 조회해 계정을 정찰한다 | 관리자 전용 도구(`mcp/lambda_mcp/risk.py`의 `ADMIN_ONLY`)는 `admins` 그룹만 쓴다. 일반 사용자 요청에는 모델에게 주는 도구 목록에서 빼고(도구 검색으로도 찾을 수 없다), 이름으로 불러도 LLM Lambda가 거절해 감사 로그에 실패로 남긴다. MCP 서버도 관리자 표시가 없는 호출은 실행하지 않는다. Slack 봇 요청은 일반 사용자다. 목록에 없는 도구는 관리자 전용으로 본다. 홈 대시보드의 '최근 변경'(CloudTrail·감사 로그)도 관리자에게만 준다 | `tests/test_tool_access.py::test_member_does_not_see_admin_tools`, `tests/test_tool_access.py::test_member_calling_an_admin_tool_by_name_is_refused_and_audited`, `tests/test_tool_access.py::test_mcp_refuses_admin_tools_without_the_admin_mark`, `tests/test_tool_access.py::test_slack_requests_are_members`, `tests/test_tool_access.py::test_every_tool_says_who_can_use_it_and_the_admin_list_is_exact`, `tests/test_dashboard_view.py::test_recent_changes_are_for_admins_only` |
+| T42 | 탐지가 놓친 지시문을 따른 변경 요청이 역추적에서 '모든 단계가 정상'으로 보이고, 경고를 보고도 승인한 것이 드러나지 않는다 | 역추적의 단계마다 판정의 근거(기록 · 탐지 · 앱 밖)를 붙이고, 탐지를 근거로 한 정상은 '탐지된 것 없음'으로 쓴다. 판단 단계에 탐지와 무관한 기록 신호(사용자가 묻지 않은 Vigie 감시 장치 약화: 로그 보존 기간 줄이기 · 알람 알림 끄기)를 더한다. 요청 값이 탐지된 지시문 안에 그대로 있고 질문에는 없으면(요청 순간 비교, `taintedBy`의 `matchedArgs`) 판단을 실패로 본다. 의심 경고가 붙은 요청을 승인했으면 효과를 주의로 본다 | `tests/test_audit_trace.py::test_injected_log_that_detection_missed_is_caught_by_the_record_signal`, `tests/test_audit_trace.py::test_request_value_from_the_injected_text_fails_the_deliberation_stage`, `tests/test_audit_trace.py::test_value_the_user_asked_for_is_not_counted_as_from_the_injected_text`, `tests/test_audit_trace.py::test_unasked_weakening_of_vigie_defenses` |
 
 ## 5. 남은 위험
 
@@ -141,6 +142,7 @@ Vigie는 사용자가 자연어로 AWS 계정을 조회하고 일부를 바꾸�
 | R10 | 체류 신호는 질문 하나 안에서만 센다 | 낮음 | 대화 기록에는 도구 결과가 아니라 글만 남는다. 앞 질문에서 읽은 의심 결과를 모델이 답변에 옮겼고, 다음 질문에서 그 답변을 보고 변경을 요청하면 신호가 없다 (승인은 여전히 필요하다) | 대화 단위로 의심 결과를 서버에 남겨 다음 질문의 변경 요청에도 적기 |
 | R11 | 관리자 토큰을 빼앗기면 결정자를 늘릴 수 있다 | 중간 | 관리자는 사용자 관리 탭에서 누구든 결정자로 만들 수 있다. 바꾼 내용은 감사 로그에 남고 prod의 승인은 요청자 본인이 할 수 없지만, 관리자 계정 하나로 결정자를 만들고 그 사람으로 승인할 수 있다 | 관리자 MFA 필수, 그룹 변경에도 다른 관리자의 승인(두 사람 규칙) |
 | R12 | 정지해도 이미 받은 토큰은 최대 1시간 쓸 수 있다 | 낮음 | 정지하면 갱신 토큰은 바로 무효가 되지만, API Gateway의 Cognito 권한 부여자는 ID 토큰의 서명과 만료만 본다. 사용자 관리 API만 Cognito에 다시 묻는다 | ID 토큰 유효 시간 줄이기, 변경 작업 승인에도 Cognito 재확인 |
+| R13 | 탐지가 놓친 지시문을 따른 요청은 판단 단계에서 주의까지만 보이고, 그마저 감시 장치 약화일 때만이다 | 중간 | 요청 값의 출처(실패)는 탐지된 결과 안에서만 본다. 탐지가 놓친 지시문으로 감시 장치가 아닌 자원(EC2 중지 등)을 바꾸면 역추적은 모두 정상이다 (근거가 '탐지'라고 보이고, 승인은 여전히 필요하다). 질문 대상과 변경 대상이 다르다는 것만으로는 보지 않는다: 멈춘 인스턴스를 켜 달라는 질문에는 인스턴스 ID가 없어도 정상이라 오탐이 많다 | 의심 여부와 상관없이 모든 도구 결과와 요청 값을 비교하되, 사용자가 고른 대상(질문 · 이전 답변에서 가리킨 자원)은 빼기 |
 
 ## 6. 설계 판단
 

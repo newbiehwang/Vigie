@@ -1533,6 +1533,42 @@
   overflow-wrap: anywhere;
 }
 
+/* 판정의 근거: 기록(실선) · 탐지(점선, 놓칠 수 있다) · 앱 밖(옅게) */
+.audit-trace-basis {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.audit-trace-basis-title {
+  margin-right: 2px;
+}
+
+.audit-trace-basis-chip {
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-2);
+  background: var(--surface);
+  cursor: help;
+}
+
+.audit-trace-basis-chip.is-detection {
+  border-style: dashed;
+}
+
+.audit-trace-basis-chip.is-outside {
+  color: var(--ink-3);
+}
+
+.audit-trace-basis-note {
+  color: var(--ink-3);
+}
+
 .audit-trace-cites {
   margin: 2px 0 0;
   padding: 8px 0 0;

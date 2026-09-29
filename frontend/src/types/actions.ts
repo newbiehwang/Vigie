@@ -8,6 +8,8 @@ export interface TaintedBy {
     tool: string; // 그 결과를 돌려준 도구 (get_logs_insight_query_results 등)
     kinds: string[]; // 찾은 문구의 종류 (services/llm/injection.py)
     callsAgo: number; // 그 결과 뒤로 몇 번째 도구 호출에서 이 변경을 요청했는가 (1이면 바로 다음)
+    // 요청 값 중 이 결과의 글 안에 그대로 있고 사용자의 질문에는 없던 인자 (값이 지시문에서 왔다). 없으면 뺀다
+    matchedArgs?: string[];
 }
 
 export type ActionStatus = 'pending' | 'approved' | 'denied' | 'executing' | 'executed' | 'failed' | 'expired';

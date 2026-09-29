@@ -289,6 +289,11 @@ class AuditLog:
             # 이 변경을 요청하기 전에 같은 질문에서 읽은 의심 결과 (체류층, approvals 모듈 설명). 요청 행에만 있다
             "taintedBy": (tainted_view(action.get("taintedBy")) or None) if event == "requested" else None,
         }
+        if event == "requested":
+            # 대상 · 지금 값 · 바뀔 값 (미리 보기). 역추적이 '사용자가 묻지 않은 방어 약화'를 이것으로 본다 (audit_trace.py)
+            for key in ("target", "before", "after"):
+                if action.get(key) is not None:
+                    record[key] = str(action[key])
         if result:
             record["result"] = _clip(self._redactor.secrets_only(result), ERROR_LIMIT)
         # 실행했으면 CloudTrail 이벤트를 찾을 단서 (요청 ID가 CloudTrail 이벤트의 requestID와 같다)

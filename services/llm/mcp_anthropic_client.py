@@ -18,6 +18,9 @@ import tool_search
 MAX_TOKENS = 16000
 # 승인 요청에 적는 '먼저 읽은 의심 결과'의 최대 수 (최근 것부터). 승인 테이블 항목 크기를 제한한다
 MAX_TAINTED = 5
+# 요청 값의 출처 (체류 신호의 matchedArgs): 이 길이 이상인 글 값만 의심 결과 안에 그대로 있는지 본다.
+# 짧은 값("1", "true")은 어느 글에나 있어 출처를 말해 주지 못한다. 로그 그룹 · 알람 · 버킷 이름, 인스턴스 ID 등이 대상이다
+MIN_MATCHED_VALUE = 6
 # Messages API 연결을 컨테이너 안에서 다시 쓴다 (요청마다 TLS 연결을 새로 맺지 않게). requests.post는 부를 때마다
 # 새 세션을 만들어 연결을 버린다. 제한 시간: 연결 10초, 응답을 기다리는 시간 300초 (사고가 긴 답변도 끊기지 않게)
 HTTP = requests.Session()
@@ -94,9 +97,11 @@ class AnthropicMCPClient:
         self.approvals = None
         # 요청마다 llm_service가 넣어 주는 결과물 목록 (artifacts.Artifacts). 없으면 예전처럼 주소를 모델에 넘긴다
         self.artifacts = None
-        # 이번 질문에서 부른 도구 수와, 모델이 이미 읽은 의심 결과 (체류 신호, invoke_with_tools가 질문마다 비운다)
+        # 이번 질문에서 부른 도구 수와, 모델이 이미 읽은 의심 결과 (체류 신호, invoke_with_tools가 질문마다 비운다).
+        # 의심 결과의 글(text)은 요청 값의 출처를 보려고 메모리에만 둔다 (저장하지 않는다). 질문은 가린 글
         self._tool_calls = 0
         self._seen_suspicious: List[Dict[str, Any]] = []
+        self._question = ""
         # 요청마다 llm_service가 넣어 주는 시간 기록 (timing.Stopwatch). 모델 호출·도구마다 걸린 시간을 모은다
         self.timer = None
         # 요청마다 llm_service가 넣어 주는 요청자의 권한 (tool_access.role_of). 관리자가 아니면 관리자 전용 도구를
@@ -136,11 +141,29 @@ class AnthropicMCPClient:
         """MCP tools/list가 알려 준 위험도 (mcp/lambda_mcp/risk.py). 모르는 도구는 변경 도구로 본다."""
         return risk_of(self._tool_definition(name))
 
-    def _tainted_by(self, call_no: int) -> List[Dict[str, Any]]:
+    def _tainted_by(self, call_no: int, tool_input: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """체류 신호: 이 변경 요청 전에 모델이 읽은 의심 결과와, 그 뒤로 몇 번째 도구 호출인지 (approvals 모듈 설명).
-        같은 응답에서 함께 부른 도구의 결과는 모델이 아직 보지 못했으므로 넣지 않는다 (배치가 끝난 뒤에 더한다)."""
-        return [{"toolUseId": seen["toolUseId"], "tool": seen["tool"], "kinds": seen["kinds"],
-                 "callsAgo": call_no - seen["callNo"]} for seen in self._seen_suspicious]
+        같은 응답에서 함께 부른 도구의 결과는 모델이 아직 보지 못했으므로 넣지 않는다 (배치가 끝난 뒤에 더한다).
+        matchedArgs: 요청 값 중 그 의심 결과 안에 그대로 있고 사용자의 질문에는 없는 인자 (_matched_args)."""
+        entries = []
+        for seen in self._seen_suspicious:
+            entry = {"toolUseId": seen["toolUseId"], "tool": seen["tool"], "kinds": seen["kinds"],
+                     "callsAgo": call_no - seen["callNo"]}
+            matched = self._matched_args(tool_input, seen.get("text", ""))
+            if matched:
+                entry["matchedArgs"] = matched
+            entries.append(entry)
+        return entries
+
+    def _matched_args(self, tool_input: Optional[Dict[str, Any]], suspicious_text: str) -> List[str]:
+        """요청 값의 출처: 의심 문구가 든 결과 안에 그대로 있고, 사용자의 질문에는 없는 글 값의 인자 이름.
+        이런 값은 사용자가 아니라 그 결과(로그 · 문서에 심긴 지시)에서 왔다. 결과는 모델이 읽은 그대로(가린 글)이고
+        모델이 쓴 값도 가명이라 같은 글끼리 비교한다. 도구 결과 어디서든 값을 가져오는 것은 정상이라(멈춘 인스턴스의
+        ID를 진단 결과에서 읽는 등) 의심 결과만 본다."""
+        question = self._question.lower()
+        return sorted(name for name, value in (tool_input or {}).items()
+                      if isinstance(value, str) and len(value.strip()) >= MIN_MATCHED_VALUE
+                      and value in suspicious_text and value.lower() not in question)
 
     def _request_approval(self, tool_name: str, tool_input: Dict[str, Any],
                           tainted_by: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
@@ -902,6 +925,7 @@ class AnthropicMCPClient:
         else:
             self.messages = []
         prompt = self.redactor.text(prompt)
+        self._question = prompt
 
         # 디버그 로그 초기화
         self.debug_log = []
@@ -1105,6 +1129,7 @@ class AnthropicMCPClient:
 
                 # Append user tool_result message in the required format
                 tool_results_list = []
+                read_texts = {}  # 모델이 읽는 결과 글 (가린 글). 의심 결과만 체류 신호에 남긴다
                 for res in tool_results:
                     # determine content value and ensure it's a string
                     if "error" in res:
@@ -1117,12 +1142,13 @@ class AnthropicMCPClient:
                         else:
                             content_value = str(result)
 
+                    read_texts[res["tool_id"]] = self.redactor.text(content_value)
                     tool_results_list.append({
                         "type": "tool_result",
                         "tool_use_id": res["tool_id"],
                         # 도구 결과가 계정 밖(Claude API)으로 나가는 곳이다. 여기서 반드시 가리고,
                         # 데이터 영역으로 감싸 지시로 읽히지 않게 한다 (의심 문구가 있으면 경고를 붙인다)
-                        "content": injection.wrap(res["name"], self.redactor.text(content_value),
+                        "content": injection.wrap(res["name"], read_texts[res["tool_id"]],
                                                   res.get("suspicious") or [])
                     })
                 # Save as a single user message with a list of tool_result objects
@@ -1133,7 +1159,7 @@ class AnthropicMCPClient:
                 # 이제 모델이 이 결과들을 읽는다: 의심 결과를 이후 변경 요청의 체류 신호로 남긴다 (최근 것 몇 개만)
                 self._seen_suspicious = (self._seen_suspicious + [
                     {"toolUseId": res["tool_id"], "tool": res["name"], "kinds": res["suspicious"],
-                     "callNo": res["call_no"]}
+                     "callNo": res["call_no"], "text": read_texts[res["tool_id"]]}
                     for res in tool_results if res.get("suspicious")])[-MAX_TAINTED:]
                 continue  # proceed to next iteration
 
@@ -1180,7 +1206,7 @@ class AnthropicMCPClient:
                         results[index] = self._finish_tool(prepared, tool_access.denied_result(prepared["name"]))
                     elif prepared["risk"] == "write":
                         result = self._request_approval(prepared["name"], prepared["input"],
-                                                        self._tainted_by(prepared["call_no"]))
+                                                        self._tainted_by(prepared["call_no"], prepared["input"]))
                         results[index] = self._finish_tool(prepared, result)
                     else:
                         arguments = self.redactor.restore(prepared["input"]) if prepared["restore"] else prepared["input"]
