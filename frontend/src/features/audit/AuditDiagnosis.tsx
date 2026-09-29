@@ -1,8 +1,8 @@
-// 서비스 진단 층 그림: 진단 도구(diagnoseService) 기록의 팝업창 맨 위에, 처리 단계 고리 대신 보인다.
+// 서비스 진단 층 그림(제목 '진단 단계'): 진단 도구(diagnoseService) 기록의 팝업창 맨 위에, 처리 단계 고리 대신 보인다.
 // 판정은 서버의 진단 절차(mcp/lambda_mcp/diagnose.py)가 낸 그대로이고, 여기서는 일곱 층을 위에서 아래로 쌓아 그린다.
 // 모양 · 색 · 움직임은 처리 단계 그림(AuditLayers.tsx)을 따른다: 왼쪽 그림, 오른쪽 설명 칸.
 //
-//   진단 층  Application Load Balancer · web-alb · 최근 1시간              ● 원인 2  ● 의심 1  ● 정상 4
+//   진단 단계  Application Load Balancer · web-alb · 최근 1시간              ● 원인 2  ● 의심 1  ● 정상 4
 //    ╲ L1 AWS ╱                          [L5] 인스턴스·실행 환경  대상 EC2              ● 원인
 //    ╲ L2 리소스 변경 기록 ╱               대상이 실행되나. 인스턴스 상태, OS 상태 검사, …   ← 이 층이 보는 것
 //    ╲ L3 네트워크 경로 ╱                  ┃ 인스턴스 2대 모두가 실행 중이 아닙니다           ← 판정(왼쪽 선 색 = 판정)
@@ -136,7 +136,7 @@ export function AuditDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
         <section className="audit-layers audit-diag" aria-labelledby="audit-diag-title">
             <div className="audit-layers-head">
                 <h4 id="audit-diag-title" className="audit-layers-title">
-                    진단 층
+                    진단 단계
                     <span className="audit-diag-target">
                         {diagnosis.serviceName} · <code>{diagnosis.resource}</code>
                         {diagnosis.target ? (
@@ -166,7 +166,7 @@ export function AuditDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
                     className={`audit-stack${picked ? ' has-pick' : ''}`}
                     role="tablist"
                     aria-orientation="vertical"
-                    aria-label={`${diagnosis.serviceName} 진단 층. 층을 고르면 오른쪽에 그 층의 설명이 보입니다`}
+                    aria-label={`${diagnosis.serviceName} 진단 단계. 층을 고르면 오른쪽에 그 층의 설명이 보입니다`}
                     ref={stackRef}
                 >
                     {layers.map((layer, index) => {
