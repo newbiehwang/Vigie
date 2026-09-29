@@ -1628,7 +1628,8 @@
 
 /* ---------------------------------------------------------------- 서비스 진단 층 그림 (AuditDiagnosis.tsx)
    진단 도구 기록의 팝업창 맨 위 (처리 단계 고리 대신). 위는 일곱 층의 그림(판정만), 아래는 고른 층 하나의 설명.
-   그림: L1 → L7을 같은 폭의 칸으로 가로 한 줄에. 칸들은 탭이고, 고른 칸은 주 색 테두리와 옅은 주 색 바탕.
+   그림: L1 → L7을 같은 폭의 칸으로 한 줄에 네 층씩 두 줄. 칸 사이는 → 화살표, 줄 끝에서 다음 줄 처음으로는 꺾인 화살표.
+   칸들은 탭이고, 고른 칸은 주 색 테두리와 옅은 주 색 바탕.
    상자는 칸 한 겹만 둔다. 판정은 배지(점과 글자) 하나로만 보이고, 빨강·노랑은 점에만 쓴다. 해당 없음은 점선 */
 .audit-diag-target {
   margin-left: 8px;
@@ -1654,21 +1655,96 @@
   border-radius: 50%;
 }
 
-/* 그림: 일곱 칸을 같은 폭으로 한 줄에 */
+/* 그림: 칸 · 화살표 · 칸 · 화살표 · 칸 · 화살표 · 칸 (한 줄에 네 층, AuditDiagnosis의 PER_ROW).
+   칸 줄 사이의 줄에는 꺾인 화살표가 들어간다. 칸 줄은 같은 높이 (판정이 바닥에 맞는다) */
 .audit-diag-map {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-auto-rows: auto;
   margin-top: 12px;
+  color: var(--slate);
 }
 
-/* 칸: 흰 바탕 버튼. 번호 · 이름 · 판정을 위에서 아래로 (판정은 바닥에 붙어 옆 칸들과 같은 높이) */
+/* → 화살표: 칸 사이 가운데 */
+.audit-diag-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+}
+
+.audit-diag-arrow svg {
+  display: block;
+}
+
+/* 꺾인 화살표 세 조각. 가로선은 세 조각 모두 위에서 12px ~ 14px를 지난다 (선 굵기 2px = → 화살표와 같다).
+   퍼센트나 소수 굵기로 두면 조각마다 반올림이 달라 이음매에서 어긋나므로 정수 픽셀로 맞춘다.
+   is-start: 윗줄 마지막 칸 가운데에서 내려와 왼쪽으로 꺾임 · is-mid: 가로줄 · is-end: 꺾여 아랫줄 첫 칸 가운데로 내려가며 화살촉 */
+.audit-diag-wrap {
+  position: relative;
+  height: 26px;
+}
+
+.audit-diag-wrap::before {
+  content: "";
+  position: absolute;
+  box-sizing: border-box;
+  border: 0 solid currentColor;
+}
+
+.audit-diag-wrap.is-start::before {
+  top: 0;
+  left: 0;
+  right: calc(50% - 1px);
+  height: 14px;
+  border-right-width: 2px;
+  border-bottom-width: 2px;
+  border-bottom-right-radius: 8px;
+}
+
+.audit-diag-wrap.is-mid::before {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 14px;
+  border-bottom-width: 2px;
+}
+
+.audit-diag-wrap.is-end::before {
+  top: 12px;
+  left: calc(50% - 1px);
+  right: 0;
+  bottom: 1px;
+  border-left-width: 2px;
+  border-top-width: 2px;
+  border-top-left-radius: 8px;
+}
+
+/* 화살촉: 아랫줄 첫 칸 위에서 아래를 가리킨다 */
+.audit-diag-wrap.is-end::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 6px;
+  height: 6px;
+  border: 0 solid currentColor;
+  border-right-width: 2px;
+  border-bottom-width: 2px;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+/* 칸: 흰 바탕 버튼. 번호와 이름 한 줄, 판정은 그 아래 바닥에 (같은 줄의 칸들과 같은 높이) */
 .audit-diag-node {
   display: grid;
-  grid-template-rows: auto 1fr auto;
-  justify-items: start;
-  gap: 6px;
-  padding: 10px 10px 9px;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+  grid-template-areas:
+    "id name"
+    "badge badge";
+  align-items: start;
+  gap: 8px;
+  padding: 10px 12px 9px;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1733,7 +1809,12 @@
   overflow-wrap: anywhere;
 }
 
+.audit-diag-node .audit-diag-id { grid-area: id; }
+.audit-diag-node .audit-diag-name { grid-area: name; align-self: center; }
+
 .audit-diag-node .badge {
+  grid-area: badge;
+  justify-self: start;
   padding: 0;
 }
 
@@ -1811,7 +1892,7 @@
 }
 
 .audit-diag-lead code {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-3);
   overflow-wrap: anywhere;
 }
@@ -1886,13 +1967,21 @@
   color: var(--ink-2);
 }
 
-/* 좁은 팝업창: 일곱 칸을 그대로 한 줄에 두되, 칸에는 번호와 판정 점만 (이름과 판정 글은 아래 설명 제목에 있다) */
+/* 좁은 팝업창: 두 줄 그대로, 칸에는 번호와 판정만 (층 이름은 아래 설명 제목에 있다) */
 @media (max-width: 640px) {
-  .audit-diag-map {
-    gap: 4px;
+  .audit-diag-arrow {
+    padding: 0 2px;
+  }
+
+  .audit-diag-arrow svg {
+    width: 12px;
   }
 
   .audit-diag-node {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "id"
+      "badge";
     justify-items: center;
     gap: 6px;
     padding: 8px 2px 9px;
@@ -1902,15 +1991,13 @@
     display: none;
   }
 
-  .audit-diag-node .audit-diag-id {
-    min-width: 0;
+  .audit-diag-node .audit-diag-id,
+  .audit-diag-node .badge {
+    justify-self: center;
   }
 
-  /* 판정은 점만: 글자는 숨기고(스크린 리더는 칸의 이름으로 읽는다) 점은 남긴다 */
   .audit-diag-node .badge {
-    gap: 0;
-    height: 10px;
-    font-size: 0;
+    font-size: 11px;
   }
 
   .audit-diag-checks li {
