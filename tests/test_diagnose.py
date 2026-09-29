@@ -63,6 +63,51 @@ def test_procedure_finds_the_planted_cause(diagnose, world, scenario):
             assert check["status"] == "skip" or check["evidence"], (item["id"], check)
 
 
+
+# ---------------------------------------------------------------- 장애 지표는 장애가 남은 동안만 다시 넣는다 (local/world.py refresh)
+def _written(world, monkeypatch):
+    """refresh가 다시 넣는 지표 이름들을 모은다 (실제로 CloudWatch에 넣지 않고)."""
+    names = []
+    monkeypatch.setattr(w, "_write_metric", lambda _world, _ns, name, *_args, **_kw: names.append(name))
+    w.refresh(world)
+    return names
+
+
+def test_fault_metrics_stop_once_the_fault_is_fixed(diagnose, world, monkeypatch):
+    """대상을 다시 켜면(대화에서 승인) ALB 5xx를 더 넣지 않는다. 넣어 둔 값은 한 시간 안에 진단 창 밖으로 밀려난다."""
+    stop_targets(world)
+    assert {"HTTPCode_ELB_5XX_Count", "HTTPCode_ELB_503_Count"} <= set(_written(world, monkeypatch))
+    boto3.client("ec2", region_name=REGION).start_instances(InstanceIds=list(world["instances"].values()))
+    after = _written(world, monkeypatch)
+    assert "HTTPCode_ELB_5XX_Count" not in after and "HTTPCode_ELB_503_Count" not in after
+    assert "RequestCount" in after  # 평소 지표는 그대로 다시 넣는다
+    # 한 번 풀린 장애 지표는 잊는다 (다시 멈춰도 되살아나지 않는다: 시나리오를 다시 심을 때 넣는다)
+    assert not any(name == "HTTPCode_ELB_5XX_Count" for (_ns, name, _dims) in world["metrics"])
+
+
+def test_security_group_fault_metrics_follow_the_rule(diagnose, world, monkeypatch):
+    block_target_sg(world)
+    assert "HTTPCode_ELB_504_Count" in _written(world, monkeypatch)
+    boto3.client("ec2", region_name=REGION).authorize_security_group_ingress(GroupId=world["web_sg"], IpPermissions=[
+        {"IpProtocol": "tcp", "FromPort": 80, "ToPort": 80, "UserIdGroupPairs": [{"GroupId": world["alb_sg"]}]}])
+    assert "HTTPCode_ELB_504_Count" not in _written(world, monkeypatch)
+
+
+def test_fixed_fault_restores_the_usual_value(diagnose, world, monkeypatch):
+    """평소 값을 덮어쓴 장애 지표는 장애가 풀리면 평소 값으로 돌아간다."""
+    broken = {"now": True}
+    instance_id = world["instances"]["web-1"]
+    w.put_metric(world, "AWS/EC2", "CPUCreditBalance", 0, {"InstanceId": instance_id}, while_=lambda _: broken["now"])
+    key = ("AWS/EC2", "CPUCreditBalance", (("InstanceId", instance_id),))
+    assert world["metrics"][key].value == 0
+    broken["now"] = False
+    values = []
+    monkeypatch.setattr(w, "_write_metric", lambda _world, _ns, name, value, dims, *_a, **_k:
+                        values.append(value) if dims == {"InstanceId": instance_id} and name == "CPUCreditBalance"
+                        else None)
+    w.refresh(world)
+    assert values == [120] and world["metrics"][key].while_ is None
+
 def test_scenarios_have_unique_names_and_filled_questions(world):
     """로컬 재현(local/scenario.py)이 이름으로 고르고, 질문의 자리 표시를 채워 보여 준다."""
     assert len(SCENARIOS) == len(w.BY_NAME) == 43
