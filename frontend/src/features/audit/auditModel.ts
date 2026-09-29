@@ -78,7 +78,8 @@ export const ACTION_EVENTS: Record<string, { label: string; className: string }>
 
 // 가린 값의 종류 → 화면에 보일 이름 (services/llm/redaction.py)
 export const REDACTED_LABELS: Record<string, string> = {
-    aws_access_key: 'AWS 액세스 키',
+    aws_access_key: 'AWS 액세스 키', // 예전 기록: 키 ID를 비밀 값으로 지우던 때
+    aws_access_key_id: 'AWS 액세스 키 ID',
     aws_secret_key: 'AWS 비밀 키',
     aws_session_token: 'AWS 세션 토큰',
     anthropic_api_key: 'Anthropic 키',

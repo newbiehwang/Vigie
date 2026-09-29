@@ -1,7 +1,7 @@
 """민감정보 가리기 (redaction.py, mcp_anthropic_client.py, llm_service.py)
 
 - 비밀 값은 [REDACTED:종류]로 바꾸고 되돌리지 않는다
-- 계정 ID·이메일은 요청마다 같은 가명으로 바꾸고, 도구를 부를 때만 원래 값으로 되돌린다
+- 계정 ID·액세스 키 ID·이메일은 요청마다 같은 가명으로 바꾸고, 도구를 부를 때만 원래 값으로 되돌린다
 - 오탐: 요청 ID·바이트 수·커밋 해시·역할 고유 ID 등은 가리지 않는다
 - 적용 위치: Claude로 나가는 질문·이전 대화·도구 결과, 진행 상황, 최종 답변과 추론 데이터
 
@@ -18,6 +18,7 @@ ACCOUNT = "111122223333"  # 이 Lambda의 계정 (AWS 문서 예시 값)
 OTHER_ACCOUNT = "444455556666"
 ACCESS_KEY = "AK" + "IA" + "Z7QW4ERTY6UIOP2A"
 TEMP_KEY = "AS" + "IA" + "Z7QW4ERTY6UIOP2B"
+KEY_ALIAS = "AKIA********OP2A"  # ACCESS_KEY의 가명 (키 종류와 끝 네 자리)
 SECRET_KEY = "wJalrXUtnFEMI/K7MDENG/" + "bPxRfiCYzEXAMPLEKE"  # 40자
 ANTHROPIC_KEY = "sk-" + "ant-api03-" + "a" * 90
 SLACK_TOKEN = "xo" + "xb-1234567890-0987654321-" + "AbCdEfGhIjKlMnOp"
@@ -37,8 +38,6 @@ def redaction(aws):
 # ---------------------------------------------------------------- 비밀 값
 
 @pytest.mark.parametrize("secret, kind", [
-    (ACCESS_KEY, "aws_access_key"),
-    (TEMP_KEY, "aws_access_key"),
     (ANTHROPIC_KEY, "anthropic_api_key"),
     (SLACK_TOKEN, "slack_token"),
     (SLACK_WEBHOOK, "slack_webhook"),
@@ -68,7 +67,7 @@ def test_values_followed_by_korean_are_masked(redaction):
     # 한국어 조사가 값 바로 뒤에 붙는 경우 (유니코드 기준이면 한국어도 단어 글자라 경계가 없어 놓친다)
     redactor = redaction.Redactor([ACCOUNT])
     assert (redactor.text(f"키 {ACCESS_KEY}가 {ACCOUNT}에서 alice@example.com으로 보였다")
-            == "키 [REDACTED:aws_access_key]가 ********3333에서 a***@example.com으로 보였다")
+            == f"키 {KEY_ALIAS}가 ********3333에서 a***@example.com으로 보였다")
 
 
 def test_password_in_connection_url_is_masked(redaction):
@@ -149,6 +148,47 @@ def test_aliases_with_same_ending_stay_distinct(redaction):
     assert redactor.text(masked) == masked
 
 
+def test_access_key_ids_get_aliases_and_are_restored_for_diagnosis(redaction):
+    # 액세스 키 ID는 비밀이 아니라 키의 이름이다. "키 AKIA…가 유출됐대요"에 진단 도구가 그 키를 조회할 수 있어야 한다
+    redactor = redaction.Redactor()
+    masked = redactor.text(f"액세스 키 {ACCESS_KEY}가 유출됐대요. 임시 키 {TEMP_KEY}도 보여요")
+    assert masked == f"액세스 키 {KEY_ALIAS}가 유출됐대요. 임시 키 ASIA********OP2B도 보여요"
+    assert ACCESS_KEY not in masked and TEMP_KEY not in masked
+    assert redactor.counts == {"aws_access_key_id": 2}
+    # 모델이 가명으로 진단을 부르면 도구는 원래 키 ID를 받는다
+    assert (redactor.restore({"service": "credential", "resource": KEY_ALIAS})
+            == {"service": "credential", "resource": ACCESS_KEY})
+    # 같은 키는 같은 가명, 이미 가린 글자는 다시 가려도 그대로
+    assert redactor.text(f"AccessKeyId: {ACCESS_KEY}") == f"AccessKeyId: {KEY_ALIAS}"
+    assert redactor.text(masked) == masked and redactor.counts == {"aws_access_key_id": 2}
+
+
+def test_access_key_id_alias_does_not_collide_with_account_alias(redaction):
+    # 끝 네 자리가 같은 계정 ID와 키 ID: 가명이 달라서 각자 제 값으로 돌아간다
+    key = "AK" + "IA" + "Z7QW4ERTY6UI3333"
+    redactor = redaction.Redactor([ACCOUNT])
+    masked = redactor.text(f"{ACCOUNT} {key}")
+    assert masked == "********3333 AKIA********3333"
+    assert redactor.restore(masked) == f"{ACCOUNT} {key}"
+
+
+def test_secret_key_is_still_masked_next_to_its_key_id(redaction):
+    # 키 ID는 가명, 짝이 되는 비밀 액세스 키는 되돌릴 수 없게 지운다
+    redactor = redaction.Redactor()
+    masked = redactor.text(f"aws_access_key_id = {ACCESS_KEY}\naws_secret_access_key = {SECRET_KEY}")
+    assert masked == f"aws_access_key_id = {KEY_ALIAS}\naws_secret_access_key = [REDACTED:aws_secret_key]"
+    assert redactor.restore(masked) == f"aws_access_key_id = {ACCESS_KEY}\naws_secret_access_key = [REDACTED:aws_secret_key]"
+
+
+def test_secrets_only_keeps_identifiers_for_the_audit_log(redaction):
+    # 감사 로그는 "어느 키를 조회했나"를 추적해야 하므로 키 ID·계정 ID·이메일은 남기고 비밀 값만 지운다
+    redactor = redaction.Redactor([ACCOUNT])
+    text = f"{ACCOUNT} {ACCESS_KEY} alice@example.com aws_secret_access_key={SECRET_KEY}"
+    assert (redactor.secrets_only(text)
+            == f"{ACCOUNT} {ACCESS_KEY} alice@example.com aws_secret_access_key=[REDACTED:aws_secret_key]")
+    assert not redactor.counts
+
+
 def test_aliases_are_per_request(redaction):
     # 요청마다 새 Redactor를 쓴다: 다른 요청의 가명으로는 원래 값을 얻을 수 없다
     first = redaction.Redactor()
@@ -160,7 +200,7 @@ def test_redact_walks_nested_values_without_changing_the_input(redaction):
     redactor = redaction.Redactor()
     value = {"steps": [{"error": f"Invalid key {ACCESS_KEY}", "ms": 12, "ok": False}]}
     original = copy.deepcopy(value)
-    assert redactor.redact(value) == {"steps": [{"error": "Invalid key [REDACTED:aws_access_key]",
+    assert redactor.redact(value) == {"steps": [{"error": f"Invalid key {KEY_ALIAS}",
                                                  "ms": 12, "ok": False}]}
     assert value == original
 
@@ -207,7 +247,7 @@ def client_run(aws, monkeypatch):
         if name == "describe_log_groups":
             return {"content": [{"type": "text", "text": json.dumps({"logGroups": [{
                 "arn": f"arn:aws:logs:us-east-1:{ACCOUNT}:log-group:/aws/lambda/vigie-llm-dev",
-                "env": f"AWS_ACCESS_KEY_ID={ACCESS_KEY}"}]})}]}
+                "env": f"AWS_ACCESS_KEY_ID={ACCESS_KEY} AWS_SECRET_ACCESS_KEY={SECRET_KEY}"}]})}]}
         return {"isError": True, "content": [{"type": "text", "text": f"AccessDenied for {ACCESS_KEY}"}]}
 
     monkeypatch.setattr(mcp_anthropic_client.HTTP, "post", fake_post)
@@ -230,14 +270,15 @@ def test_nothing_sensitive_is_sent_to_claude(client_run):
     _, sent, _, _ = client_run
     for payload in sent:
         body = json.dumps(payload, ensure_ascii=False)
-        assert ACCOUNT not in body and ACCESS_KEY not in body
+        assert ACCOUNT not in body and ACCESS_KEY not in body and SECRET_KEY not in body
     last = sent[-1]["messages"]
     # 질문과 이전 대화도 가린다
-    assert last[0]["content"] == "내 키는 [REDACTED:aws_access_key]"
+    assert last[0]["content"] == f"내 키는 {KEY_ALIAS}"
     assert last[2]["content"] == "********3333 계정 로그 봐줘"
-    # 도구 결과: 계정 ID는 가명, 키는 [REDACTED]
+    # 도구 결과: 계정 ID·액세스 키 ID는 가명, 비밀 키는 [REDACTED]
     tool_result = last[4]["content"][0]["content"]
-    assert ALIAS_ARN in tool_result and "[REDACTED:aws_access_key]" in tool_result
+    assert ALIAS_ARN in tool_result and KEY_ALIAS in tool_result
+    assert "[REDACTED:aws_secret_key]" in tool_result
 
 
 def test_thinking_blocks_in_history_are_sent_unchanged(client_run):
@@ -255,7 +296,7 @@ def test_progress_does_not_keep_sensitive_values(client_run):
     _, _, _, client = client_run
     steps = json.dumps(client.progress.steps, ensure_ascii=False)
     assert ACCOUNT not in steps and ACCESS_KEY not in steps
-    assert client.progress.steps[-1]["error"] == "AccessDenied for [REDACTED:aws_access_key]"
+    assert client.progress.steps[-1]["error"] == f"AccessDenied for {KEY_ALIAS}"
 
 
 # ---------------------------------------------------------------- 적용 위치: 최종 답변과 추론 데이터
@@ -284,11 +325,11 @@ def test_llm1_answer_and_inference_are_redacted(aws, monkeypatch):
     response = llm.handle_llm1_with_mcp({"text": "알람 알려줘"}, "https://test.abc.amplifyapp.com", caller_id="alice")
     result = json.loads(response["body"])
 
-    assert result["answer"] == "계정 ********3333에서 키 [REDACTED:aws_access_key]가 보입니다."
+    assert result["answer"] == f"계정 ********3333에서 키 {KEY_ALIAS}가 보입니다."
     inference = json.dumps(result["inference"], ensure_ascii=False)
     assert ACCOUNT not in inference and ACCESS_KEY not in inference
-    assert result["inference"]["tools_used"][0]["error"] == "AccessDenied for [REDACTED:aws_access_key]"
-    assert result["inference"]["redacted"] == {"aws_access_key": 1, "account_id": 1}
+    assert result["inference"]["tools_used"][0]["error"] == f"AccessDenied for {KEY_ALIAS}"
+    assert result["inference"]["redacted"] == {"aws_access_key_id": 1, "account_id": 1}
     # 요청마다 새 Redactor를 클라이언트에 넣는다
     assert fake.redactor is not None and fake.redactor.counts == result["inference"]["redacted"]
 

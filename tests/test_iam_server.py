@@ -94,14 +94,18 @@ def test_roles_and_inline_policies_can_be_read(iam_env):
     assert "logs:DescribeLogGroups" in policy
 
 
-def test_access_key_ids_in_results_are_redacted_before_claude(iam_env):
-    # get_user는 액세스 키 ID도 돌려준다. Claude로 보내기 전에 가린다 (redaction.py, PR 1)
+def test_access_key_ids_in_results_are_pseudonymized_before_claude(iam_env):
+    # get_user는 액세스 키 ID도 돌려준다. Claude로 보내기 전에 가명으로 바꾸고, 그 가명으로 다시 조회하면 되돌린다
     env, _ = iam_env
     raw = text_of(env["mcp"].call_admin("get_user", {"user_name": "alice"}))
     key_id = boto3.client("iam").list_access_keys(UserName="alice")["AccessKeyMetadata"][0]["AccessKeyId"]
     assert key_id in raw
     from redaction import Redactor
-    assert key_id not in Redactor().text(raw)
+    redactor = Redactor()
+    alias = key_id[:4] + "********" + key_id[-4:]
+    masked = redactor.text(raw)
+    assert key_id not in masked and alias in masked
+    assert redactor.restore({"resource": alias}) == {"resource": key_id}
 
 
 def test_mcp_role_has_no_iam_write_permissions():

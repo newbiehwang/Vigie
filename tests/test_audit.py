@@ -1,7 +1,7 @@
 """감사 로그 (audit.py, mcp_anthropic_client.py, llm_service.py, lambda_function.py, llm.yaml)
 
 - 도구 호출 한 번, 질문 하나마다 누가·무엇을·어떤 입력으로 했는지 남긴다
-- 감사 로그에는 도구가 실제로 받은 값(계정 ID 원래 값)을 남기고, 비밀 값은 남기지 않는다
+- 감사 로그에는 도구가 실제로 받은 값(계정 ID·액세스 키 ID 원래 값)을 남기고, 비밀 값은 남기지 않는다
 - 추가만 한다 (덮어쓰지 않는다). 기록에 실패해도 답변은 만든다
 - 조회: 일반 사용자는 자기 기록만, admins 그룹은 모든 사람의 기록
 
@@ -21,6 +21,8 @@ AUDIT_TABLE = "vigie-audit-test"
 AUDIT_LOG_GROUP = "/vigie/test/audit"
 ACCOUNT = "111122223333"
 ACCESS_KEY = "AK" + "IA" + "Z7QW4ERTY6UIOP2A"
+KEY_ALIAS = "AKIA********OP2A"  # 모델이 보는 ACCESS_KEY의 가명
+SECRET_KEY = "wJalrXUtnFEMI/K7MDENG/" + "bPxRfiCYzEXAMPLEKE"  # 40자
 ORIGIN = "https://test.abc.amplifyapp.com"
 REQUEST_ID = "0f8fad5b-d9cb-469f-a165-70867728950e"
 
@@ -85,7 +87,8 @@ def client_run(audit_env, monkeypatch):
         {"content": [{"type": "tool_use", "id": "toolu_1", "name": "describe_log_groups",
                       "input": {"log_group_name_prefix": "/aws/lambda"}}], "usage": {}},
         {"content": [{"type": "tool_use", "id": "toolu_2", "name": "analyze_log_group",
-                      "input": {"log_group_arn": ALIAS_ARN, "note": f"key {ACCESS_KEY}"}}], "usage": {}},
+                      "input": {"log_group_arn": ALIAS_ARN,
+                                "note": f"key {KEY_ALIAS} secret_access_key={SECRET_KEY}"}}], "usage": {}},
         {"content": [{"type": "text", "text": "오류가 없습니다."}], "usage": {}},
     ]
     sent = []
@@ -96,8 +99,9 @@ def client_run(audit_env, monkeypatch):
 
     def fake_call_tool(name, args):
         if name == "describe_log_groups":
-            return {"content": [{"type": "text", "text": REAL_ARN}]}
-        return {"isError": True, "content": [{"type": "text", "text": f"AccessDenied for {ACCESS_KEY}"}]}
+            return {"content": [{"type": "text", "text": f"{REAL_ARN} {ACCESS_KEY}"}]}
+        return {"isError": True, "content": [{"type": "text",
+                                              "text": f"AccessDenied for {ACCESS_KEY} secret_access_key={SECRET_KEY}"}]}
 
     monkeypatch.setattr(mcp_anthropic_client.HTTP, "post", fake_post)
     client = mcp_anthropic_client.AnthropicMCPClient(
@@ -124,9 +128,12 @@ def test_each_tool_call_is_recorded_with_the_value_the_tool_received(client_run)
     assert first["status"] == "ok" and first["resultChars"] > 0 and first["ms"] >= 0
     assert first["requestId"] == REQUEST_ID and first["sessionId"] == "s1" and first["email"] == "alice@example.com"
     assert first["at"].endswith("#toolu_1") and first["day"] == first["at"][:10]
-    # 모델은 가명(********3333)을 줬지만, 감사 로그에는 도구가 실제로 받은 ARN을 남긴다. 비밀 값은 남기지 않는다
-    assert json.loads(second["input"]) == {"log_group_arn": REAL_ARN, "note": "key [REDACTED:aws_access_key]"}
-    assert second["status"] == "error" and second["error"] == "AccessDenied for [REDACTED:aws_access_key]"
+    # 모델은 가명(********3333, AKIA********OP2A)을 줬지만, 감사 로그에는 도구가 실제로 받은 값을 남긴다.
+    # 비밀 값은 남기지 않는다
+    assert json.loads(second["input"]) == {"log_group_arn": REAL_ARN,
+                                           "note": f"key {ACCESS_KEY} secret_access_key=[REDACTED:aws_secret_key]"}
+    assert second["status"] == "error"
+    assert second["error"] == f"AccessDenied for {ACCESS_KEY} secret_access_key=[REDACTED:aws_secret_key]"
 
 
 def test_audit_records_are_also_written_to_cloudwatch_logs(client_run):
@@ -134,7 +141,7 @@ def test_audit_records_are_also_written_to_cloudwatch_logs(client_run):
     assert [r["tool"] for r in records] == ["describe_log_groups", "analyze_log_group"]
     assert all(r["vigie_audit"] is True and r["userId"] == "alice" for r in records)
     assert all("expiresAt" not in r for r in records)
-    assert ACCESS_KEY not in json.dumps(records)
+    assert SECRET_KEY not in json.dumps(records)
     # 실행 환경마다 로그 스트림 하나
     assert len(boto3.client("logs").describe_log_streams(logGroupName=AUDIT_LOG_GROUP)["logStreams"]) == 1
 
@@ -176,16 +183,17 @@ def test_llm1_records_the_request(audit_env, monkeypatch):
     llm = load_service_module("services/llm", "llm_service")
     monkeypatch.setattr(llm, "get_client", lambda *_: FakeClient())
 
-    body = {"text": f"계정 {ACCOUNT}의 키 {ACCESS_KEY} 확인", "requestId": REQUEST_ID, "sessionId": "s1"}
+    body = {"text": f"계정 {ACCOUNT}의 키 {ACCESS_KEY} secret_access_key={SECRET_KEY} 확인",
+            "requestId": REQUEST_ID, "sessionId": "s1"}
     llm.handle_llm1_with_mcp(body, ORIGIN, caller_id="alice", caller_email="alice@example.com")
 
     request = next(i for i in items_of(audit_env, "alice") if i["kind"] == "request")
     assert request["at"].endswith(f"#request#{REQUEST_ID}")
     assert request["status"] == "ok" and request["toolCount"] == 1 and request["source"] == "web"
     assert request["model"] == "claude-sonnet-5" and request["email"] == "alice@example.com"
-    # 질문: 계정 ID는 남기고 비밀 값은 가린다
-    assert request["question"] == f"계정 {ACCOUNT}의 키 [REDACTED:aws_access_key] 확인"
-    assert request["redacted"] == {"aws_access_key": 1}
+    # 질문: 계정 ID·액세스 키 ID는 남기고 비밀 값은 가린다
+    assert request["question"] == f"계정 {ACCOUNT}의 키 {ACCESS_KEY} secret_access_key=[REDACTED:aws_secret_key] 확인"
+    assert request["redacted"] == {"aws_access_key_id": 1}
 
 
 def test_slack_requests_are_recorded_by_slack_user(audit_env, monkeypatch):
@@ -204,13 +212,13 @@ def test_failed_request_is_recorded(audit_env, monkeypatch):
 
     class Broken(FakeClient):
         def process_user_input(self, text, system_prompt):
-            raise RuntimeError(f"Anthropic 오류 {ACCESS_KEY}")
+            raise RuntimeError(f"Anthropic 오류 secret_access_key={SECRET_KEY}")
 
     monkeypatch.setattr(llm, "get_client", lambda *_: Broken())
     response = llm.handle_llm1_with_mcp({"text": "알람"}, ORIGIN, caller_id="alice")
     assert response["statusCode"] == 500
     request = items_of(audit_env, "alice")[0]
-    assert request["status"] == "error" and request["error"] == "Anthropic 오류 [REDACTED:aws_access_key]"
+    assert request["status"] == "error" and request["error"] == "Anthropic 오류 secret_access_key=[REDACTED:aws_secret_key]"
 
 
 def test_audit_failure_does_not_stop_the_answer(aws, monkeypatch):
@@ -256,7 +264,7 @@ def test_llm1_records_the_answer_the_user_received(audit_env, monkeypatch):
     answer = f"계정 {ACCOUNT}의 키 {ACCESS_KEY}는 지난주에 만들었습니다. " + "가" * 300
     response = run_llm1(llm, monkeypatch, answer)
     shown = json.loads(response["body"])["answer"]  # 사용자가 받은 답변 (가명·가림 적용 뒤)
-    assert ACCESS_KEY not in shown
+    assert ACCESS_KEY not in shown and KEY_ALIAS in shown
 
     items = items_of(audit_env, "alice")
     request = next(i for i in items if i["kind"] == "request")

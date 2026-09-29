@@ -12,8 +12,8 @@ Vigie는 사용자가 자연어로 AWS 계정을 조회하고 일부를 바꾸�
 |:--|:--|:--|
 | AWS 계정의 리소스 상태 | 로그 그룹 보존 기간, 알람 알림, EC2 인스턴스 상태, S3 퍼블릭 액세스 차단 | 변경 도구 4개가 바꿀 수 있다. 잘못 바뀌면 로그 삭제·장애 알림 누락·서비스 중단 |
 | 계정 안의 데이터 | 로그, 지표, IAM 정책, S3 버킷 목록, 비용, CloudTrail 이벤트, VPC 구성 | 조회 도구가 읽어 계정 밖(Claude API)으로 보낸다 |
-| 비밀 값 | 로그·도구 결과에 섞인 액세스 키, 토큰, 비밀번호, 개인 키 | 계정 밖으로 나가면 안 된다 |
-| 식별자 | 계정 ID, 이메일 | 계정 밖으로 나갈 때 가명으로 바꾼다 |
+| 비밀 값 | 로그·도구 결과에 섞인 비밀 액세스 키, 세션 토큰, API 토큰, 비밀번호, 개인 키 | 계정 밖으로 나가면 안 된다 |
+| 식별자 | 계정 ID, 액세스 키 ID, 이메일 | 계정 밖으로 나갈 때 가명으로 바꾼다 |
 | 감사 기록 | DynamoDB `vigie-audit-<env>`, CloudWatch `/vigie/<env>/audit` | 누가 무엇을 했는지의 근거. 지워지거나 고쳐지면 안 된다 |
 | 자격 증명 | Anthropic API 키(SSM SecureString), Lambda 실행 역할, Cognito 토큰, Slack 서명 비밀 | 새면 위 자산을 모두 우회한다 |
 | 비용 | Anthropic 토큰, Logs Insights 스캔, Cost Explorer API | 남용되면 청구서로 돌아온다 |
@@ -88,8 +88,8 @@ Vigie는 사용자가 자연어로 AWS 계정을 조회하고 일부를 바꾸�
 
 | # | 위협 | 방어 | 테스트 |
 |:--|:--|:--|:--|
-| T23 | 도구 결과의 비밀 값이 Claude API로 나간다 | 비밀 값은 `[REDACTED:종류]`로 바꾸고 되돌리지 않는다. 한국어 조사가 붙어도 잡는다 | `tests/test_redaction.py::test_nothing_sensitive_is_sent_to_claude`, `tests/test_redaction.py::test_secrets_are_replaced_and_not_restored`, `tests/test_redaction.py::test_values_followed_by_korean_are_masked`, `tests/test_iam_server.py::test_access_key_ids_in_results_are_redacted_before_claude` |
-| T24 | 계정 ID·이메일이 Claude API로 나간다 | 요청마다 가명으로 바꾸고, 도구를 부르기 직전에만 원래 값으로 되돌린다 | `tests/test_redaction.py::test_own_account_id_is_masked_anywhere`, `tests/test_redaction.py::test_same_value_gets_same_alias_and_is_restored_for_tool_calls`, `tests/test_redaction.py::test_aliases_are_per_request` |
+| T23 | 도구 결과의 비밀 값이 Claude API로 나간다 | 비밀 값은 `[REDACTED:종류]`로 바꾸고 되돌리지 않는다. 한국어 조사가 붙어도 잡는다. 액세스 키 ID 옆의 비밀 액세스 키도 지운다 | `tests/test_redaction.py::test_nothing_sensitive_is_sent_to_claude`, `tests/test_redaction.py::test_secrets_are_replaced_and_not_restored`, `tests/test_redaction.py::test_values_followed_by_korean_are_masked`, `tests/test_redaction.py::test_secret_key_is_still_masked_next_to_its_key_id` |
+| T24 | 계정 ID·액세스 키 ID·이메일이 Claude API로 나간다 | 요청마다 가명(`********9012`, `AKIA********2QXA`, `a***@example.com`)으로 바꾸고, 도구를 부르기 직전에만 원래 값으로 되돌린다. 액세스 키 ID는 키의 이름이라, 사용자가 "키 AKIA…가 유출됐대요"라고 물으면 진단 도구가 그 키를 조회할 수 있어야 한다 | `tests/test_redaction.py::test_own_account_id_is_masked_anywhere`, `tests/test_redaction.py::test_same_value_gets_same_alias_and_is_restored_for_tool_calls`, `tests/test_redaction.py::test_access_key_ids_get_aliases_and_are_restored_for_diagnosis`, `tests/test_redaction.py::test_aliases_are_per_request`, `tests/test_iam_server.py::test_access_key_ids_in_results_are_pseudonymized_before_claude`, `tests/test_local_claude_code.py::test_leaked_access_key_id_in_the_question_can_be_diagnosed` |
 | T25 | 화면·대화 기록·진행 상황에 민감한 값이 남는다 | 저장 전에 다시 가린다 | `tests/test_redaction.py::test_progress_does_not_keep_sensitive_values`, `tests/test_redaction.py::test_llm1_answer_and_inference_are_redacted` |
 | T26 | 조회 도구가 비밀이 든 데이터를 읽는다 | S3 객체 내용, EC2 사용자 데이터·콘솔 출력·Windows 암호는 코드가 읽지 않고 IAM도 Deny | `tests/test_s3_tools.py::test_code_never_reads_object_contents`, `tests/test_s3_tools.py::test_iam_denies_reading_objects_outside_the_diagram_bucket`, `tests/test_ec2_tools.py::test_code_never_reads_user_data_or_console_output`, `tests/test_ec2_tools.py::test_iam_denies_user_data_console_and_passwords` |
 | T27 | 공식 서버의 위험한 도구가 딸려 온다 (A6) | 필요한 도구만 붙인다: 파일을 읽는 Pricing 도구, 비용이 드는 CloudTrail Lake, IAM 변경 도구를 뺐고, 이름으로 불러도 없는 도구다. IAM 서버는 자체 읽기 전용 모드 | `tests/test_pricing.py::test_file_reading_tools_cannot_be_called`, `tests/test_cloudtrail.py::test_only_event_lookup_is_attached`, `tests/test_iam_server.py::test_write_tools_cannot_be_called_even_by_name`, `tests/test_iam_server.py::test_server_runs_in_its_own_read_only_mode`, `tests/test_network_server.py::test_profile_name_from_the_model_is_ignored` |
@@ -104,7 +104,7 @@ Vigie는 사용자가 자연어로 AWS 계정을 조회하고 일부를 바꾸�
 | # | 위협 | 방어 | 테스트 |
 |:--|:--|:--|:--|
 | T33 | 감사 기록을 고치거나 지운다 | 쓰기는 `attribute_not_exists`로 덧붙이기만 하고, LLM 역할에는 PutItem·Query만 준다. CloudWatch Logs(365일)에도 같은 기록을 남긴다. 테이블은 PITR | `tests/test_audit.py::test_records_are_append_only`, `tests/test_audit.py::test_llm_role_can_only_append_and_read_audit_records`, `tests/test_audit.py::test_audit_records_are_also_written_to_cloudwatch_logs` |
-| T34 | 도구 호출이 기록되지 않는다 | 도구마다 실제로 받은 값(비밀 값만 가림)으로 기록한다 | `tests/test_audit.py::test_each_tool_call_is_recorded_with_the_value_the_tool_received`, `tests/test_audit.py::test_slack_requests_are_recorded_by_slack_user` |
+| T34 | 도구 호출이 기록되지 않는다 | 도구마다 실제로 받은 값(비밀 값만 가림. 계정 ID·액세스 키 ID·이메일은 원래 값)으로 기록한다 | `tests/test_audit.py::test_each_tool_call_is_recorded_with_the_value_the_tool_received`, `tests/test_redaction.py::test_secrets_only_keeps_identifiers_for_the_audit_log`, `tests/test_audit.py::test_slack_requests_are_recorded_by_slack_user` |
 | T35 | 결정자가 로그에 심긴 지시에서 나온 변경 요청을 평소 요청처럼 승인한다 (승인 피로) | 같은 질문에서 의심 문구가 든 결과를 읽은 뒤의 변경 요청이면, 그 결과와 거리(몇 번째 뒤 호출)를 승인 요청에 적어 승인 카드·감사 로그에 보인다(체류 신호). 모델이 아직 보지 못한 결과(같은 응답에서 함께 부른 도구)는 세지 않는다. 판단은 바꾸지 않는다 | `tests/test_audit_locus.py::test_change_requested_after_reading_an_injected_log_is_flagged`, `tests/test_audit_locus.py::test_results_from_the_same_response_are_not_counted`, `tests/test_audit_locus.py::test_clean_log_leaves_no_residence_signal` |
 | T36 | 사고가 났을 때 어디가 뚫렸는지 좁히지 못한다 | 감사 행마다 층(경계·유입·유출·효과)을 적고, 관리자는 층과 체류(의심 뒤 요청)로 거른다. 등록부에 없는 도구 호출은 경계층으로 따로 남는다 | `tests/test_audit_locus.py::test_unregistered_tool_is_recorded_at_the_interface`, `tests/test_audit_locus.py::test_change_requested_after_reading_an_injected_log_is_flagged`, `tests/test_audit_trace.py::test_trace_of_a_change_that_followed_an_injected_log` |
 | T37 | 기록이 서로 어긋나도(승인 없이 실행, 요청 없이 결정) 아무도 모른다 | 관리자가 변경 작업 하나를 역추적하면 요청자·결정자의 기록과 같은 질문의 도구 기록을 모아 층마다 예·아니오로 답하고, 어긋난 층은 실패로 보인다. 앱 밖(CloudTrail)과는 대조할 요청 ID를 준다 | `tests/test_audit_trace.py::test_records_that_do_not_add_up_fail`, `tests/test_audit_trace.py::test_trace_finds_events_across_midnight`, `tests/test_audit_trace.py::test_trace_errors` |
@@ -148,7 +148,7 @@ Vigie는 사용자가 자연어로 AWS 계정을 조회하고 일부를 바꾸�
 - **위험도는 우리가 정한다.** MCP 표준 `annotations`(readOnlyHint 등)는 공식 서버들이 비워 두어 믿을 수 없다. 목록(`mcp/lambda_mcp/risk.py`)에 없으면 변경 도구로 본다. 공식 서버를 올리다 새 도구가 생겨도 승인 없이는 돌지 않는다.
 - **승인은 채팅 글이 아니라 인증된 버튼으로.** "응, 승인해"는 인젝션으로도 만들 수 있다. 승인은 `/actions/{id}/approve` 호출이고, 카드 내용은 서버가 만든다.
 - **승인 절차는 감사 로그보다 약하지 않다.** 결정을 기록하지 못하면 실행하지 않는다. 반대로 조회 요청은 감사 로그가 실패해도 답한다 (가용성 우선).
-- **가명은 지우지 않고 바꾼다.** 계정 ID를 지우면 ARN으로 다시 조회하는 흐름이 깨진다. 요청마다 가명 표를 따로 두고, AWS를 조회하는 도구를 부르기 직전에만 되돌린다. 차트·다이어그램처럼 모델이 쓴 값을 그림에 옮길 뿐인 도구에는 되돌리지 않는다 (예전에 차트로 원래 값이 계정 밖에 나간 것이 R1이었다).
+- **가명은 지우지 않고 바꾼다.** 계정 ID를 지우면 ARN으로 다시 조회하는 흐름이 깨진다. 액세스 키 ID도 같다: 비밀은 비밀 액세스 키이고 키 ID는 이름이라, 지우면 "이 키가 유출됐다"는 질문에 그 키를 진단할 수 없다 (예전에는 키 ID를 비밀 값으로 지워서 진단이 "IAM 사용자가 없습니다"로 실패했다). 요청마다 가명 표를 따로 두고, AWS를 조회하는 도구를 부르기 직전에만 되돌린다. 차트·다이어그램처럼 모델이 쓴 값을 그림에 옮길 뿐인 도구에는 되돌리지 않는다 (예전에 차트로 원래 값이 계정 밖에 나간 것이 R1이었다).
 - **탐지는 보조, 구조가 주된 방어.** 인젝션 탐지는 사람에게 알리려는 것이고, 막는 것은 승인이다. 그래서 탐지 패턴은 오탐을 줄이는 쪽으로 좁혔다.
 - **누가 쓸 수 있는지도 위험도처럼 MCP가 알린다.** 도구마다 `_meta["vigie/access"]`(all·admin)를 붙이고, LLM Lambda가 요청자의 그룹으로 모델에게 보일 도구를 고른다. 막는 곳은 세 겹이다: 모델에게 보이지 않기, LLM Lambda의 거절, MCP의 재확인. MCP의 재확인은 LLM Lambda가 붙인 표시를 믿으므로 LLM Lambda가 뚫리면 막지 못한다 (R8). 결정자(`approvers`)는 승인을 하는 사람이지 계정을 들여다보는 사람이 아니라서 관리자 전용 도구를 주지 않는다.
 - **도구 검색은 위험을 바꾸지 않는다.** 모델에게 정의를 보여 주는 시점만 바뀐다. 위험도와 승인은 도구를 부를 때 판단한다.

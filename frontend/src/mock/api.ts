@@ -1069,7 +1069,7 @@ const seedAudit = (): AuditRecord[] => {
       // 몇 건은 질문에 붙여 넣은 계정 ID·키를 Claude로 보내기 전에 가린 기록
       const roll = random();
       const redacted: Record<string, number> =
-        roll < 0.12 ? { account_id: 1 } : roll < 0.16 ? { aws_access_key: 1, account_id: 2 } : {};
+        roll < 0.12 ? { account_id: 1 } : roll < 0.16 ? { aws_access_key_id: 1, account_id: 2 } : {};
       records.push(
         ...auditRecordsOf(pickUser(), question, tools, time, redacted, answer),
       );

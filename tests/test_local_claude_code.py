@@ -3,6 +3,7 @@
 실제 claude 대신 가짜 claude(FAKE_CLAUDE)를 실행한다. 가짜도 실제처럼 --mcp-config의 중계 주소에 HTTP로 붙어
 initialize → tools/list → tools/call을 하고, stream-json을 출력한다. 나머지(LLM 서버 코드, MCP 서버, 가짜 AWS)는 진짜다.
 - 관리자가 물으면 진단이 불리고, 감사 로그에 진단이 남는다. 모델(가짜 claude)이 받는 결과는 계정 ID가 가려져 있다
+- 질문에 적은 액세스 키 ID는 가명으로 나가고, 모델이 그 가명으로 부른 진단은 원래 키 ID로 조회한다
 - 변경 도구는 실행되지 않고 승인 요청이 된다. 화면에서 승인하면 가짜 AWS의 인스턴스가 실제로 켜진다
 - 일반 사용자에게는 관리자 전용 도구가 보이지 않고, 이름으로 불러도 거절된다
 - claude는 기본 도구를 끄고 중계 MCP 하나만 붙여, 빈 임시 폴더에서 AWS 자격 증명 없이 실행한다
@@ -107,6 +108,28 @@ def test_diagnosis_through_the_gateway_is_audited_and_redacted(claude):
     # 사고 요약과 도구가 진행 상황에 보인다
     _, _, progress = call(api, "GET", "/llm1/progress/0f8fad5b-d9cb-469f-a165-70867728950e")
     assert "diagnoseService" in json.dumps(progress["steps"], ensure_ascii=False)
+
+
+def test_leaked_access_key_id_in_the_question_can_be_diagnosed(claude):
+    # "액세스 키 AKIA…가 유출됐대요": 모델은 키 ID의 가명만 보고, 그 가명으로 부른 진단은 원래 키 ID로 조회한다
+    stack, api, ran, plan = claude
+    scenario = stack.apply("credential-persistence")
+    key = scenario["resource"]
+    alias = key[:4] + "********" + key[-4:]
+    plan(("diagnoseService", {"service": "credential", "resource": alias}))
+    ask(api, scenario["ask"])
+    run = ran()
+    assert alias in run["prompt"] and key not in run["prompt"]
+    seen = run["results"][0]["content"][0]["text"]
+    assert run["results"][0].get("isError") is not True and "IAM 사용자가 없습니다" not in seen
+    assert key not in seen  # 결과 속의 키 ID도 가명으로 나간다
+    # 감사 로그에는 도구가 실제로 받은 키 ID와 층별 판정이 남는다
+    _, _, page = call(api, "GET", "/audit")
+    row = next(item for item in page["items"] if item.get("tool") == "diagnoseService")
+    assert row["input"]["resource"] == key
+    assert row["diagnosis"]["causes"] == scenario["causes"] == ["L2", "L6"]
+    request = next(item for item in page["items"] if item.get("kind") == "request")
+    assert request["redacted"]["aws_access_key_id"] >= 1
 
 
 def test_write_tool_becomes_an_approval_and_runs_after_approval(claude):

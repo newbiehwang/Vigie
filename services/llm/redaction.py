@@ -5,12 +5,16 @@
     도구 호출 ◀── [되돌리기] ◀── Claude가 고른 도구 입력 (가명이 들어 있을 수 있다)
 
 가리는 값은 두 종류로 나눠 다르게 다룬다.
-1. 비밀 값 (액세스 키, 비밀 키, API 토큰, JWT, 개인 키, 접속 주소의 비밀번호)
+1. 비밀 값 (비밀 액세스 키, 세션 토큰, API 토큰, JWT, 개인 키, 접속 주소의 비밀번호)
    - [REDACTED:종류]로 바꾸고 되돌리지 않는다. 모델이 알 필요가 없고, 알면 안 되는 값이다.
-2. 식별자 (12자리 AWS 계정 ID, 이메일)
-   - 요청마다 같은 값은 같은 가명으로 바꾼다 (예: 123456789012 → ********9012, alice@example.com → a***@example.com).
+2. 식별자 (12자리 AWS 계정 ID, 액세스 키 ID, 이메일)
+   - 요청마다 같은 값은 같은 가명으로 바꾼다 (예: 123456789012 → ********9012,
+     AKIA…2QXA(20자) → AKIA********2QXA, alice@example.com → a***@example.com).
    - 모델이 그 가명을 도구 입력에 넣으면 도구를 부르기 직전에 원래 값으로 되돌린다.
      ARN 안의 계정 ID를 가려도 그 ARN으로 다시 조회하는 흐름이 깨지지 않는다.
+   - 액세스 키 ID(AKIA·ASIA…)는 키를 가리키는 이름이고, 비밀은 따로 있는 비밀 액세스 키다.
+     "키 AKIA…가 유출됐대요"라는 질문에 진단 도구(diagnoseService의 credential)가 그 키를 조회해야 하므로
+     되돌릴 수 없게 지우지 않고 가명으로 다룬다. 앞 네 글자(장기 키 AKIA, 임시 키 ASIA)는 남긴다.
    - 모델이 가명만 보므로 답변과 화면에도 가명만 남는다.
 
 오탐을 줄이는 원칙
@@ -42,8 +46,6 @@ SECRET_PATTERNS: List[Tuple[str, re.Pattern, int]] = [
     ("slack_token", re.compile(r"\bxox[abposr]-[A-Za-z0-9-]{10,}|\bxapp-[A-Za-z0-9-]{10,}", re.A), 0),
     ("slack_webhook", re.compile(r"https://hooks\.slack\.com/(?:services|workflows)/[A-Za-z0-9/_-]+", re.A), 0),
     ("github_token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b|\bgithub_pat_[A-Za-z0-9_]{50,}", re.A), 0),
-    # 장기 키(AKIA)와 임시 키(ASIA) 등. 역할·사용자의 고유 ID(AROA·AIDA)는 비밀이 아니라서 넣지 않는다
-    ("aws_access_key", re.compile(r"\b(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b", re.A), 0),
     # 비밀 키·세션 토큰은 이름 뒤에 올 때만 (모양만으로는 해시·base64 값과 구분되지 않는다)
     ("aws_secret_key", re.compile(
         r"(?i)((?:aws_?)?secret_?access_?key[\\\"'\s:=]{1,8})([A-Za-z0-9/+]{40})(?![A-Za-z0-9/+=])", re.A), 2),
@@ -55,7 +57,11 @@ SECRET_PATTERNS: List[Tuple[str, re.Pattern, int]] = [
 
 # ---------------------------------------------------------------- 식별자 (가명으로 바꾸고 도구 호출 때 되돌린다)
 ACCOUNT_ID = "account_id"
+ACCESS_KEY_ID = "aws_access_key_id"
 EMAIL = "email"
+
+# 장기 키(AKIA)와 임시 키(ASIA) 등의 액세스 키 ID. 역할·사용자의 고유 ID(AROA·AIDA)는 가리지 않는다
+ACCESS_KEY_ID_PATTERN = re.compile(r"\b(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b", re.A)
 
 # 다른 계정 ID는 이 자리에 있을 때만 계정 ID로 본다. 모두 두 번째 그룹이 계정 ID다
 ACCOUNT_ID_PATTERNS: List[re.Pattern] = [
@@ -90,6 +96,7 @@ class Redactor:
             return value
         for kind, pattern, group in SECRET_PATTERNS:
             value = pattern.sub(lambda match, k=kind, g=group: self._secret(match, k, g), value)
+        value = ACCESS_KEY_ID_PATTERN.sub(lambda match: self._pseudonym(ACCESS_KEY_ID, match.group(0)), value)
         for pattern in ACCOUNT_ID_PATTERNS:
             value = pattern.sub(lambda match: match.group(1) + self._pseudonym(ACCOUNT_ID, match.group(2)), value)
         if self._known_pattern is not None:
@@ -107,7 +114,7 @@ class Redactor:
         return value
 
     def secrets_only(self, value: Any) -> Any:
-        """비밀 값만 가린 사본 (계정 ID·이메일은 그대로). 계정 안에 남는 감사 로그용 (audit.py).
+        """비밀 값만 가린 사본 (계정 ID·액세스 키 ID·이메일은 그대로). 계정 안에 남는 감사 로그용 (audit.py).
         누가 어느 계정의 무엇을 조회했는지 추적하려면 식별자는 남아 있어야 하고, 비밀 값은 감사 로그에도 남기지 않는다.
         밖으로 나간 값이 아니므로 counts에는 세지 않는다."""
         if isinstance(value, str):
@@ -158,6 +165,8 @@ class Redactor:
             return known
         if kind == ACCOUNT_ID:
             alias = "********" + original[-4:]  # 콘솔처럼 끝 네 자리만 보인다 (계정을 구분할 수는 있게)
+        elif kind == ACCESS_KEY_ID:
+            alias = original[:4] + "********" + original[-4:]  # 키 종류(AKIA·ASIA)와 끝 네 자리
         else:
             local, domain = original.split("@", 1)
             alias = f"{local[0]}***@{domain}"
