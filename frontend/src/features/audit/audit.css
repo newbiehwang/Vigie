@@ -1667,7 +1667,6 @@
 .audit-diag-band {
   position: relative;
   min-width: 0;
-  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface);
@@ -1697,6 +1696,22 @@
 .audit-diag-chip.is-selected {
   border-color: var(--primary);
   box-shadow: 0 0 0 1px var(--primary);
+}
+
+/* 고른 칸 아래의 꺾쇠: 아래 설명 칸이 이 칸의 것임을 잇는다 (가로 길에서만, 세로로 쌓으면 뺀다) */
+.audit-diag-node.is-selected::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  border-right: 1px solid var(--primary);
+  border-bottom: 1px solid var(--primary);
+  border-bottom-right-radius: 2px;
+  background: var(--surface);
+  box-shadow: 1px 1px 0 0 var(--primary);
+  transform: translateX(-50%) rotate(45deg);
 }
 
 /* 해당 없음: 점선, 옅은 글자 */
@@ -1887,26 +1902,100 @@
 }
 
 /* 설명 칸 */
+/* 설명 칸: 그림과 넉넉히 떼고 가는 선으로 나눈다. 판정 → 판정을 정한 항목(크게) → 확인한 다른 항목 → 이 층이 보는 것 */
 .audit-diag-panel {
   display: grid;
-  gap: 6px;
-  margin-top: 18px;
+  gap: 8px;
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line-soft);
   min-width: 0;
   animation: audit-cycle-in 200ms ease both;
 }
 
-/* 이 층이 묻는 것: 옅은 작은 글자 */
-.audit-diag-panel .audit-cycle-panel-text {
+.audit-diag-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.audit-diag-panel-head .badge {
+  padding: 0;
+  font-size: 13px;
+}
+
+.audit-diag-panel-head strong {
+  font-family: var(--font-label);
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.audit-diag-panel-component {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+/* 판정을 정한 항목: 앞말을 크게, 나머지(ID·사유)와 근거는 그 아래 */
+.audit-diag-lead {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.audit-diag-lead-head {
   margin: 0;
+  font-family: var(--font-label);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: var(--ink);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.audit-diag-lead-rest {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+.audit-diag-lead code {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+
+.audit-diag-others-title {
+  margin: 10px 0 0;
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+/* 이 층이 보는 것: 맨 아래 옅은 작은 글자 */
+.audit-diag-about {
+  margin: 8px 0 0;
   font-size: 12.5px;
   line-height: 1.6;
   color: var(--ink-3);
 }
 
+.audit-diag-about span {
+  margin-right: 8px;
+  font-family: var(--font-label);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
 /* 확인한 항목: 상자 없이 가는 선으로 나눈 목록 */
 .audit-diag-checks {
   display: grid;
-  margin: 4px 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -1974,6 +2063,10 @@
 
   .audit-diag-step .audit-diag-node {
     flex: none;
+  }
+
+  .audit-diag-node.is-selected::after {
+    content: none;
   }
 
   .audit-diag-arrow {

@@ -4,12 +4,14 @@
 //   진단 층  Application Load Balancer · web-alb · 최근 1시간        ● 원인 2  ● 증상 1  ● 정상 4
 //   ┌ L2 변경  관련 변경 2건 — 09-29 15:16 StopInstances (alice → …) 외 1건  ● 원인 ┐   ← 위 띠 (시간 축: 계기)
 //   사용자 › [L3 입구·네트워크] › [L4 로드 밸런서] › [L5 컴퓨팅] › [L7 데이터·의존성]  ← 그 서비스의 길
+//                                                    ▼                                  ← 고른 칸의 꺾쇠 (아래 설명 칸으로)
 //   └ 길에 없는 층 중 원인·증상·주의·확인 불가만 띠로                                 ┘
 //     띠에는 원인·증상·주의면 판정 한 줄(diagnosisModel.briefOf), 아니면 그 층이 보는 부품
 //   그 밖의 층  [L6 권한·한도 ● 정상] [L1 AWS 자체 ● 정상]                             ← 조용한 층은 작은 칩
-//   L5 컴퓨팅 · 대상 EC2  ● 원인                                                       ← 설명 칸
-//   이 서비스에서 이 층이 묻는 것 (옅은 글자)
-//   ● 원인  인스턴스 상태  찾은 것 / 근거 API·지표
+//   ● 원인  L5 컴퓨팅 · 대상 EC2                                                       ← 설명 칸: 판정이 먼저
+//   인스턴스 2대 모두가 실행 중이 아닙니다                                               ← 판정을 정한 항목의 앞말 (크게)
+//   i-0a1b… (web-1) stopped, … / ec2:DescribeInstances State·StateReason               ← 나머지와 근거
+//   확인한 다른 항목 · 이 층이 보는 것 (이 서비스에서 이 층이 묻는 것, 옅은 글자)
 //
 // - 판정은 배지(점과 글자) 하나로만 보인다. 빨강·노랑은 점에만 쓰고 칸을 칠하지 않는다. 고른 층은 주 색 테두리
 // - 해당 없음 층은 점선 테두리와 옅은 글자
@@ -26,6 +28,7 @@ import {
     FINDING_STATUSES,
     QUIET_STATUSES,
     SERVICE_MAPS,
+    splitFinding,
     STATUS_ORDER,
 } from './diagnosisModel';
 
@@ -100,6 +103,10 @@ export function AuditDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
     const layerOf = (id: DiagnosisLayerId) => diagnosis.layers.find((layer) => layer.id === id);
     const [picked, setPicked] = useState<DiagnosisLayerId>(() => firstPick(diagnosis, map.path));
     const selected = layerOf(picked);
+    // 고른 층의 판정을 정한 항목 (서버가 층의 finding으로 고른 것과 같다: 층과 판정이 같은 첫 항목). 나머지는 '확인한 다른 항목'
+    const lead = selected?.checks.find((check) => check.status === selected.status) ?? selected?.checks[0];
+    const others = selected?.checks.filter((check) => check !== lead) ?? [];
+    const [leadHead, leadRest] = splitFinding(lead?.finding ?? '');
     const bands = bandsOf(map);
     // 길에 없는 층: 이상이 있거나 볼 수 없었던 층은 띠로, 조용한 층(정상 · 해당 없음)은 한 줄의 칩으로
     const below = bands.below.map(layerOf).filter((layer): layer is DiagnosisLayer => !!layer);
@@ -186,31 +193,45 @@ export function AuditDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
                 ) : null}
             </div>
 
-            {/* 설명 칸 (aria-live: 다른 층을 고르면 새 설명을 읽는다) */}
+            {/* 설명 칸 (aria-live: 다른 층을 고르면 새 설명을 읽는다). 판정 → 그 판정을 정한 항목(크게) → 확인한 다른 항목 →
+                이 층이 보는 것(옅게) 차례로, 답을 먼저 읽고 근거와 배경을 뒤에 읽는다 */}
             {selected ? (
                 <div className="audit-diag-panel" aria-live="polite" key={selected.id}>
-                    <div className="audit-cycle-panel-head">
-                        <span className="audit-cycle-panel-no">{selected.id}</span>
-                        <strong>{selected.name}</strong>
-                        <span className="audit-cycle-en">{selected.component}</span>
+                    <div className="audit-diag-panel-head">
                         <StatusBadge layer={selected} />
+                        <span className="audit-diag-id">{selected.id}</span>
+                        <strong>{selected.name}</strong>
+                        <span className="audit-diag-panel-component">{selected.component}</span>
                     </div>
-                    {map.descriptions[selected.id] ? (
-                        <p className="audit-cycle-panel-text">{map.descriptions[selected.id]}</p>
+                    {lead ? (
+                        <div className="audit-diag-lead">
+                            <p className="audit-diag-lead-head">{leadHead}</p>
+                            {leadRest ? <p className="audit-diag-lead-rest">{leadRest}</p> : null}
+                            {lead.evidence ? <code>{lead.evidence}</code> : null}
+                        </div>
                     ) : null}
-                    {selected.checks.length ? (
-                        <ul className="audit-diag-checks" aria-label="확인한 항목">
-                            {selected.checks.map((check, index) => (
-                                <li key={`${check.name}-${index}`} className={`is-${check.status}`}>
-                                    <StatusBadge layer={check} />
-                                    <div className="audit-diag-check-body">
-                                        <strong>{check.name}</strong>
-                                        <span>{check.finding}</span>
-                                        {check.evidence ? <code>{check.evidence}</code> : null}
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
+                    {others.length ? (
+                        <>
+                            <p className="audit-diag-others-title">확인한 다른 항목</p>
+                            <ul className="audit-diag-checks" aria-label="확인한 다른 항목">
+                                {others.map((check, index) => (
+                                    <li key={`${check.name}-${index}`} className={`is-${check.status}`}>
+                                        <StatusBadge layer={check} />
+                                        <div className="audit-diag-check-body">
+                                            <strong>{check.name}</strong>
+                                            <span>{check.finding}</span>
+                                            {check.evidence ? <code>{check.evidence}</code> : null}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        </>
+                    ) : null}
+                    {map.descriptions[selected.id] ? (
+                        <p className="audit-diag-about">
+                            <span>이 층이 보는 것</span>
+                            {map.descriptions[selected.id]}
+                        </p>
                     ) : null}
                 </div>
             ) : null}

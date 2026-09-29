@@ -204,6 +204,13 @@ function splitTop(text: string, separator: string): string[] {
     return parts.map((part) => part.trim()).filter(Boolean);
 }
 
+// 판정 글을 앞말과 나머지로: "인스턴스 2대 모두가 실행 중이 아닙니다: i-… stopped, …" → [앞말, 나머지].
+// 설명 칸은 앞말을 크게, 나머지(ID·사유)를 그 아래 보통 크기로 쓴다. 콜론이 없으면 나머지는 빈 글
+export function splitFinding(finding: string): [string, string] {
+    const [head, ...rest] = splitTop(finding, ': ');
+    return [head ?? '', rest.join(': ')];
+}
+
 // 판정 글 하나를 한 줄로: "앞말: 항목1, 항목2, 항목3 → 덧붙임" → "앞말 — 항목1, 항목2 외 1건"
 export function briefOf(finding: string): string {
     const [head, ...rest] = splitTop(finding, ': ');
