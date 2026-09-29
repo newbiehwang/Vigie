@@ -1627,8 +1627,8 @@
 }
 
 /* ---------------------------------------------------------------- 서비스 진단 층 그림 (AuditDiagnosis.tsx)
-   진단 도구 기록의 팝업창 맨 위 (처리 단계 고리 대신). 결론 줄 · 위 띠 L2 · 그 서비스의 길 위에 놓은 층 칸 ·
-   아래 띠(길에 없는 층 중 이상이 있는 것) · 그 밖의 층 칩 · 설명 칸.
+   진단 도구 기록의 팝업창 맨 위 (처리 단계 고리 대신). 위 띠 L2 · 그 서비스의 길 위에 놓은 층 칸 ·
+   아래 띠(길에 없는 층 중 이상이 있는 것) · 그 밖의 층 칩 · 설명 칸. 이상이 있는 띠에는 판정 한 줄.
    상자는 칸·띠 한 겹만 둔다. 판정은 배지(점과 글자) 하나로만 보이고, 빨강·노랑은 점에만 쓴다. 고른 층은 주 색 테두리.
    해당 없음은 점선 */
 .audit-diag-target {
@@ -1640,65 +1640,6 @@
 .audit-diag-target code {
   font-size: 12px;
   color: var(--ink-2);
-}
-
-/* 결론 줄: [● 원인] L5 컴퓨팅  인스턴스 2대 모두가 … — … 외 1건
-   줄마다 배지 · 층 이름 · 글 세 열을 맞춘다 (li는 칸을 만들지 않고 ul의 격자에 바로 놓인다) */
-.audit-diag-verdict {
-  display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
-  align-items: baseline;
-  gap: 6px 14px;
-  margin: 10px 0 14px;
-  padding: 0;
-  list-style: none;
-  font-size: 13.5px;
-  line-height: 1.55;
-}
-
-.audit-diag-verdict li {
-  display: contents;
-}
-
-.audit-diag-verdict .badge {
-  justify-self: start;
-  padding: 0;
-}
-
-/* 이상 없음 줄에는 층이 없다: 글이 층 이름 자리부터 */
-.audit-diag-verdict li:not(:has(.audit-diag-verdict-layer)) .audit-diag-verdict-text {
-  grid-column: 2 / -1;
-}
-
-.audit-diag-verdict-layer {
-  justify-self: start;
-  padding: 0;
-  border: 0;
-  background: none;
-  font-family: var(--font-label);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--ink);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.audit-diag-verdict-layer:hover {
-  color: var(--primary);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.audit-diag-verdict-layer:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-.audit-diag-verdict-text {
-  min-width: 0;
-  color: var(--ink-2);
-  overflow-wrap: anywhere;
 }
 
 /* 판정 개수의 점: 배지와 같은 동그라미 */
@@ -1714,12 +1655,11 @@
 .audit-counts .is-diag-ok .audit-counts-dot { background: var(--status-ok); }
 .audit-counts .is-diag-unknown .audit-counts-dot { background: var(--status-none); }
 
-/* 층 그림: 바깥 상자 없이 결론 줄 아래에 가는 선 하나로 나눈다 */
+/* 층 그림: 바깥 상자 없이 제목 줄 아래에 둔다 */
 .audit-diag-map {
   display: grid;
   gap: 8px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line-soft);
+  margin-top: 12px;
 }
 
 /* 칸과 띠 공통: 흰 바탕 버튼 (판정은 배지로만) */
@@ -1825,6 +1765,15 @@
   align-items: center;
   gap: 10px;
   padding: 9px 12px 8px;
+}
+
+/* 띠의 판정 한 줄 (L2 띠면 계기): 부품 글보다 조금 진하게, 길면 줄을 바꾼다 */
+.audit-diag-finding {
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
 }
 
 .audit-diag-band .audit-diag-names {
@@ -2009,24 +1958,6 @@
 
 /* 좁은 팝업창: 길을 위에서 아래로 쌓고 화살표를 아래로 */
 @media (max-width: 640px) {
-  /* 휴대폰: 배지 · 층 이름 한 줄, 글은 그 아래 */
-  .audit-diag-verdict {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
-  }
-
-  .audit-diag-verdict li {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 2px 8px;
-  }
-
-  .audit-diag-verdict-text {
-    flex: 1 0 100%;
-  }
-
   .audit-diag-path {
     flex-direction: column;
     align-items: stretch;

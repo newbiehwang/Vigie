@@ -2,11 +2,10 @@
 // 판정은 서버의 진단 절차(mcp/lambda_mcp/diagnose.py)가 낸 그대로이고, 여기서는 그 서비스의 길 위에 층을 놓아 그린다.
 //
 //   진단 층  Application Load Balancer · web-alb · 최근 1시간        ● 원인 2  ● 증상 1  ● 정상 4
-//   ● 원인  L5 컴퓨팅  인스턴스 2대 모두가 실행 중이 아닙니다 — i-0a1b… (web-1) stopped 외 1건   ← 결론 줄 (diagnosisModel)
-//   ● 계기  L2 변경    관련 변경 2건 — 09-29 15:16 StopInstances (alice → …) 외 1건
-//   ┌ L2 변경 · CloudTrail 쓰기 이벤트                                    ● 원인 ┐   ← 위 띠 (시간 축)
+//   ┌ L2 변경  관련 변경 2건 — 09-29 15:16 StopInstances (alice → …) 외 1건  ● 원인 ┐   ← 위 띠 (시간 축: 계기)
 //   사용자 › [L3 입구·네트워크] › [L4 로드 밸런서] › [L5 컴퓨팅] › [L7 데이터·의존성]  ← 그 서비스의 길
 //   └ 길에 없는 층 중 원인·증상·주의·확인 불가만 띠로                                 ┘
+//     띠에는 원인·증상·주의면 판정 한 줄(diagnosisModel.briefOf), 아니면 그 층이 보는 부품
 //   그 밖의 층  [L6 권한·한도 ● 정상] [L1 AWS 자체 ● 정상]                             ← 조용한 층은 작은 칩
 //   L5 컴퓨팅 · 대상 EC2  ● 원인                                                       ← 설명 칸
 //   이 서비스에서 이 층이 묻는 것 (옅은 글자)
@@ -14,16 +13,17 @@
 //
 // - 판정은 배지(점과 글자) 하나로만 보인다. 빨강·노랑은 점에만 쓰고 칸을 칠하지 않는다. 고른 층은 주 색 테두리
 // - 해당 없음 층은 점선 테두리와 옅은 글자
-// - 처음 고른 층: 원인 중 L2가 아닌 것(무엇이 고장 났나) → L2 → 증상 → 길의 첫 층. 칸·띠·칩·결론 줄의 층 이름을 누르면 그 층의 설명
+// - 처음 고른 층: 원인 중 L2가 아닌 것(무엇이 고장 났나) → L2 → 증상 → 길의 첫 층. 칸·띠·칩을 누르면 그 층의 설명.
+//   무엇이 고장 났나는 처음부터 열린 설명 칸이, 무엇이 계기였나는 L2 띠의 한 줄이 말한다 (같은 문장을 두 번 쓰지 않는다)
 // - 키보드: 칸·띠·칩은 버튼이라 Tab으로 옮기고 Enter·Space로 고른다
 import { useState } from 'react';
 import type { Diagnosis, DiagnosisLayer, DiagnosisLayerId } from '@/types/audit';
 import {
     bandsOf,
-    CONCLUSION_LABEL,
-    conclusionOf,
+    briefOf,
     DIAGNOSIS_STATUS,
     FALLBACK_MAP,
+    FINDING_STATUSES,
     QUIET_STATUSES,
     SERVICE_MAPS,
     STATUS_ORDER,
@@ -60,6 +60,7 @@ function LayerButton({
     selected: boolean;
     onPick: () => void;
 }) {
+    const finding = FINDING_STATUSES.includes(layer.status) ? briefOf(layer.finding || '') : '';
     return (
         <button
             type="button"
@@ -71,10 +72,15 @@ function LayerButton({
             <span className="audit-diag-id">{layer.id}</span>
             <span className="audit-diag-names">
                 <span className="audit-diag-name">{layer.name}</span>
-                {/* 칸에서는 한 줄로 줄인다 (넘치면 말줄임표, 전체는 마우스를 올리면) */}
-                <span className="audit-diag-component" title={layer.component}>
-                    {layer.component}
-                </span>
+                {/* 띠에 이상이 있으면 부품 대신 판정 한 줄 (L2 띠면 계기). 칸에서는 부품을 한 줄로 줄인다
+                    (넘치면 말줄임표, 전체는 마우스를 올리면) */}
+                {variant === 'band' && finding ? (
+                    <span className="audit-diag-finding">{finding}</span>
+                ) : (
+                    <span className="audit-diag-component" title={layer.component}>
+                        {layer.component}
+                    </span>
+                )}
             </span>
             <StatusBadge layer={layer} />
         </button>
@@ -99,7 +105,6 @@ export function AuditDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
     const below = bands.below.map(layerOf).filter((layer): layer is DiagnosisLayer => !!layer);
     const loud = below.filter((layer) => !QUIET_STATUSES.includes(layer.status));
     const quiet = below.filter((layer) => QUIET_STATUSES.includes(layer.status));
-    const conclusion = conclusionOf(diagnosis);
     const counts = STATUS_ORDER.map((status) => ({
         status,
         n: diagnosis.layers.filter((layer) => layer.status === status).length,
@@ -137,25 +142,6 @@ export function AuditDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
                     ))}
                 </ul>
             </div>
-            {/* 결론: 무엇이 고장 났나 → 무엇이 계기였나 (긴 판정 글은 아래 설명 칸에) */}
-            <ul className="audit-diag-verdict" aria-label="결론">
-                {conclusion.map((line, index) => (
-                    <li key={`${line.kind}-${line.layer?.id ?? index}`}>
-                        <span className={`badge ${CONCLUSION_LABEL[line.kind].badge}`}>{CONCLUSION_LABEL[line.kind].label}</span>
-                        {line.layer ? (
-                            <button
-                                type="button"
-                                className="audit-diag-verdict-layer"
-                                onClick={() => setPicked(line.layer!.id)}
-                                aria-label={`${line.layer.id} ${line.layer.name} 설명 보기`}
-                            >
-                                {line.layer.id} {line.layer.name}
-                            </button>
-                        ) : null}
-                        <span className="audit-diag-verdict-text">{line.text}</span>
-                    </li>
-                ))}
-            </ul>
 
             {/* 그 서비스의 길 위에 놓은 층들 */}
             <div className="audit-diag-map" role="group" aria-label={`${diagnosis.serviceName} 진단 층. 층을 누르면 설명이 나옵니다`}>
