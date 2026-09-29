@@ -153,7 +153,7 @@ def test_scenario_cli(serve, capsys):
     assert "rds-stopped" in out and "원인 L2 · L5" in out and "orders-db에 연결이 안 돼요" in out
     scenario_cli.main(["--url", base, "list"])
     listing = capsys.readouterr().out.splitlines()
-    assert len(listing) == 43 and [line for line in listing if line.startswith("▶")][0].split()[1] == "rds-stopped"
+    assert len(listing) == 44 and [line for line in listing if line.startswith("▶")][0].split()[1] == "rds-stopped"
     scenario_cli.main(["--url", base, "refresh"])
     scenario_cli.main(["--url", base, "reset"])
     assert "정상" in capsys.readouterr().out
