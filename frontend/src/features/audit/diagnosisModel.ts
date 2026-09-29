@@ -13,7 +13,7 @@
 //                비용     청구서 → L5 컴퓨팅 → L3 전송·NAT → L4 앞단 → L7 저장·로그
 //   아래 띠    길에 없는 층 (보통 L6 권한·한도) · 맨 아래 L1 AWS 자체 (모든 것이 올라탄 바닥)
 // 설명: 층마다 이 서비스에서 무엇을 묻고 무엇을 보는지 (런북의 진단 단계를 줄인 것)
-import type { DiagnosisLayerId, DiagnosisStatus } from '@/types/audit';
+import type { Diagnosis, DiagnosisLayer, DiagnosisLayerId, DiagnosisStatus } from '@/types/audit';
 
 export interface ServiceMap {
     entry: string; // 들어오는 쪽 (층이 아닌 글자)
@@ -172,3 +172,88 @@ export const bandsOf = (map: ServiceMap) => {
     const below = (['L6', 'L3', 'L4', 'L5', 'L7'] as DiagnosisLayerId[]).filter((id) => !map.path.includes(id));
     return { top: 'L2' as DiagnosisLayerId, below: [...below, 'L1' as DiagnosisLayerId] };
 };
+
+// ---------------------------------------------------------------- 결론 줄 (진단 층 그림 맨 위)
+// 서버의 요약(summary)은 판정 글을 모두 이어 붙인 긴 문단이라, 화면에서는 층마다 한 줄로 줄인다.
+// 차례는 서버 요약(diagnose._summary)과 같다: 무엇이 고장 났나(L2가 아닌 원인) → 무엇이 계기였나(L2).
+// 원인이 없으면 증상, 증상도 없으면 '이상 없음'과 주의할 층. 판정 글에서 잘라 쓰므로 예전 감사 로그 행에도 쓸 수 있다.
+//   원인  L5 컴퓨팅  인스턴스 2대 모두가 실행 중이 아닙니다 — i-0a1b… (web-1) stopped 외 1건
+//   계기  L2 변경    관련 변경 2건 — 09-29 15:16 StopInstances (alice → i-0a1b…) 외 1건
+export type ConclusionKind = 'cause' | 'trigger' | 'symptom' | 'warn' | 'clear';
+
+export interface ConclusionLine {
+    kind: ConclusionKind;
+    layer?: DiagnosisLayer; // 'clear'(이상 없음)에는 층이 없다
+    text: string;
+}
+
+export const CONCLUSION_LABEL: Record<ConclusionKind, { label: string; badge: string }> = {
+    cause: { label: '원인', badge: 'is-fail' },
+    trigger: { label: '계기', badge: 'is-fail' },
+    symptom: { label: '증상', badge: 'is-warn' },
+    warn: { label: '주의', badge: 'is-quiet' },
+    clear: { label: '이상 없음', badge: 'is-ok' },
+};
+
+const BRIEF_ITEMS_MAX = 60; // 콜론 뒤 목록에서 보일 글자 수 (넘으면 '외 N건')
+
+// 괄호 밖의 구분자로만 나눈다 ("(Client.UserInitiatedShutdown: …)"이나 "(처음 …, 마지막 …)" 안은 나누지 않는다)
+function splitTop(text: string, separator: string): string[] {
+    const parts: string[] = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === '(' || ch === '[') depth++;
+        else if ((ch === ')' || ch === ']') && depth > 0) depth--;
+        else if (depth === 0 && text.startsWith(separator, i)) {
+            parts.push(text.slice(start, i));
+            start = i + separator.length;
+            i += separator.length - 1;
+        }
+    }
+    parts.push(text.slice(start));
+    return parts.map((part) => part.trim()).filter(Boolean);
+}
+
+// 판정 글 하나를 한 줄로: "앞말: 항목1, 항목2, 항목3 → 덧붙임" → "앞말 — 항목1, 항목2 외 1건"
+export function briefOf(finding: string): string {
+    const [head, ...rest] = splitTop(finding, ': ');
+    if (!rest.length) return head ?? '';
+    const listed = splitTop(rest.join(': '), ' → ')[0] ?? ''; // 목록 뒤의 권고("→ …")는 설명 칸에만
+    const items = splitTop(listed, ', ');
+    const shown: string[] = [];
+    for (const item of items) {
+        if (shown.length && [...shown, item].join(', ').length > BRIEF_ITEMS_MAX) break;
+        shown.push(item);
+    }
+    const more = items.length - shown.length;
+    return `${head} — ${shown.join(', ')}${more > 0 ? ` 외 ${more}건` : ''}`;
+}
+
+export function conclusionOf(diagnosis: Pick<Diagnosis, 'layers'>): ConclusionLine[] {
+    const byStatus = (status: DiagnosisStatus) => diagnosis.layers.filter((layer) => layer.status === status);
+    const line = (kind: ConclusionKind, layer: DiagnosisLayer): ConclusionLine => ({
+        kind,
+        layer,
+        text: briefOf(layer.finding || ''),
+    });
+    const causes = byStatus('cause');
+    const symptoms = byStatus('symptom').map((layer) => line('symptom', layer));
+    const change = causes.find((layer) => layer.id === 'L2');
+    const broken = causes.filter((layer) => layer.id !== 'L2').map((layer) => line('cause', layer));
+    if (causes.length) {
+        if (!change) return broken;
+        // 고장 난 곳을 찾았으면 변경은 계기, 못 찾았으면 증상 직전의 변경이 가장 유력한 원인이다
+        if (broken.length) return [...broken, line('trigger', change)];
+        return [line('cause', change), ...symptoms];
+    }
+    if (symptoms.length) return symptoms;
+    return [
+        { kind: 'clear', text: '이 절차가 보는 범위에서는 이상이 없습니다' },
+        ...byStatus('warn').map((layer) => line('warn', layer)),
+    ];
+}
+
+// 길에 없는 층 중 조용한 것(정상 · 해당 없음)은 띠 대신 '그 밖의 층' 한 줄의 작은 칩으로 모은다
+export const QUIET_STATUSES: DiagnosisStatus[] = ['ok', 'skip'];
