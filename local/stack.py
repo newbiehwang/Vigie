@@ -269,8 +269,17 @@ def main(argv=None) -> None:
     parser.add_argument("--admin", action="store_true",
                         help="/mcp로 직접 붙은 도구 호출을 관리자 요청으로 보낸다 (Claude Code를 직접 붙일 때. 화면의 요청과는 무관)")
     parser.add_argument("--scenario", help="처음에 심을 시나리오 (없으면 정상 환경)")
+    parser.add_argument("--llm", choices=("auto", "claude-code", "anthropic"), default="auto",
+                        help="대화의 모델. auto: claude 명령이 있으면 Claude Code, 없으면 ANTHROPIC_API_KEY")
+    parser.add_argument("--claude-model", default="sonnet", help="Claude Code의 모델 (기본 sonnet: 배포와 같은 최신 Sonnet)")
+    parser.add_argument("--claude-command", help="claude 실행 파일 경로 (기본: PATH에서 찾는다)")
     args = parser.parse_args(argv)
 
+    from local.claude_code import claude_environment, find_claude, logged_in
+    original = dict(os.environ)  # Claude Code는 로컬 서버를 띄우기 전의 환경으로 실행한다 (모델 API에 닿아야 한다)
+    claude = (args.claude_command or find_claude()) if args.llm in ("auto", "claude-code") else None
+    if args.llm == "claude-code" and not claude:
+        raise SystemExit("claude 명령을 찾지 못했습니다. Claude Code를 설치해 로그인하거나 --llm anthropic을 씁니다")
     prepare_environment(args.region)
     from moto import mock_aws  # 환경 변수를 고친 뒤에 불러온다
 
@@ -285,6 +294,12 @@ def main(argv=None) -> None:
         print("MCP 서버와 공식 AWS MCP 서버, LLM 서버 코드를 불러오는 중…", flush=True)
         stack = Stack(load_app(), args.region, admin=args.admin)
         api = local_api.LocalApi(args.region, url + "/server", claims, world_of=lambda: stack.world)
+        claude_env = claude_environment(original)
+        signed_in = logged_in(claude, claude_env) if claude else None
+        # auto: claude가 로그인되어 있지 않고 API 키가 있으면 API 키로 (로그인했는지 모르면 claude를 쓴다)
+        if claude and not (args.llm == "auto" and signed_in is False and api.has_model):
+            api.use_claude_code(claude, f"http://127.0.0.1:{args.api_port}/_local/gateway", claude_env,
+                                args.claude_model)
         stack.on_change = api.collect_dashboard
         current = stack.apply(args.scenario)
         servers = [stack.serve("127.0.0.1", args.port), api.serve("127.0.0.1", args.api_port)]
@@ -292,12 +307,15 @@ def main(argv=None) -> None:
         stop = stack.keep_fresh()
         print(f"\nVigie 로컬 MCP 서버: {url}  (가짜 AWS · {args.region}{' · 관리자 요청' if args.admin else ''})")
         print(f"로컬 API 서버:      http://127.0.0.1:{args.api_port}  (화면: npm --prefix frontend run dev:local)")
-        print(f"모델: {'Anthropic API (ANTHROPIC_API_KEY)' if api.has_model else '없음 — 대화는 안내 문구로 거절합니다'}")
+        print(f"모델: {api.model_name or '없음 — 대화는 안내 문구로 거절합니다'}")
         print(f"지금 환경: {current.get('scenario') or '정상'} — {current['about']}")
         print("시나리오 바꾸기: python -m local.scenario list | apply <이름> | reset")
         print("Claude Code에 바로 붙이기 (이 세션에만):")
         print(f"  claude --mcp-config '{{\"mcpServers\":{{\"vigie\":{{\"type\":\"http\",\"url\":\"{url}\"}}}}}}'")
         print("멈추기: Ctrl+C\n", flush=True)
+        if api.gateway is not None and signed_in is False:
+            print("주의: claude 명령이 로그인되어 있지 않습니다 (데스크톱 앱의 로그인과 따로입니다). "
+                  "다른 터미널에서 claude auth login으로 로그인한 뒤 대화하세요.\n", flush=True)
         try:
             servers[0].serve_forever()
         except KeyboardInterrupt:

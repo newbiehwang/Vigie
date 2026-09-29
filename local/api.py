@@ -12,7 +12,11 @@
 권한 부여자처럼 요청에 넣는다. 머리글이 없는 요청은 거절한다: 다른 사이트의 페이지는 이 머리글을 붙이려면 사전 요청(CORS)을
 거쳐야 하고, 사전 요청은 로컬 화면 주소(localhost · 127.0.0.1)에만 허락한다.
 
-모델: 우선 배포와 같은 Anthropic API 경로를 쓴다. ANTHROPIC_API_KEY 환경 변수가 없으면 대화는 안내 문구로 거절한다.
+모델 (local.stack의 --llm)
+- claude-code: 이 맥에 로그인된 Claude Code (local/claude_code.py). 도구 호출은 이 서버의 중계 MCP(/_local/gateway/…)를
+  거쳐 배포와 같은 승인 · 가리기 · 감사 로그 · 진행 상황을 남긴다
+- anthropic: 배포와 같은 Anthropic API 경로 (ANTHROPIC_API_KEY, 요금이 든다)
+- 둘 다 없으면 대화는 안내 문구로 거절한다
 """
 from __future__ import annotations
 
@@ -26,6 +30,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable, Optional
 from urllib.parse import parse_qsl, urlsplit
 
+from local.claude_code import GATEWAY_PATH
 from local.stack import ENV_NAME, LOCAL_HOSTS, PENDING_TABLE, ROOT
 
 DEFAULT_API_PORT = 8787
@@ -44,8 +49,8 @@ LOCAL_USERS = {
     "member": ("member@vigie.local", []),
 }
 LOCAL_ORIGIN = re.compile(r"^http://(localhost|127\.0\.0\.1)(:\d+)?$")
-NO_MODEL = ("로컬 모델이 연결되지 않았습니다. ANTHROPIC_API_KEY 환경 변수를 넣고 local.stack을 다시 띄우세요 "
-            "(비용이 드는 Anthropic API를 씁니다).")
+NO_MODEL = ("로컬 모델이 연결되지 않았습니다. Claude Code(claude 명령)를 설치해 로그인하거나 ANTHROPIC_API_KEY 환경 변수를 "
+            "넣고 local.stack을 다시 띄우세요.")
 
 
 def api_environment(environ, mcp_url: str) -> None:
@@ -133,7 +138,24 @@ class LocalApi:
         self.region, self.mcp_url, self.claims = region, mcp_url, claims
         self.world_of = world_of or (lambda: None)  # 지금 가짜 AWS 환경 (local/world.py, 홈의 '최근 변경'에 쓴다)
         self.has_model = bool(os.environ.get("ANTHROPIC_API_KEY"))
+        self.model_name = "Anthropic API (ANTHROPIC_API_KEY)" if self.has_model else None
+        self.gateway = None  # Claude Code를 쓸 때의 중계 MCP (local/claude_code.Gateway)
         self.modules = modules or self._load_services(region, mcp_url)
+
+    def use_claude_code(self, command: str, gateway_url: str, environ: dict, model: Optional[str]) -> None:
+        """대화의 모델을 Claude Code로 바꾼다: LLM 서버 코드는 그대로 두고 클라이언트를 고르는 get_client만 바꿔 끼운다."""
+        from local.claude_code import Gateway, make_client_class
+        client_class = make_client_class()
+        self.gateway = Gateway()
+        llm_service = sys.modules["llm_service"]  # LLM Lambda(lambda_function)가 불러 둔 모듈
+
+        def get_client(timer=None):
+            # 질문마다 새 클라이언트 (요청마다 따로 도는 claude 프로세스와 중계 토큰을 가진다)
+            return client_class(self.mcp_url, self.gateway, gateway_url, command, environ, model)
+
+        llm_service.get_client = get_client
+        self.has_model = True
+        self.model_name = f"Claude Code ({model or '기본 모델'}, 이 맥의 로그인)"
 
     @staticmethod
     def _load_services(region: str, mcp_url: str) -> dict:
@@ -168,6 +190,11 @@ class LocalApi:
             return (204 if cors else 403), cors, ""
         url = urlsplit(target)
         path, query = url.path, dict(parse_qsl(url.query)) or None
+        if self.gateway is not None and path.startswith(GATEWAY_PATH):
+            # 중계 MCP: 부르는 것은 claude 프로세스뿐이다 (브라우저가 아니다). 요청마다 새 토큰이 주소에 들어 있다
+            if method != "POST":
+                return 405, {"Allow": "POST"}, ""
+            return self.gateway.handle(path, body)
         role = headers.get(ROLE_HEADER.lower())
         if path != "/health" and role not in self.claims:
             return 401, cors, json.dumps({"error": f"{ROLE_HEADER} 머리글(admin · decider · member)이 필요합니다"})

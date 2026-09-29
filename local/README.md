@@ -1,14 +1,17 @@
 # 로컬 장애 재현
 
 실제 AWS 없이 가짜 AWS(moto) 위에 Vigie의 MCP 서버와 API 서버를 띄웁니다. 장애 시나리오 43개 중 하나를 심은 뒤, Vigie 화면의 대화창에서 물어보며 진단을 재현합니다.
-진단 채점 테스트(`tests/test_diagnose.py`)와 같은 환경·시나리오(`local/world.py`)를 씁니다.
+대화의 모델로 이 맥에 로그인된 Claude Code를 씁니다. 진단 채점 테스트(`tests/test_diagnose.py`)와 같은 환경·시나리오(`local/world.py`)를 씁니다.
 
 ```
 화면 (npm run dev:local) ──▶ 로컬 API 서버 :8787 (local/api.py) ──▶ LLM·대화 기록·사용자 관리 Lambda 코드 그대로
-                                                                     │ 도구 호출
-Claude Code (직접 붙일 때) ─────────────────────────────▶ MCP 서버 :8765 (local/stack.py → mcp/app.py 그대로)
-                                                                     │
-python -m local.scenario ──▶ /_local/scenario ──▶ 정상 환경 + 장애    ▼ 같은 프로세스 안의 moto (가짜 AWS, 서울 리전)
+                                   │ 질문마다                                 │
+                                   ▼                                          │ 도구 호출
+                          claude -p (이 맥의 로그인) ──▶ 중계 MCP :8787/_local/gateway/<토큰>/mcp
+                                                          (승인 요청 · 가리기 · 감사 로그 · 진행 상황)
+                                                                              ▼
+Claude Code (직접 붙일 때) ─────────────────────────▶ MCP 서버 :8765 (local/stack.py → mcp/app.py 그대로)
+python -m local.scenario ──▶ /_local/scenario ──▶ 정상 환경 + 장애  │ 같은 프로세스 안의 moto (가짜 AWS, 서울 리전)
 ```
 
 ## 실행
@@ -58,12 +61,24 @@ npm --prefix frontend run dev:local
 - **사용자 바꾸기:** 주소에 `?local-role=member`(또는 `decider`, `admin`)를 붙여 엽니다. 그 탭에서는 다른 주소로 옮겨도 유지됩니다.
   로컬 사용자는 `admin@vigie.local`(관리자) · `decider@vigie.local`(결정자) · `member@vigie.local`(일반 사용자) 세 명입니다.
 - **홈:** 시나리오를 심을 때마다 대시보드를 다시 모읍니다. '최근 변경'에는 시나리오가 심은 변경 기록이 보입니다.
-- **대화:** 지금은 배포와 같은 Anthropic API 경로를 씁니다. 서버를 띄우는 셸에 `ANTHROPIC_API_KEY`가 있어야 하고, API 요금이 듭니다.
-  키가 없으면 대화창에 안내 문구가 나옵니다. 이 맥에 로그인된 Claude Code를 모델로 쓰는 방법은 다음 단계에서 더합니다.
+- **대화:** 아래 '대화의 모델'을 봅니다. 모델이 없으면 대화창에 안내 문구가 나옵니다.
 - **감사 로그:** 관리자가 물어 `diagnoseService`가 불리면, 그 행을 눌렀을 때 서비스의 진단 층 그림이 보입니다.
 - **승인:** 로컬 환경은 dev처럼 관리자·결정자가 자기 요청도 승인할 수 있습니다. 승인하면 가짜 AWS의 자원이 실제로 바뀝니다.
 
-## Claude Code로 대화해 보기
+## 대화의 모델
+
+`local.stack`의 `--llm`으로 고릅니다. 기본(`auto`)은 `claude` 명령이 있으면 Claude Code, 없으면 `ANTHROPIC_API_KEY`입니다.
+
+- **Claude Code (`--llm claude-code`)**: 질문마다 `claude -p`를 한 번 실행합니다. API 키 없이 이 맥의 Claude Code 로그인을 씁니다.
+  - `claude` 명령이 따로 로그인되어 있어야 합니다. 데스크톱 앱의 로그인과는 별개이므로, 서버가 뜰 때 로그인이 안 되어 있다는 안내가 나오면 터미널에서 `claude auth login`을 실행합니다.
+  - 모델은 `--claude-model`로 고릅니다. 기본은 배포와 같은 최신 Sonnet(`sonnet`)입니다. `claude`가 PATH에 없으면 `--claude-command`로 경로를 줍니다.
+  - 모델이 쓸 수 있는 것은 중계 MCP의 도구뿐입니다. 기본 도구(파일·명령 실행·웹)는 `--tools ""`와 `--restricted`로 끄고, `--strict-mcp-config`로 중계 MCP 하나만 붙입니다. 사용자·프로젝트 설정(훅 등)은 읽지 않고, 빈 임시 폴더에서 AWS 자격 증명 없이 실행합니다.
+  - 도구 호출은 중계 MCP가 받아 배포에서 모델의 도구 호출이 거치는 함수를 그대로 부릅니다. 변경 도구는 승인 요청이 되고, 결과의 계정 ID·비밀 값은 가린 뒤 모델에 넘깁니다. 도구마다 감사 로그(진단 층 그림 포함)와 진행 상황이 남고, 일반 사용자에게는 관리자 전용 도구가 보이지 않습니다.
+  - 이전 대화는 대화 기록으로 한 글에 담아 넘깁니다. Claude Code 세션은 이어 가지 않습니다.
+  - 여러 턴의 흐름, 사고 요약, 토큰 수 같은 모델 쪽의 세부는 Claude Code가 정합니다. 배포의 Anthropic API 경로와 똑같지는 않습니다(도구 검색·프롬프트 캐시 설정 등).
+- **Anthropic API (`--llm anthropic`)**: 배포와 같은 경로입니다. 서버를 띄우는 셸에 `ANTHROPIC_API_KEY`가 있어야 하고, API 요금이 듭니다.
+
+## Claude Code로 직접 대화해 보기
 
 떠 있는 서버를 이번 세션에만 붙입니다 (Claude Code 설정 파일은 바꾸지 않습니다).
 
@@ -72,7 +87,7 @@ claude --mcp-config '{"mcpServers":{"vigie":{"type":"http","url":"http://127.0.0
 ```
 
 그다음 `물어볼 말`처럼 물으면 모델이 `diagnoseService`를 부르고 판정을 설명합니다.
-이렇게 직접 붙이면 Vigie의 승인 요청·감사 로그·가리기를 거치지 않습니다.
+이렇게 직접 붙이면 Vigie의 승인 요청·감사 로그·가리기를 거치지 않습니다. 화면의 대화창에서는 중계 MCP를 거칩니다.
 
 ## 실제 AWS에 닿지 않게 하는 장치
 
