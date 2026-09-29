@@ -142,7 +142,7 @@ def test_bad_input_is_a_clear_error(diagnose, world, service, resource, message)
 def test_logging_stopped_alone_reads_as_the_cause(diagnose, world):
     leak_evasion(world)
     assert diagnose.run("credential", world["access_key"], region=REGION)["summary"] == (
-        "원인 — L2 변경: 감사 기록·탐지를 끄려 했습니다: StopLogging 1건")
+        "원인 — L2 리소스 변경 기록: 감사 기록·탐지를 끄려 했습니다: StopLogging 1건")
 
 
 def test_credential_findings_name_what_to_do(diagnose, world):

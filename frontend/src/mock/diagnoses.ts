@@ -8,11 +8,11 @@ import type { Diagnosis, DiagnosisCheck, DiagnosisLayer, DiagnosisLayerId, Diagn
 import { DEMO_REGION, events } from './demo/frothly';
 
 const NAMES: Record<DiagnosisLayerId, string> = {
-    L1: 'AWS 자체',
-    L2: '변경',
-    L3: '입구·네트워크',
+    L1: 'AWS',
+    L2: '리소스 변경 기록',
+    L3: '네트워크 경로',
     L4: '로드 밸런서·게이트웨이',
-    L5: '컴퓨팅',
+    L5: '인스턴스·실행 환경',
     L6: '권한·한도',
     L7: '데이터·의존성',
 };
@@ -61,7 +61,7 @@ export const publicWebcodeDiagnosis = (clock: (offset: number) => string) => dia
     's3',
     'S3',
     'frothlywebcode',
-    `원인 — L6 권한·한도: ACL이 모든 사람에게 열려 있습니다: AllUsers READ, AllUsers WRITE → 공개 노출 / 계기 L2 변경: 관련 변경 1건: ${clock(-8014)} PutBucketAcl (bstoll → frothlywebcode)`,
+    `원인 — L6 권한·한도: ACL이 모든 사람에게 열려 있습니다: AllUsers READ, AllUsers WRITE → 공개 노출 / 계기 L2 리소스 변경 기록: 관련 변경 1건: ${clock(-8014)} PutBucketAcl (bstoll → frothlywebcode)`,
     [
         layer('L1', 'S3 서비스', [HEALTH]),
         layer('L2', 'CloudTrail 쓰기 이벤트 (정책·ACL·차단)', [
@@ -71,7 +71,7 @@ export const publicWebcodeDiagnosis = (clock: (offset: number) => string) => dia
             check('해당 없음', 'skip', 'VPC 엔드포인트 정책은 이 절차가 보지 않습니다 (VPC 안에서만 403이면 엔드포인트 정책을 확인)'),
         ]),
         layer('L4', '앞단 (CloudFront 등)', [check('해당 없음', 'skip', 'S3 앞단(CloudFront 등)은 이 절차가 보지 않습니다')]),
-        layer('L5', '관리형 (컴퓨팅 없음)', [check('해당 없음', 'skip', 'S3는 관리형 저장소라 컴퓨팅 층이 없습니다')]),
+        layer('L5', '관리형 (인스턴스 없음)', [check('해당 없음', 'skip', 'S3는 관리형 저장소라 인스턴스·실행 환경 층이 없습니다')]),
         layer('L6', '퍼블릭 액세스 차단 · 정책 · ACL · 요청 한도', [
             check('버킷 ACL', 'cause', 'ACL이 모든 사람에게 열려 있습니다: AllUsers READ, AllUsers WRITE → 공개 노출', 's3:GetBucketAcl'),
             check('요청 오류', 'unknown', '요청 지표가 없습니다 (버킷에 요청 지표를 켜야 403·503을 셀 수 있습니다)', 'AWS/S3 4xxErrors · 5xxErrors (FilterId EntireBucket)'),
@@ -88,7 +88,7 @@ export const webAlbDiagnosis = (clock: (offset: number) => string) => diagnosis(
     'alb',
     'Application Load Balancer',
     'frothly-web-alb',
-    `원인 — L5 컴퓨팅: 인스턴스 3대 모두가 실행 중이 아닙니다: ${TARGETS} (WebServers) shutting-down (Client.UserInitiatedShutdown: User initiated shutdown) / 계기 L2 변경: 관련 변경 1건: ${clock(-3332)} TerminateInstances (bstoll → i-038ae43bc05053694)`,
+    `원인 — L5 인스턴스·실행 환경: 인스턴스 3대 모두가 실행 중이 아닙니다: ${TARGETS} (WebServers) shutting-down (Client.UserInitiatedShutdown: User initiated shutdown) / 계기 L2 리소스 변경 기록: 관련 변경 1건: ${clock(-3332)} TerminateInstances (bstoll → i-038ae43bc05053694)`,
     [
         layer('L1', '리전·AZ · 대상 EC2 호스트', [
             check('시스템 상태 검사', 'ok', '인스턴스 3대의 시스템 상태 검사가 정상입니다', 'ec2:DescribeInstanceStatus SystemStatus'),
@@ -124,9 +124,9 @@ export const leakedKeyDiagnosis = (clock: (offset: number) => string) =>
         'credential',
         '자격 증명 유출',
         'web_admin',
-        `원인 층을 특정하지 못했습니다. 증상 — L3 입구·네트워크: 배포 리전(${DEMO_REGION}) 밖 1곳에서 호출했습니다: ${reconRegion()} (채굴은 여러 리전에 퍼뜨리는 경우가 많습니다) / L6 권한·한도: 권한 거부 4건: ListAccessKeys 1건, ListBuckets 1건, DescribeAccountAttributes 1건, GetUser 1건 (권한을 더듬어 본 흔적)`,
+        `원인 층을 특정하지 못했습니다. 증상 — L3 네트워크 경로: 배포 리전(${DEMO_REGION}) 밖 1곳에서 호출했습니다: ${reconRegion()} (채굴은 여러 리전에 퍼뜨리는 경우가 많습니다) / L6 권한·한도: 권한 거부 4건: ListAccessKeys 1건, ListBuckets 1건, DescribeAccountAttributes 1건, GetUser 1건 (권한을 더듬어 본 흔적)`,
         [
-            layer('L1', 'AWS 자체 (해당 없음)', [check('해당 없음', 'skip', 'AWS 쪽 장애가 아니라 자격 증명 사고입니다')]),
+            layer('L1', 'AWS (해당 없음)', [check('해당 없음', 'skip', 'AWS 쪽 장애가 아니라 자격 증명 사고입니다')]),
             layer('L2', '이 키가 바꾼 것 (쓰기 이벤트·기록 끄기)', [
                 check('키가 바꾼 것', 'ok', '최근 24시간 동안 성공한 쓰기가 없습니다 (호출 4건)', 'cloudtrail:LookupEvents AccessKeyId'),
             ]),
@@ -135,9 +135,9 @@ export const leakedKeyDiagnosis = (clock: (offset: number) => string) =>
                 check('쓴 IP', 'symptom', 'IP 3곳에서 썼습니다: 139.198.18.205, 209.107.196.112, 82.102.18.111 …', 'cloudtrail sourceIPAddress'),
             ]),
             layer('L4', '앞단 (해당 없음)', [check('해당 없음', 'skip', '앞단이 없는 API 호출입니다')]),
-            layer('L5', '컴퓨팅 남용 (채굴 흔적 · GuardDuty)', [
+            layer('L5', '인스턴스·함수 남용 (채굴 흔적 · GuardDuty)', [
                 check('GuardDuty', 'unknown', 'GuardDuty를 조회하지 못했습니다 (AccessDeniedException)', 'guardduty:ListFindings'),
-                check('컴퓨팅 생성', 'ok', '인스턴스·함수·컨테이너를 만든 흔적이 없습니다', 'cloudtrail:LookupEvents'),
+                check('인스턴스·함수 생성', 'ok', '인스턴스·함수·컨테이너를 만든 흔적이 없습니다', 'cloudtrail:LookupEvents'),
             ]),
             layer('L6', '지속성 확보 · 권한 더듬기 · 키 상태', [
                 check('거부된 시도', 'symptom', `권한 거부 4건: ListAccessKeys 1건, ListBuckets 1건, DescribeAccountAttributes 1건, GetUser 1건 (권한을 더듬어 본 흔적, 처음 ${clock(-21542)})`, 'cloudtrail errorCode AccessDenied'),

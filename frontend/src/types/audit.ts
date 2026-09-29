@@ -82,7 +82,7 @@ export interface DiagnosisCheck {
 
 export interface DiagnosisLayer {
     id: DiagnosisLayerId;
-    name: string; // 층의 이름 (예: 컴퓨팅)
+    name: string; // 층의 이름 (예: 인스턴스·실행 환경)
     component: string; // 이 서비스에서 그 층이 가리키는 부품 (예: 대상 EC2)
     status: DiagnosisStatus; // 항목 중 가장 무거운 판정
     finding: string; // 층의 판정을 정한 항목의 찾은 것
