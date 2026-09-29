@@ -1627,9 +1627,9 @@
 }
 
 /* ---------------------------------------------------------------- 서비스 진단 층 그림 (AuditDiagnosis.tsx)
-   진단 도구 기록의 팝업창 맨 위 (처리 단계 고리 대신). 위는 일곱 층의 그림(판정만), 아래는 문제가 있는 층의 설명.
-   그림: 들어오는 쪽 열 | 층 열. 층 열에 위 띠 L2 · 그 서비스의 길 · 길 옆 · 바닥 띠 L1을 쌓는다.
-   상자는 칸·띠 한 겹만 둔다. 판정은 배지(점과 글자) 하나로만 보이고, 빨강·노랑은 점에만 쓴다. 해당 없음은 점선 */
+   진단 도구 기록의 팝업창 맨 위 (처리 단계 고리 대신). 위는 일곱 층의 그림(판정만), 아래는 고른 층 하나의 설명.
+   그림: L1 → L7을 같은 폭의 칸으로 가로 한 줄에. 칸들은 탭이고, 고른 칸은 주 색 테두리와 옅은 주 색 바탕.
+   상자는 칸 한 겹만 둔다. 판정은 배지(점과 글자) 하나로만 보이고, 빨강·노랑은 점에만 쓴다. 해당 없음은 점선 */
 .audit-diag-target {
   margin-left: 8px;
   font-weight: 500;
@@ -1654,30 +1654,21 @@
   border-radius: 50%;
 }
 
-/* 그림: 들어오는 쪽 열(글자 폭) | 층 열. 층 열의 줄들(.audit-diag-lane)은 모두 둘째 열에 놓여 왼쪽 끝이 맞는다 */
+/* 그림: 일곱 칸을 같은 폭으로 한 줄에 */
 .audit-diag-map {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 8px 10px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
   margin-top: 12px;
 }
 
-.audit-diag-lane {
-  grid-column: 2;
-  min-width: 0;
-}
-
-.audit-diag-entry {
-  grid-column: 1;
-  display: flex;
-  align-items: center;
+/* 칸: 흰 바탕 버튼. 번호 · 이름 · 판정을 위에서 아래로 (판정은 바닥에 붙어 옆 칸들과 같은 높이) */
+.audit-diag-node {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  justify-items: start;
   gap: 6px;
-}
-
-/* 칸과 띠 공통: 흰 바탕 버튼, 층 번호 · 이름 · 판정만 */
-.audit-diag-node,
-.audit-diag-band {
+  padding: 10px 10px 9px;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1689,26 +1680,29 @@
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
-.audit-diag-node:hover,
-.audit-diag-band:hover {
+.audit-diag-node:hover {
   border-color: var(--slate);
 }
 
-.audit-diag-node:focus-visible,
-.audit-diag-band:focus-visible {
+/* 고른 칸: 주 색 테두리(두 겹 두께)와 옅은 주 색 바탕. 아래 설명이 이 층이라는 표시 */
+.audit-diag-node.is-selected {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+  background: var(--primary-soft);
+}
+
+.audit-diag-node:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
 /* 해당 없음: 점선, 옅은 글자 */
-.audit-diag-node.is-skip,
-.audit-diag-band.is-skip {
+.audit-diag-node.is-skip:not(.is-selected) {
   border-style: dashed;
   background: transparent;
 }
 
-.audit-diag-node.is-skip .audit-diag-name,
-.audit-diag-band.is-skip .audit-diag-name {
+.audit-diag-node.is-skip .audit-diag-name {
   color: var(--ink-3);
 }
 
@@ -1733,96 +1727,17 @@
   font-family: var(--font-label);
   font-size: 13px;
   font-weight: 700;
+  line-height: 1.35;
   color: var(--ink);
   word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
-.audit-diag-node .badge,
-.audit-diag-band .badge {
+.audit-diag-node .badge {
   padding: 0;
 }
 
-/* 띠(L2 · L1): 한 줄 (번호 · 이름 · 판정은 오른쪽 끝) */
-.audit-diag-band {
-  display: grid;
-  width: 100%;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-}
-
-/* 칸(길 위 · 길 옆): 번호와 이름 한 줄, 판정은 그 아래 바닥에 (옆 칸들과 같은 높이) */
-.audit-diag-node {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: 1fr auto;
-  grid-template-areas:
-    "id name"
-    "badge badge";
-  align-items: start;
-  gap: 8px 8px;
-  padding: 10px 12px;
-}
-
-.audit-diag-node .audit-diag-id { grid-area: id; }
-.audit-diag-node .audit-diag-name { grid-area: name; align-self: center; }
-.audit-diag-node .badge { grid-area: badge; justify-self: start; }
-
-/* 길: 칸 › 칸 › … › 나가는 쪽 */
-.audit-diag-path {
-  display: flex;
-  align-items: stretch;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.audit-diag-step {
-  display: flex;
-  flex: 1 1 0;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.audit-diag-step .audit-diag-node {
-  flex: 1 1 0;
-  align-self: stretch;
-}
-
-/* 나가는 쪽(층이 아닌 글자)만 있는 칸은 글자 폭만 (층 칸들이 남은 폭을 나눈다) */
-.audit-diag-step.is-end {
-  flex: none;
-}
-
-.audit-diag-end {
-  flex: none;
-  font-family: var(--font-label);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink-3);
-  white-space: nowrap;
-}
-
-.audit-diag-arrow {
-  flex: none;
-  color: var(--slate);
-}
-
-/* 길 옆: 길에 없는 층 (길 위 칸 하나 폭 정도) */
-.audit-diag-side {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.audit-diag-side .audit-diag-node {
-  flex: 0 1 200px;
-}
-
-/* ---------------------------------------------------------------- 아래 설명 (문제가 있는 층을 차례로)
+/* ---------------------------------------------------------------- 아래 설명 (고른 층 하나)
    판정 → 판정을 정한 항목(앞말을 크게) → 나머지와 근거 → 확인한 다른 항목 → 이 층이 보는 것(옅게) */
 .audit-diag-details {
   display: grid;
@@ -1835,27 +1750,12 @@
   gap: 8px;
   min-width: 0;
   padding: 20px 0 22px;
-  scroll-margin-top: 16px;
-  transition: background 400ms ease, box-shadow 400ms ease;
 }
 
-.audit-diag-detail + .audit-diag-detail {
-  border-top: 1px solid var(--line-soft);
-}
-
-.audit-diag-detail:focus {
-  outline: none;
-}
-
-/* 그림에서 눌러 옮겨 온 설명: 잠깐 옅은 주 색 바탕 */
-.audit-diag-detail.is-flash {
-  background: var(--primary-soft);
-  box-shadow: 0 0 0 10px var(--primary-soft);
-}
-
+/* 문제가 없을 때 설명 위의 한 줄 */
 .audit-diag-clear {
   margin: 0;
-  padding: 18px 0 4px;
+  padding: 18px 0 0;
   font-size: 13.5px;
   color: var(--ink-2);
 }
@@ -1986,67 +1886,31 @@
   color: var(--ink-2);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .audit-diag-detail {
-    transition: none;
-  }
-}
-
-/* 좁은 팝업창: 한 열로, 길을 위에서 아래로 쌓고 화살표를 아래로. 칸은 한 줄 (번호 · 이름 · 판정) */
+/* 좁은 팝업창: 일곱 칸을 그대로 한 줄에 두되, 칸에는 번호와 판정 점만 (이름과 판정 글은 아래 설명 제목에 있다) */
 @media (max-width: 640px) {
   .audit-diag-map {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
-  }
-
-  .audit-diag-lane,
-  .audit-diag-entry {
-    grid-column: 1;
-  }
-
-  .audit-diag-entry {
-    flex-direction: column;
-    gap: 2px;
-    justify-self: center;
-  }
-
-  .audit-diag-path {
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  /* 세로로 쌓을 때는 칸이 내용만큼 높이를 갖는다 (가로 줄의 flex: 1 1 0을 풀지 않으면 높이가 0으로 눌린다) */
-  .audit-diag-step {
-    flex: none;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 2px;
-  }
-
-  .audit-diag-step .audit-diag-node {
-    flex: none;
-  }
-
-  .audit-diag-arrow {
-    align-self: center;
-    transform: rotate(90deg);
+    gap: 4px;
   }
 
   .audit-diag-node {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-rows: auto;
-    grid-template-areas: "id name badge";
-    align-items: center;
-    gap: 10px;
-    padding: 9px 12px 8px;
+    justify-items: center;
+    gap: 6px;
+    padding: 8px 2px 9px;
   }
 
+  .audit-diag-node .audit-diag-name {
+    display: none;
+  }
+
+  .audit-diag-node .audit-diag-id {
+    min-width: 0;
+  }
+
+  /* 판정은 점만: 글자는 숨기고(스크린 리더는 칸의 이름으로 읽는다) 점은 남긴다 */
   .audit-diag-node .badge {
-    justify-self: end;
-  }
-
-  .audit-diag-side .audit-diag-node {
-    flex: 1 1 100%;
+    gap: 0;
+    height: 10px;
+    font-size: 0;
   }
 
   .audit-diag-checks li {
