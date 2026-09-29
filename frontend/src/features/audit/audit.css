@@ -1684,40 +1684,87 @@
   display: block;
 }
 
-/* 칸: 흰 바탕 버튼, 번호와 이름 한 줄. 테두리 색이 판정 */
+/* 칸: 흰 바탕 버튼, 번호와 이름 한 줄. 테두리 색이 판정 (--diag-color, 고른 칸 바탕은 그 옅은 색 --diag-soft) */
 .audit-diag-node {
+  --diag-color: var(--line);
+  --diag-soft: var(--line-soft);
+  position: relative;
   display: flex;
   flex: 0 0 calc((100% - 3 * var(--diag-arrow)) / 4);
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
   min-width: 0;
-  border: 1.5px solid var(--line);
+  border: 1.5px solid var(--diag-color);
   border-radius: 10px;
   background: var(--surface);
   color: var(--ink);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 140ms ease, box-shadow 140ms ease;
+  /* 풀릴 때: 부드럽게 가라앉는다 (고를 때의 움직임은 .is-selected에) */
+  transition:
+    transform 180ms ease-out,
+    background-color 180ms ease,
+    border-width 180ms ease,
+    padding 180ms ease,
+    box-shadow 180ms ease;
 }
 
-.audit-diag-node.is-cause { border-color: var(--status-fail); }
-.audit-diag-node.is-suspect { border-color: var(--status-warn); }
-.audit-diag-node.is-ok { border-color: var(--status-ok); }
+.audit-diag-node.is-cause { --diag-color: var(--status-fail); --diag-soft: var(--danger-soft); }
+.audit-diag-node.is-suspect { --diag-color: var(--status-warn); --diag-soft: var(--warning-soft); }
+.audit-diag-node.is-ok { --diag-color: var(--status-ok); --diag-soft: var(--primary-soft); }
 
 /* 누를 수 있다는 표시: 옅은 그림자 (테두리와 바탕은 판정 · 고른 칸 표시에 쓴다) */
 .audit-diag-node:hover {
   box-shadow: 0 2px 8px rgba(10, 22, 40, 0.1);
 }
 
-/* 고른 칸: 테두리 색을 옅게 한 바탕 */
-.audit-diag-node.is-cause.is-selected { background: var(--danger-soft); }
-.audit-diag-node.is-suspect.is-selected { background: var(--warning-soft); }
-.audit-diag-node.is-ok.is-selected { background: var(--primary-soft); }
+/* 누르는 순간: 살짝 눌린다 */
+.audit-diag-node:active {
+  transform: scale(0.97);
+  transition-duration: 80ms;
+}
+
+/* 고른 칸: 소폭 커지고(4%), 테두리가 굵어지고(1.5px → 3px), 테두리 색을 옅게 한 바탕과 그림자.
+   테두리가 굵어진 만큼 안쪽 여백을 줄여 글자가 밀리지 않는다. 옆 칸 위로 올라오도록 z-index */
+.audit-diag-node.is-selected {
+  z-index: 1;
+  border-width: 3px;
+  padding: 8.5px 10.5px;
+  transform: scale(1.04);
+  background: var(--diag-soft);
+  box-shadow: 0 6px 16px rgba(10, 22, 40, 0.12);
+  /* 고를 때: 살짝 튀어 오르듯 (끝에서 조금 넘쳤다가 멈춤) */
+  transition:
+    transform 240ms cubic-bezier(0.34, 1.4, 0.64, 1),
+    background-color 200ms ease,
+    border-width 200ms ease,
+    padding 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.audit-diag-node.is-selected:active {
+  transform: scale(1.01);
+}
+
+.audit-diag-node .audit-diag-id {
+  transition: background-color 200ms ease;
+}
 
 .audit-diag-node.is-selected .audit-diag-id {
   background: var(--surface);
+}
+
+/* 움직임 줄이기: 크기 변화와 튀는 움직임 없이 바탕 · 테두리만 바뀐다 */
+@media (prefers-reduced-motion: reduce) {
+  .audit-diag-node,
+  .audit-diag-node:active,
+  .audit-diag-node.is-selected,
+  .audit-diag-node.is-selected:active {
+    transform: none;
+    transition: background-color 120ms linear, border-width 120ms linear, padding 120ms linear, box-shadow 120ms linear;
+  }
 }
 
 .audit-diag-node:focus-visible {
@@ -1914,6 +1961,10 @@
   .audit-diag-node {
     justify-content: center;
     padding: 10px 2px;
+  }
+
+  .audit-diag-node.is-selected {
+    padding: 8.5px 0.5px;
   }
 
   .audit-diag-node .audit-diag-name {
