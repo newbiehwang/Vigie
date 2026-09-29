@@ -2,14 +2,14 @@
 // (질문·사용자 관리 행에는 층이 없다).
 //
 //   처리 단계
-//        ╭ 효과 ╮                     [5] 유입 Ingress
+//        ╭ 효과 ╮                     [L5] 유입 Ingress
 //     매개      유출 ▸               비용 조회의 결과가 모델에게 들어갔습니다
 //    경계   유입    체류              ┌ 다른 단계에 남긴 흔적 ───────────────┐
-//     ▸[유입]    판단                │ 3 체류  의심 문구가 든 결과를 읽은 뒤 … │
+//     ▸[유입]    판단                │ L3 체류  의심 문구가 든 결과를 읽은 뒤 …│
 //        ╰────╯                      └──────────────────────────────┘
 //
 // - 고리는 조각 7개다. 조각 끝이 뾰족해(셰브런) 따로 화살표 없이 도는 방향이 보인다.
-//   차례는 서버의 판정(services/llm/audit_trace.py)이 따지는 차례다 (맨 위 1 효과부터 시계 방향)
+//   차례는 서버의 판정(services/llm/audit_trace.py)이 따지는 차례다 (맨 위 L1 효과부터 시계 방향). 단계 번호는 진단 층(L1~L7)처럼 L을 붙여 쓴다
 // - 이 기록의 단계(행의 locus)는 따로 강조하지 않는다. 처음 고른 단계이고, 설명 칸에 이 기록의 근거가 붙을 뿐이다
 // - 조각의 색: 판정이 있으면 판정, 없으면 흔적이 있는 단계만 옅은 주황. 기록으로 남지 않는 단계(판단: 모델 안,
 //   매개: 앱 밖)은 점선 테두리. 색은 고르는 것과 상관없이 그대로다
@@ -379,7 +379,7 @@ export function AuditLayers({ record }: { record: AuditRecord }) {
                                 tabIndex={0}
                                 role="button"
                                 aria-pressed={isSelected}
-                                aria-label={`${index + 1} ${layer.label} (${layer.en})${state ? `, ${state}` : ''}`}
+                                aria-label={`L${index + 1} ${layer.label} (${layer.en})${state ? `, ${state}` : ''}`}
                                 onClick={choose}
                                 onKeyDown={(event) => {
                                     if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -389,7 +389,7 @@ export function AuditLayers({ record }: { record: AuditRecord }) {
                             >
                                 <path className="audit-cycle-shape" d={segmentPath(index)} />
                                 <text className="audit-cycle-no" x={label.x} y={label.y - 7} textAnchor="middle">
-                                    {index + 1}
+                                    L{index + 1}
                                 </text>
                                 <text className="audit-cycle-label" x={label.x} y={label.y + 9} textAnchor="middle">
                                     {layer.label}
@@ -413,7 +413,7 @@ export function AuditLayers({ record }: { record: AuditRecord }) {
                 {selected ? (
                     <div className="audit-cycle-panel" aria-live="polite" key={selected.id}>
                         <div className="audit-cycle-panel-head">
-                            <span className={`audit-cycle-panel-no ${toneOf(selectedIndex)}`}>{selectedIndex + 1}</span>
+                            <span className={`audit-cycle-panel-no ${toneOf(selectedIndex)}`}>L{selectedIndex + 1}</span>
                             <strong>{selected.label}</strong>
                             <span className="audit-cycle-en">{selected.en}</span>
                             {selectedStep ? (
@@ -431,7 +431,7 @@ export function AuditLayers({ record }: { record: AuditRecord }) {
                             ? otherMarks.map((layer) => (
                                   <Evidence
                                       key={layer.id}
-                                      title={`흔적 · ${LAYERS.indexOf(layer) + 1} ${layer.label}`}
+                                      title={`흔적 · L${LAYERS.indexOf(layer) + 1} ${layer.label}`}
                                       flows={marks[layer.id]!}
                                       variant="mark"
                                   />
