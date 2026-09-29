@@ -16,6 +16,9 @@ moto에 없는 것은 world에 기록으로 심고 진단 절차의 조회 함�
 - CloudTrail 조회(LookupEvents): 자원 변경 기록(trail) · 키 사용 기록(activity) · 비용을 늘린 변경(cost_changes)
 - Cost Explorer 날짜별 비용(GetCostAndUsage): costs (평소 base, 최근 3일 recent)
 지표·로그는 넣은 시각이 진단 창(최근 1시간) 안에 들어야 하므로, 넣은 값을 기억해 두고 refresh로 지금 시각에 다시 넣는다.
+장애가 넣은 지표는 장애가 남아 있는 동안에만 다시 넣는다 (put_metric의 while_). 대화에서 승인해 되돌리면(인스턴스 시작 등)
+더 넣지 않아, 마지막으로 넣은 값이 한 시간 안에 진단 창 밖으로 밀려난다: 실제 AWS처럼 복구 직후에는 지난 증상이 남고
+한 시간 뒤에는 정상으로 돌아온다. 평소 값을 덮어쓴 지표였다면 그때부터 평소 값을 다시 넣는다.
 """
 from __future__ import annotations
 
@@ -62,12 +65,31 @@ def client(world: dict, service: str):
 
 
 # ---------------------------------------------------------------- 지표 · 로그 (넣은 값을 기억해 refresh로 다시 넣는다)
-def put_metric(world: dict, namespace: str, name: str, value: float, dimensions: dict, unit: str = "Count",
-               at: Optional[datetime] = None) -> None:
-    world["metrics"][(namespace, name, tuple(sorted(dimensions.items())))] = (value, unit)
+@dataclass
+class Metric:
+    """다시 넣을 지표 하나. while_가 있으면 장애 지표다: 그 조건이 참인 동안(장애가 남은 동안)만 다시 넣는다.
+    fallback은 장애가 덮어쓴 평소 값 (value, unit). 장애가 풀리면 그 값으로 돌아간다."""
+    value: float
+    unit: str
+    while_: Optional[Callable[[dict], bool]] = None
+    fallback: Optional[tuple] = None
+
+
+def _write_metric(world: dict, namespace: str, name: str, value: float, dimensions: dict, unit: str,
+                  at: Optional[datetime] = None) -> None:
     client(world, "cloudwatch").put_metric_data(Namespace=namespace, MetricData=[
         {"MetricName": name, "Timestamp": at or datetime.now(timezone.utc) - timedelta(minutes=10), "Value": value,
          "Unit": unit, "Dimensions": [{"Name": k, "Value": v} for k, v in dimensions.items()]}])
+
+
+def put_metric(world: dict, namespace: str, name: str, value: float, dimensions: dict, unit: str = "Count",
+               while_: Optional[Callable[[dict], bool]] = None) -> None:
+    """지표를 넣고 refresh가 다시 넣도록 기억한다. while_: 장애가 남아 있나 (world를 받아 참·거짓)."""
+    key = (namespace, name, tuple(sorted(dimensions.items())))
+    previous = world["metrics"].get(key)
+    fallback = (previous.value, previous.unit) if while_ and previous and previous.while_ is None else None
+    world["metrics"][key] = Metric(value, unit, while_, fallback)
+    _write_metric(world, namespace, name, value, dimensions, unit)
 
 
 def put_logs(world: dict, group: str, lines: list, at_ms: Optional[int] = None) -> None:
@@ -79,10 +101,17 @@ def put_logs(world: dict, group: str, lines: list, at_ms: Optional[int] = None) 
 
 
 def refresh(world: dict) -> int:
-    """넣어 둔 지표·로그를 지금 시각에 다시 넣는다 (진단 창 '최근 1시간' 안에 머물도록). 다시 넣은 지표 수."""
+    """넣어 둔 지표·로그를 지금 시각에 다시 넣는다 (진단 창 '최근 1시간' 안에 머물도록). 다시 넣은 지표 수.
+    장애 지표는 장애가 풀렸으면 더 넣지 않는다 (덮어쓴 평소 값이 있으면 그 값으로 돌아간다)."""
     now = datetime.now(timezone.utc) - timedelta(minutes=1)
-    for (namespace, name, dimensions), (value, unit) in list(world["metrics"].items()):
-        put_metric(world, namespace, name, value, dict(dimensions), unit, at=now)
+    for key, metric in list(world["metrics"].items()):
+        if metric.while_ is not None and not metric.while_(world):
+            if metric.fallback is None:
+                del world["metrics"][key]
+                continue
+            metric = world["metrics"][key] = Metric(*metric.fallback)
+        namespace, name, dimensions = key
+        _write_metric(world, namespace, name, metric.value, dict(dimensions), metric.unit, at=now)
     for group, lines in list(world["logs"]):
         put_logs(world, group, lines, at_ms=int(now.timestamp() * 1000))
     return len(world["metrics"])
@@ -285,22 +314,40 @@ def fill(text: Optional[str], world: dict) -> Optional[str]:
     return text.replace("{key}", world["access_key"])
 
 
+# ---------------------------------------------------------------- 장애가 남아 있나 (장애 지표의 while_)
+def targets_down(world) -> bool:
+    """웹 대상 중 하나라도 실행 중이 아니다 (대화에서 승인해 모두 시작하면 거짓)."""
+    reservations = client(world, "ec2").describe_instances(
+        InstanceIds=list(world["instances"].values()))["Reservations"]
+    return any(i["State"]["Name"] != "running" for r in reservations for i in r["Instances"])
+
+
+def target_port_closed(world) -> bool:
+    """대상 보안 그룹이 ALB에서 오는 80번을 받지 않는다."""
+    group = client(world, "ec2").describe_security_groups(GroupIds=[world["web_sg"]])["SecurityGroups"][0]
+    return not any(rule.get("FromPort") == 80 and any(pair.get("GroupId") == world["alb_sg"]
+                                                      for pair in rule.get("UserIdGroupPairs", []))
+                   for rule in group.get("IpPermissions", []))
+
+
 # ---------------------------------------------------------------- 심을 장애: ALB · EC2 · Lambda · S3
 def stop_targets(world):
     ec2 = client(world, "ec2")
     ec2.stop_instances(InstanceIds=list(world["instances"].values()))
     for instance_id in world["instances"].values():
         change(world, "StopInstances", instance_id, user="alice")
-    put_metric(world, "AWS/ApplicationELB", "HTTPCode_ELB_5XX_Count", 340, world["lb_dimension"])
-    put_metric(world, "AWS/ApplicationELB", "HTTPCode_ELB_503_Count", 340, world["lb_dimension"])
+    put_metric(world, "AWS/ApplicationELB", "HTTPCode_ELB_5XX_Count", 340, world["lb_dimension"], while_=targets_down)
+    put_metric(world, "AWS/ApplicationELB", "HTTPCode_ELB_503_Count", 340, world["lb_dimension"], while_=targets_down)
 
 
 def block_target_sg(world):
     client(world, "ec2").revoke_security_group_ingress(GroupId=world["web_sg"], IpPermissions=[
         {"IpProtocol": "tcp", "FromPort": 80, "ToPort": 80, "UserIdGroupPairs": [{"GroupId": world["alb_sg"]}]}])
     change(world, "RevokeSecurityGroupIngress", world["web_sg"], user="alice")
-    put_metric(world, "AWS/ApplicationELB", "HTTPCode_ELB_5XX_Count", 120, world["lb_dimension"])
-    put_metric(world, "AWS/ApplicationELB", "HTTPCode_ELB_504_Count", 120, world["lb_dimension"])
+    put_metric(world, "AWS/ApplicationELB", "HTTPCode_ELB_5XX_Count", 120, world["lb_dimension"],
+               while_=target_port_closed)
+    put_metric(world, "AWS/ApplicationELB", "HTTPCode_ELB_504_Count", 120, world["lb_dimension"],
+               while_=target_port_closed)
 
 
 def deregister_targets(world):
