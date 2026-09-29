@@ -990,7 +990,8 @@ const incidentEntryFor = (text: string, history: string[], admin: boolean): Mock
 // 끝난 대응 대화 (대화 목록): 웹 ALB 사고 바로 뒤 진단 → "다시 켜 줘" → 다시 진단. 시각은 데모 기록의 시간 축
 // (사고 -3332, 진단 -3180, 다시 켜 줘 -2900, 다시 진단 -2600). 감사 로그의 같은 질문들과 대화 ID가 같다
 const INCIDENT_SESSION_ID = "5f1c0a2e-5e55-4a1b-9c0d-ab0000000008";
-// 감사 로그의 S3 대응 (예시 시나리오 7 진단 → 1 차단 켜기 → 다시 진단): kim의 한 대화
+// 감사 로그의 S3 대응 (예시 시나리오 7): kim의 한 대화. 공개 진단 → (bstoll이 콘솔에서 ACL을 되돌림, 실제 기록) → 다시 진단.
+// 차단은 켜지 않은 채 끝난다: 목업을 열면 그 다음(차단 꺼짐)이라, 시연자가 대화에서 차단을 켜 마무리한다 (mockResources와 맞다)
 const S3_INCIDENT_SESSION = "5f1c0a2e-5e55-4a1b-9c0d-ab0000000007";
 const INCIDENT_TURNS: { offset: number; question: string; entry: () => MockEntry; elapsed: string }[] = [
   { offset: -3180, question: ALB_FIRST_QUESTION, entry: albFirstEntry, elapsed: "12초" },
@@ -1441,8 +1442,8 @@ const adminAuditRecord = (event: AdminEvent, target: ManagedUser, roles?: { from
 // 판정이 서로 다른 변경 작업 여섯 가지와 사용자 관리 기록을 기본 기록에 넣는다.
 // 변경 작업은 데모의 Frothly 사고(demo/frothly.ts) 뒤에 Vigie로 한 일이다. 시각은 그 기록의 시간 축 위에 둔다 (검색어는 괄호 안)
 //   사고: web_admin 키로 권한 탐색 → 키 비활성화 → frothlywebcode 공개 읽기·쓰기 ACL(56분) → 웹 보안 그룹 UDP 11211 개방(8분)
-//   1 정상 승인·실행            모든 층 정상                          ("frothlywebcode 퍼블릭": 공개됐던 버킷의 퍼블릭 액세스 차단 켜기.
-//                                                                     7의 진단과 같은 대화: 진단 → 차단 켜기(승인) → 다시 진단)
+//   1 정상 승인·실행            모든 층 정상                          ("frothlyweblogs 퍼블릭": 공개 사고 뒤 웹 로그 버킷에도 예방으로
+//                                                                     퍼블릭 액세스 차단 켜기. frothlywebcode는 목업 상태와 맞게 꺼진 채 둔다)
 //   2 거절                      효과 정상(거절), AWS 바뀌지 않음       ("Forensic": 유휴로 보인 조사용 인스턴스 중지를 결정자가 거절)
 //   3 실행 실패                 효과 주의(승인했지만 실패)             ("IncorrectInstanceState": 이미 종료된 웹 서버를 중지하려 함)
 //   4 의심 뒤 요청 → 실행        체류·판단·유입 주의, 매개 흔적         ("의심 뒤 요청", "로그에 적힌": 웹 서버 로그에 심긴 지시로
@@ -1521,45 +1522,27 @@ function seedScenarios(): AuditRecord[] {
   const MIN = 60 * 1000;
   const FORENSIC = "i-08e52f8b5a034012d"; // Bud's Forensic AMI (조사용으로 띄운 인스턴스)
 
-  // 1 정상 승인·실행: 공개 ACL을 되돌린 뒤, 다시 공개되지 않게 퍼블릭 액세스 차단을 켠다.
-  //   7에서 공개를 진단한 kim이 같은 대화에서 요청하고, 결정자 park이 승인한다. 실행 뒤 kim이 다시 진단한다 (장애 대응 한 흐름)
+  // 1 정상 승인·실행: 공개 사고 뒤, 같은 계정의 웹 로그 버킷(frothlyweblogs)에도 예방으로 퍼블릭 액세스 차단을 켠다.
+  //   공개됐던 frothlywebcode는 여기서 켜지 않는다 (목업을 열면 차단이 꺼져 있어, 대화에서 켜는 시연과 맞게: 7의 대화)
   {
     const t = incidentTime(-4400); // ACL 원복(-4646) 몇 분 뒤
     const action: ScenarioAction = {
       id: "5f1c0a2e-0001-4c3b-9d10-aa0000000001",
       tool: "enableS3PublicAccessBlock",
-      args: { bucket_name: "frothlywebcode" },
-      summary: "frothlywebcode 버킷 퍼블릭 액세스 차단 꺼짐 → 켜짐",
+      args: { bucket_name: "frothlyweblogs" },
+      summary: "frothlyweblogs 버킷 퍼블릭 액세스 차단 꺼짐 → 켜짐",
     };
-    const q = scenarioQuestion(kim, "frothlywebcode 버킷이 다시 공개되지 않게 막아줘", [
+    const q = scenarioQuestion(lee, "웹 로그 버킷 frothlyweblogs도 공개되지 않게 막아줘", [
       { tool_name: "listS3Buckets", input: {}, status: "ok" },
       { tool_name: "enableS3PublicAccessBlock", input: action.args, status: "ok" },
-    ], t, "`frothlywebcode` 버킷의 퍼블릭 액세스 차단 네 가지를 모두 켜려면 승인이 필요합니다. 켜면 ACL이나 버킷 정책으로 다시 공개할 수 없습니다.", S3_INCIDENT_SESSION);
-    const executed = new Date(t.getTime() + 4 * MIN + 1800);
+    ], t, "`frothlyweblogs` 버킷의 퍼블릭 액세스 차단 네 가지를 모두 켜려면 승인이 필요합니다. 지금 공개된 것은 아니지만, 켜 두면 ACL이나 버킷 정책으로 공개할 수 없습니다.");
     out.push(
       ...q.records,
-      scenarioEvent(action, "requested", kim, new Date(t.getTime() + 5000), q.requestId),
-      scenarioEvent(action, "approved", park, new Date(t.getTime() + 4 * MIN), q.requestId),
-      scenarioEvent(action, "executed", park, executed, q.requestId,
+      scenarioEvent(action, "requested", lee, new Date(t.getTime() + 5000), q.requestId),
+      scenarioEvent(action, "approved", kim, new Date(t.getTime() + 4 * MIN), q.requestId),
+      scenarioEvent(action, "executed", kim, new Date(t.getTime() + 4 * MIN + 1800), q.requestId,
         trail("s3.amazonaws.com", "PutPublicAccessBlock", "3d1f6a0b-7c2e-4f8a-9b1d-2a5c6e7f8a01")),
     );
-    // 다시 진단: 차단이 모두 켜져 L6 정상, 버전 관리(L7)만 주의. 변경 기록에 차단 켜기와 ACL 두 번이 보인다
-    const minute = (time: Date) => new Date(time.getTime() + 9 * 60 * MIN).toISOString().slice(5, 16).replace("T", " ");
-    const recheck = scenarioQuestion(kim, "다시 진단해 줘", [
-      { tool_name: "diagnoseService", input: { service: "s3", resource: "frothlywebcode" }, status: "ok",
-        diagnosis: webcodeDiagnosis(true, [
-          `${minute(executed)} PutPublicAccessBlock (vigie-llm-dev → frothlywebcode)`,
-          `${diagClock(-4646)} PutBucketAcl (bstoll → frothlywebcode)`,
-          `${diagClock(-8014)} PutBucketAcl (bstoll → frothlywebcode)`,
-        ]) },
-    ], new Date(executed.getTime() + 2 * MIN), [
-      "다시 진단한 결과, **공개될 위험이 없습니다.**",
-      "",
-      "- **정상 (L6 권한·한도)**: 퍼블릭 액세스 차단 네 가지가 모두 켜져 있고 공개 정책·ACL이 없습니다",
-      "- **주의 (L7 데이터·의존성)**: 버전 관리가 꺼져 있어 지우거나 덮어쓴 객체를 되돌릴 수 없습니다",
-      "- **리소스 변경 기록 (L2)**: 방금 켠 차단과 bstoll의 ACL 공개·되돌리기가 보이지만, 다른 층에 이상이 없어 원인이 아닙니다",
-    ].join("\n"), S3_INCIDENT_SESSION);
-    out.push(...recheck.records);
   }
 
   // 2 거절: '쓰지 않는 리소스'로 보인 조사용 인스턴스를 끄려 했지만, 사고 조사 중이라 결정자가 거절한다
@@ -1671,7 +1654,8 @@ function seedScenarios(): AuditRecord[] {
     return `${kst.toISOString().slice(5, 10)} ${kst.toISOString().slice(11, 16)}`;
   };
   {
-    // 7 공개 버킷: ACL을 되돌리기(-4646) 전에 관리자가 확인했다
+    // 7 공개 버킷: ACL을 되돌리기(-4646) 전에 관리자가 확인했고, bstoll이 되돌린 뒤 같은 대화에서 다시 진단했다.
+    //   다시 진단은 원인 없음, 퍼블릭 액세스 차단 꺼짐(L6 주의)으로 끝난다: 목업의 지금 상태(차단 꺼짐)로 이어진다
     const q = scenarioQuestion(kim, "frothlywebcode 버킷이 공개된 거 맞아? 원인도 알려줘", [
       { tool_name: "diagnoseService", input: { service: "s3", resource: "frothlywebcode" }, status: "ok",
         diagnosis: publicWebcodeDiagnosis(clock) },
@@ -1685,6 +1669,23 @@ function seedScenarios(): AuditRecord[] {
       "먼저 ACL을 비공개로 되돌리고, 퍼블릭 액세스 차단을 켜는 것을 권합니다. 차단 켜기는 제가 승인 요청으로 만들 수 있습니다.",
     ].join("\n"), S3_INCIDENT_SESSION);
     out.push(...q.records);
+    // bstoll이 콘솔에서 ACL을 되돌린(-4646) 뒤 다시 진단: 공개 ACL이 없어 원인은 없고, 차단은 아직 꺼져 있다
+    const recheck = scenarioQuestion(kim, "다시 진단해 줘", [
+      { tool_name: "diagnoseService", input: { service: "s3", resource: "frothlywebcode" }, status: "ok",
+        diagnosis: webcodeDiagnosis(false, [
+          `${clock(-4646)} PutBucketAcl (bstoll → frothlywebcode)`,
+          `${clock(-8014)} PutBucketAcl (bstoll → frothlywebcode)`,
+        ]) },
+    ], incidentTime(-4500), [
+      "다시 진단한 결과, **지금은 공개되어 있지 않습니다.** 공개 ACL이 없어 원인은 없습니다.",
+      "",
+      `- **리소스 변경 기록 (L2)**: ${clock(-4646)}에 bstoll이 콘솔에서 ACL을 되돌렸습니다 (PutBucketAcl). 앞의 공개(${clock(-8014)})와 함께 보이지만, 다른 층에 이상이 없어 원인이 아닙니다`,
+      "- **주의 (L6 권한·한도)**: 퍼블릭 액세스 차단 네 가지가 모두 꺼져 있어, ACL이나 정책 하나로 다시 공개할 수 있습니다",
+      "- **주의 (L7 데이터·의존성)**: 버전 관리가 꺼져 있습니다",
+      "",
+      "다시 공개되지 않게 퍼블릭 액세스 차단을 켜 두기를 권합니다. \"퍼블릭 액세스 차단 켜 줘\"라고 하면 승인 요청을 만듭니다.",
+    ].join("\n"), S3_INCIDENT_SESSION);
+    out.push(...recheck.records);
   }
   {
     // 8 웹 ALB 5xx: bstoll이 웹 서버 대상 세 대를 직접 종료한(-3332) 직후. 대화 목록의 끝난 대응 대화(incidentSession)와
