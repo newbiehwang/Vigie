@@ -24,6 +24,7 @@ import {
   demoResources,
   epochOf,
   idleInstance,
+  when,
 } from "./demo/frothly";
 import type {
   AxiosAdapter,
@@ -33,7 +34,16 @@ import type {
 import type { PendingAction } from "../types/actions";
 import type { Artifact } from "../types/artifacts";
 import type { AdminEvent, AuditQuery, AuditRecord, Diagnosis, TraceStep } from "../types/audit";
-import { leakedKeyDiagnosis, publicWebcodeDiagnosis, webAlbDiagnosis } from "./diagnoses";
+import {
+  diagClock,
+  diagNow,
+  leakedKeyDiagnosis,
+  publicWebcodeDiagnosis,
+  reconRegion,
+  webAlbDiagnosis,
+  webAlbRecoveredDiagnosis,
+  webcodeDiagnosis,
+} from "./diagnoses";
 import type { ManagedGroup, ManagedUser, UserRole } from "../types/users";
 import type {
   DashboardChange,
@@ -202,6 +212,7 @@ const mockResources = {
   // 데모(Frothly) 리소스 상태 (demo/frothly.ts의 DemoState)
   forensicStopped: false,
   webcodeBlocked: false,
+  webcodeBlockedAt: "", // 대화에서 차단을 켠 때 (재진단의 리소스 변경 기록에 보인다, 서버의 월-일 시:분)
 };
 const actions = new Map<string, PendingAction>();
 const APPROVAL_TTL_S = 600;
@@ -520,11 +531,15 @@ const TAINTED_ENTRY: MockEntry = {
   }),
 };
 
-// 승인한 작업의 결과 설명 (실제로는 서버가 저장된 결과로 질문을 만들어 모델이 설명한다)
+// 승인한 작업의 결과 설명 (실제로는 서버가 저장된 결과로 질문을 만들어 모델이 설명한다).
+// 퍼블릭 액세스 차단은 장애 대응의 조치라, 다시 진단해 바뀐 것을 확인하도록 이어 준다
 const explanationEntry = (action: PendingAction): MockEntry => ({
   answer:
     action.status === "executed"
-      ? `승인하신 변경을 실행했습니다: **${action.after}** (이전: ${action.before}).\n\n감사 로그 탭에서 누가 요청하고 승인했는지 확인할 수 있습니다.`
+      ? `승인하신 변경을 실행했습니다: **${action.after}** (이전: ${action.before}).\n\n감사 로그 탭에서 누가 요청하고 승인했는지 확인할 수 있습니다.` +
+        (action.tool === "enableS3PublicAccessBlock"
+          ? `\n\n"다시 진단해 줘"라고 하면 \`${PUBLIC_BUCKET}\`의 권한·한도(L6)가 정상으로 바뀌었는지 확인합니다.`
+          : "")
       : "승인하신 변경을 실행하지 못했습니다. 권한이나 리소스 상태를 확인해 주세요.",
   tools: [],
   thinking: ["승인된 변경 작업의 실행 결과를 사용자에게 설명한다."],
@@ -683,6 +698,9 @@ const entryFor = (body: RequestBody): MockEntry => {
   if (guard) return guard;
   // 차트: 질문이나 앞 주제에 맞는 Frothly 지표·비용
   if (/차트|그려|그래프|시각화/.test(text)) return demoChartFor(text, admin, history);
+  // 장애 대응: 서비스 진단 · 다시 진단 · 진단한 웹 서버 "다시 켜 줘"
+  const incident = incidentEntryFor(text, history, admin);
+  if (incident) return incident;
   const topic = demoTopicOf(history, admin);
   if (text.includes("보존"))
     return /줄여|줄이|바꿔|바꾸|설정|정해|로\s*해|해\s*줘/.test(text) ? APPROVAL_ENTRIES.retention : retentionInfoEntry();
@@ -693,10 +711,12 @@ const entryFor = (body: RequestBody): MockEntry => {
     return APPROVAL_ENTRIES.alarm;
   }
   // 퍼블릭 액세스 차단 켜기 (데모의 공개됐던 버킷). 버킷 이야기 뒤의 "막아 줘"도 같은 뜻이다
-  const bucketTopic = topic !== undefined && ["s3", "s3Objects", "security", "timeline", "who", "remediation"].includes(topic);
+  const bucketTopic =
+    (topic !== undefined && ["s3", "s3Objects", "security", "timeline", "who", "remediation"].includes(topic)) ||
+    lastIncidentService(history) === "s3";
   if (
     /퍼블릭\s*(액세스\s*)?차단|공개\s*(를|을)?\s*(막|차단)|공개되지\s*않게/.test(text) ||
-    (bucketTopic && /막아|막자|차단해/.test(text) && !/포트|보안\s*그룹|SSH|키/i.test(text))
+    (bucketTopic && /막아|막자|차단해|차단\s*(을\s*)?(다시\s*)?켜/.test(text) && !/포트|보안\s*그룹|SSH|키/i.test(text))
   )
     return mockResources.webcodeBlocked
       ? alreadyEntry(`\`${PUBLIC_BUCKET}\`의 퍼블릭 액세스 차단은 이미 켜져 있습니다. 바꿀 것이 없습니다.`,
@@ -740,7 +760,272 @@ const startRun = (
   return run;
 };
 
-// 처음 열었을 때 보이는 예시 대화: 데모의 첫 질문과 그 답 (demo/answers.ts)
+// ---------------------------------------------------------------- 장애 대응 (서비스 진단 diagnoseService, mcp/lambda_mcp/diagnose.py)
+// Frothly 사고로 해 보는 장애 대응: 진단 → 조치(승인) → 다시 진단. 진단 결과는 mock/diagnoses.ts (감사 로그의 진단 기록과
+// 같은 모양이라, 대화에서 부른 진단도 감사 로그에서 진단 단계 그림으로 열린다: auditRecordsOf가 diagnosis를 옮긴다)
+//   웹 ALB   "frothly-web-alb에서 503이 나요"     → 지금은 복구됨. 원인 L2(bstoll의 웹 서버 종료) · 증상 L4(최근 1시간 5xx)
+//            "다시 켜 줘"                        → 종료된 인스턴스는 켤 수 없고 Auto Scaling이 새로 띄웠다고 안내 (승인 없음)
+//   S3       "frothlywebcode가 공개된 것 같아"    → 지금은 공개 아님. 퍼블릭 액세스 차단 꺼짐(L6 주의)과 오늘 56분 공개됐던 기록
+//            "차단 다시 켜 줘"                    → 승인 카드 (APPROVAL_ENTRIES.s3Block). 승인하면 차단이 켜진다
+//   유출 키   "web_admin 키가 유출된 것 같아"      → 이미 꺼진 키. 증상 L3(IP·리전) · L6(거부 4건), 사람이 할 순서를 안내
+//   "다시 진단해 줘"                              → 이 대화에서 마지막으로 진단한 서비스를 지금 상태로 다시
+// 서비스 진단은 관리자 전용 도구다 (일반 사용자는 관리자만 쓸 수 있다는 답)
+// 대화 목록에는 끝난 대응 대화 하나(웹 ALB: 진단 → 다시 켜 줘 → 다시 진단)를 넣는다 (incidentSession). 감사 로그의
+// 같은 질문들(seedScenarios 8)과 대화 ID가 같다
+type IncidentService = "alb" | "s3" | "credential";
+
+const DIAGNOSE_WORD = /진단/;
+// 질문이 어느 서비스의 장애를 묻나 (진단을 부탁하거나, 장애를 알리는 말)
+const incidentServiceOf = (text: string): IncidentService | undefined => {
+  if (
+    /frothly-web-alb|\bALB\b|로드\s*밸런서|웹\s*(사이트|서비스|서버)/i.test(text) &&
+    (/50[0-4]|5xx/i.test(text) || DIAGNOSE_WORD.test(text))
+  )
+    return "alb";
+  if (
+    /frothlywebcode|버킷/i.test(text) &&
+    (DIAGNOSE_WORD.test(text) ||
+      /공개\s*(된|됐|되었|되어)\s*(것|거)\s*(같|맞)|공개(됐|되었)\s*(대|어|나|다는)|노출된\s*(것|거)\s*같/.test(text))
+  )
+    return "s3";
+  if (
+    /web_admin|액세스\s*키|키/i.test(text) &&
+    (/유출|노출|털렸|깃\s*허브|GitHub|올라갔/i.test(text) || (/web_admin/.test(text) && DIAGNOSE_WORD.test(text)))
+  )
+    return "credential";
+  return undefined;
+};
+
+// 이 대화에서 마지막으로 진단한 서비스 ("다시 진단해 줘", "다시 켜 줘"가 가리키는 것)
+const lastIncidentService = (history: string[]): IncidentService | undefined => {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const service = incidentServiceOf(history[i]);
+    if (service) return service;
+  }
+  return undefined;
+};
+
+const RECHECK = /다시\s*진단|재진단|다시\s*(확인|봐)\s*(해|줘|줄|주)|복구\s*(됐|되었)/;
+const START_WORDS = /켜\s*(줘|주|라)|시작\s*(해|시켜)|다시\s*켜/;
+
+const diagnoseTool = (service: IncidentService, resource: string, diagnosis: Diagnosis): MockTool => ({
+  tool_name: "diagnoseService",
+  input: { service, resource },
+  status: "ok",
+  diagnosis,
+});
+
+const incidentLines = (...parts: (string | false | undefined)[]) =>
+  parts.filter((part) => part !== false && part !== undefined).join("\n");
+
+// 웹 ALB 첫 진단 (사고 바로 뒤, -3180): 대상 세 대가 모두 종료 중. 감사 로그의 예시 기록 8과 끝난 대응 대화의 첫 답
+const ALB_FIRST_QUESTION = "웹 사이트가 502, 503을 내요. frothly-web-alb 진단해줘";
+const albFirstEntry = (): MockEntry => ({
+  tools: [diagnoseTool("alb", "frothly-web-alb", webAlbDiagnosis(diagClock))],
+  thinking: [
+    "ALB의 5xx를 묻는다. 서비스 진단 절차로 ALB → 대상 그룹 → 대상 EC2 → 그 뒤까지 층마다 본다.",
+    "대상 세 대가 모두 사용자가 시작한 종료 중이고, 직전에 bstoll의 TerminateInstances가 있다. 원인·계기·증상 차례로 정리한다.",
+  ],
+  answer: incidentLines(
+    "**대상 웹 서버 세 대가 모두 종료 중이라** ALB가 보낼 곳이 없습니다.",
+    "",
+    "- **원인 (L5 인스턴스·실행 환경)**: 대상 EC2 3대가 모두 shutting-down 상태입니다 (사용자가 시작한 종료)",
+    `- **계기 (L2 리소스 변경 기록)**: ${diagClock(-3332)}에 bstoll이 TerminateInstances를 불렀습니다`,
+    "- **증상 (L4 로드 밸런서)**: 대상이 모두 Target.InvalidState이고, ALB가 만든 5xx가 212건입니다",
+    "- 네트워크(L3)·연결 한도(L6)·응답 시간(L7)은 정상입니다",
+    "",
+    "Auto Scaling 그룹이 새 인스턴스를 띄우는지 확인하고, 종료가 의도한 것인지 bstoll에게 확인해 주세요.",
+  ),
+});
+
+// 웹 ALB, 대상이 교체되어 복구된 뒤 (지금, 또는 끝난 대응 대화의 다시 진단). errors: 최근 1시간의 ALB 5xx (만든 값)
+const ALB_ERRORS_AFTER = { total: 212, e502: 64, e503: 148, requests: 1904 }; // 사고 30분 뒤: 한 시간 안에 사고 구간이 다 든다
+const ALB_ERRORS_NOW = { total: 148, e502: 45, e503: 103, requests: 1286 }; // 지금: 한 시간 창의 앞쪽이 사고 구간에 걸친다
+const albRecoveredEntry = (errors: typeof ALB_ERRORS_NOW, recheck: boolean): MockEntry => ({
+  tools: [diagnoseTool("alb", "frothly-web-alb", webAlbRecoveredDiagnosis(diagClock, errors))],
+  thinking: [
+    recheck
+      ? "같은 ALB를 다시 진단해 복구됐는지 본다."
+      : "ALB의 5xx를 묻는다. 서비스 진단 절차로 ALB → 대상 그룹 → 대상 EC2 → 그 뒤까지 층마다 본다.",
+    "대상은 모두 정상이다. 고장 난 층은 없고, 최근 1시간의 5xx(증상)와 그 직전 bstoll의 웹 서버 종료(변경)가 남았다.",
+  ],
+  answer: incidentLines(
+    recheck
+      ? "**복구됐습니다.** 대상 2대가 모두 정상이고, 남은 판정은 이미 지난 5xx와 그 계기입니다."
+      : "**지금은 복구되어 있습니다.** 대상 2대가 모두 정상이고, 최근 1시간의 5xx는 웹 서버가 교체되던 때 난 것입니다.",
+    "",
+    `- **원인 (L2 리소스 변경 기록)**: 고장 난 층은 없고, 증상 직전의 변경이 가장 유력합니다. ${diagClock(-3332)}에 bstoll이 웹 서버 대상 3대를 직접 종료했고(TerminateInstances), ${diagClock(-6296)}에도 2대를 종료했습니다`,
+    `- **증상 (L4 로드 밸런서·게이트웨이)**: 최근 1시간 ALB가 만든 5xx ${errors.total}건 (502 ${errors.e502}건 · 503 ${errors.e503}건). 지금 대상 헬스는 모두 healthy입니다`,
+    "- **정상**: AWS(L1) · 네트워크 경로(L3) · 인스턴스(L5, Auto Scaling이 새로 띄운 2대 실행 중) · 연결 한도(L6) · 응답 시간(L7)",
+    "",
+    "웹 서버는 Auto Scaling 그룹이 관리해서, 직접 종료하면 새 인스턴스가 뜨는 동안 대상이 비어 5xx가 납니다. 종료가 의도한 것이었는지 bstoll에게 확인하고, 대수를 줄이려면 그룹의 원하는 용량(desired capacity)을 바꾸세요.",
+    ...(recheck ? [] : ["", '이어서 물어볼 수 있어요: "다시 켜 줘" · "다시 진단해 줘"']),
+  ),
+});
+
+// 진단한 웹 서버를 "다시 켜 줘": 종료된 인스턴스는 켤 수 없다 (승인 요청을 만들지 않는다)
+const albRestartEntry = (): MockEntry => ({
+  tools: [{ tool_name: "listEc2Instances", input: {}, status: "ok" }],
+  thinking: [
+    "진단한 웹 서버를 다시 켜 달라고 한다. 인스턴스 목록에서 대상 상태를 확인한다.",
+    "대상은 중지가 아니라 종료됐다. 종료된 인스턴스는 시작할 수 없으니 승인 요청을 만들지 않고, Auto Scaling이 새로 띄운 것을 알린다.",
+  ],
+  answer: incidentLines(
+    "**종료된(terminated) 인스턴스는 다시 켤 수 없습니다.** 중지(stopped)와 달리 종료는 되돌릴 수 없어, 승인 요청을 만들지 않았습니다.",
+    "",
+    `- 웹 서버는 Auto Scaling 그룹이 관리해서, bstoll이 종료한 뒤 ${diagClock(-3271)}~${diagClock(-3024)}에 새 인스턴스 3대를 띄웠습니다. 지금 대상 2대가 정상입니다`,
+    "- 대상이 모자라면 그룹의 원하는 용량(desired capacity)을 늘리세요. Vigie에는 Auto Scaling을 바꾸는 도구가 없어 콘솔에서 합니다",
+    "- 종료된 인스턴스의 디스크가 필요하면 스냅샷이 남아 있는지 먼저 확인하세요",
+    "",
+    '"다시 진단해 줘"라고 하면 ALB가 복구됐는지 확인합니다.',
+  ),
+});
+
+// frothlywebcode 지금: 차단을 켰으면 정상, 아니면 L6 주의. 첫 진단이면 오늘 공개됐던 기록(CloudTrail)도 거슬러 본다
+const webcodeNowEntry = (recheck: boolean): MockEntry => {
+  const blocked = mockResources.webcodeBlocked;
+  // 보는 시간(최근 1시간 + 앞 1시간) 안의 관련 변경: ACL 되돌리기(-4646), 대화에서 켠 차단
+  const changes = [
+    ...(blocked && mockResources.webcodeBlockedAt
+      ? [`${mockResources.webcodeBlockedAt} PutPublicAccessBlock (vigie-llm-dev → ${PUBLIC_BUCKET})`]
+      : []),
+    `${diagClock(-4646)} PutBucketAcl (bstoll → ${PUBLIC_BUCKET})`,
+  ];
+  const opened = Math.round((-4646 - -8014) / 60);
+  const lookback = !recheck && !blocked;
+  return {
+    ...(lookback && { search: { query: "lookup_events", found: ["lookup_events"] } }),
+    tools: [
+      diagnoseTool("s3", PUBLIC_BUCKET, webcodeDiagnosis(blocked, changes)),
+      ...(lookback
+        ? [{
+            tool_name: "lookup_events",
+            input: { lookup_attributes: [{ AttributeKey: "EventName", AttributeValue: "PutBucketAcl" }] },
+            status: "ok" as const,
+          }]
+        : []),
+    ],
+    thinking: [
+      recheck
+        ? `${PUBLIC_BUCKET}를 다시 진단해 조치가 반영됐는지 본다.`
+        : `${PUBLIC_BUCKET}가 공개됐는지 묻는다. 서비스 진단 절차로 퍼블릭 액세스 차단·정책·ACL·버전 관리를 층마다 본다.`,
+      blocked
+        ? "차단이 모두 켜져 권한·한도(L6)가 정상이다. 버전 관리(L7) 주의만 남았다."
+        : "지금 공개 ACL·정책은 없어 원인은 없다. 차단이 꺼져 있고, 진단의 변경 기록에 ACL 되돌리기가 보여 그 전의 공개 기록을 CloudTrail에서 찾았다.",
+    ],
+    answer: blocked
+      ? incidentLines(
+          recheck ? "다시 진단한 결과, **공개될 위험이 없습니다.**" : "**공개될 위험이 없습니다.**",
+          "",
+          "- **정상 (L6 권한·한도)**: 퍼블릭 액세스 차단 네 가지가 모두 켜져 있고 공개 정책·ACL이 없습니다. ACL이나 버킷 정책으로 다시 공개할 수 없습니다",
+          "- **주의 (L7 데이터·의존성)**: 버전 관리가 꺼져 있어 지우거나 덮어쓴 객체를 되돌릴 수 없습니다. 콘솔에서 버전 관리를 켜기를 권합니다 (Vigie에는 그 도구가 없습니다)",
+          `- **리소스 변경 기록 (L2)**: ${changes.join(", ")}`,
+        )
+      : incidentLines(
+          "**지금은 공개되어 있지 않습니다.** 진단 절차의 판정에 원인은 없지만, 다시 공개될 수 있는 설정이 남아 있습니다.",
+          "",
+          "- **주의 (L6 권한·한도)**: 퍼블릭 액세스 차단 네 가지(BlockPublicAcls · IgnorePublicAcls · BlockPublicPolicy · RestrictPublicBuckets)가 모두 꺼져 있어, ACL이나 정책 하나로 다시 공개할 수 있습니다",
+          "- **주의 (L7 데이터·의존성)**: 버전 관리가 꺼져 있어 덮어쓴 객체를 되돌릴 수 없습니다",
+          `- **리소스 변경 기록 (L2)**: ${diagClock(-4646)}에 bstoll이 PutBucketAcl을 불렀습니다`,
+          "",
+          lookback &&
+            `CloudTrail을 더 거슬러 보면 **오늘 ${opened}분 동안 실제로 공개됐었습니다**: ${when(-8014)}에 bstoll이 ACL로 모든 사용자(AllUsers)에게 READ·WRITE를 줬고, ${when(-4646)}에 되돌렸습니다. 그동안 누가 읽거나 올렸는지는 S3 서버 액세스 로그로 확인해야 합니다 (관리 이벤트로는 보이지 않습니다).`,
+          lookback && "",
+          '다시 공개되지 않게 퍼블릭 액세스 차단을 켜 두기를 권합니다. "퍼블릭 액세스 차단 다시 켜 줘"라고 하면 승인 요청을 만듭니다.',
+        ),
+  };
+};
+
+// web_admin 키 지금: bstoll이 이미 끈 키. 거부된 시도는 24시간 안이라 그대로 보인다
+const leakedKeyNowEntry = (recheck: boolean): MockEntry => ({
+  tools: [diagnoseTool("credential", "web_admin", leakedKeyDiagnosis(diagClock, false))],
+  thinking: [
+    recheck
+      ? "web_admin 키를 다시 진단한다."
+      : "키 유출을 묻는다. 자격 증명 유출 절차로 이 키가 최근 24시간 동안 어디서 무엇을 했는지 층마다 본다.",
+    "키는 이미 비활성이다. 쓰기는 없고 거부된 조회 4건과 IP 세 곳만 있다. Vigie에는 IAM을 바꾸는 도구가 없어 사람이 할 순서를 알린다.",
+  ],
+  answer: incidentLines(
+    `**이 키는 이미 꺼져 있습니다** (${when(-20348)}에 bstoll이 비활성화). 이 키로 바뀐 것은 없고, 권한을 더듬어 본 흔적만 있습니다.`,
+    "",
+    `- **증상 (L6 권한·한도)**: ${diagClock(-21542)}부터 IAM·S3·EC2에 부른 4건이 모두 거부됐습니다 (ListAccessKeys, ListBuckets, DescribeAccountAttributes, GetUser)`,
+    `- **증상 (L3 네트워크 경로)**: IP 3곳(139.198.18.205 · 209.107.196.112 · 82.102.18.111)에서 썼고, 배포 리전 밖 ${reconRegion()}에서도 불렀습니다`,
+    "- **정상**: 쓰기(L2) · 인스턴스·함수 생성(L5) · 비밀 값 조회와 버킷 공개(L7) 흔적이 없습니다",
+    "- **확인 불가**: GuardDuty 탐지(권한 없음)와 S3 객체 읽기(데이터 이벤트)는 이 절차로 보이지 않습니다",
+    "",
+    "해야 할 일 (Vigie에는 IAM을 바꾸는 도구가 없어 콘솔에서 합니다):",
+    "",
+    "1. 키는 지우지 말고 **비활성으로 둡니다** (지우면 CloudTrail 조사가 어려워집니다)",
+    "2. 키가 노출된 곳(코드 저장소·설정 파일)을 찾아 지우고, 필요하면 새 키를 만듭니다",
+    '3. web_admin의 권한이 넓다면 줄입니다 ("최소 권한 알려 줘")',
+  ),
+});
+
+// 일반 사용자: 서비스 진단은 관리자 전용 도구다 (services/llm/tool_access.py). 진단 없이 스스로 볼 수 있는 것을 알린다
+const incidentAdminOnlyEntry = (): MockEntry => ({
+  tools: [],
+  thinking: ["장애 진단을 부탁한다. 서비스 진단은 관리자 전용 도구라 이 사용자는 쓸 수 없다."],
+  answer: incidentLines(
+    "**서비스 진단은 관리자(admins 그룹)만 쓸 수 있습니다.** 여러 층의 CloudTrail·IAM·네트워크 설정을 함께 보는 절차라서, 필요하면 관리자에게 진단을 요청해 주세요.",
+    "",
+    '지금 권한으로는 지표와 상태를 볼 수 있습니다: "웹 서비스 상태 어때?", "오늘 오류 있었어?"',
+  ),
+});
+
+const incidentDiagnosis = (service: IncidentService, recheck: boolean): MockEntry =>
+  service === "alb" ? albRecoveredEntry(ALB_ERRORS_NOW, recheck) : service === "s3" ? webcodeNowEntry(recheck) : leakedKeyNowEntry(recheck);
+
+// 장애 대응 질문이면 그 답, 아니면 undefined (entryFor가 이어서 고른다)
+const incidentEntryFor = (text: string, history: string[], admin: boolean): MockEntry | undefined => {
+  const previous = lastIncidentService(history);
+  // 진단한 웹 서버를 다시 켜 달라는 말 (진단 절차는 부르지 않는다)
+  if (previous === "alb" && START_WORDS.test(text) && !/Forensic|포렌식|조사용|i-[0-9a-f]{8,}/i.test(text)) return albRestartEntry();
+  const named = incidentServiceOf(text);
+  const service = named ?? (RECHECK.test(text) ? previous : undefined);
+  if (!service) return undefined;
+  if (!admin) return incidentAdminOnlyEntry();
+  return incidentDiagnosis(service, !named);
+};
+
+// 끝난 대응 대화 (대화 목록): 웹 ALB 사고 바로 뒤 진단 → "다시 켜 줘" → 다시 진단. 시각은 데모 기록의 시간 축
+// (사고 -3332, 진단 -3180, 다시 켜 줘 -2900, 다시 진단 -2600). 감사 로그의 같은 질문들과 대화 ID가 같다
+const INCIDENT_SESSION_ID = "5f1c0a2e-5e55-4a1b-9c0d-ab0000000008";
+// 감사 로그의 S3 대응 (예시 시나리오 7): kim의 한 대화. 공개 진단 → (bstoll이 콘솔에서 ACL을 되돌림, 실제 기록) → 다시 진단.
+// 차단은 켜지 않은 채 끝난다: 목업을 열면 그 다음(차단 꺼짐)이라, 시연자가 대화에서 차단을 켜 마무리한다 (mockResources와 맞다)
+const S3_INCIDENT_SESSION = "5f1c0a2e-5e55-4a1b-9c0d-ab0000000007";
+const INCIDENT_TURNS: { offset: number; question: string; entry: () => MockEntry; elapsed: string }[] = [
+  { offset: -3180, question: ALB_FIRST_QUESTION, entry: albFirstEntry, elapsed: "12초" },
+  { offset: -2900, question: "종료된 거 다시 켜 줘", entry: albRestartEntry, elapsed: "7초" },
+  { offset: -2600, question: "다시 진단해 줘", entry: () => albRecoveredEntry(ALB_ERRORS_AFTER, true), elapsed: "11초" },
+];
+
+const incidentSession = (): MockSession => {
+  const at = (offset: number, plusMs = 0) => new Date(epochOf(offset) * 1000 + plusMs).toISOString();
+  const messages = INCIDENT_TURNS.flatMap(({ offset, question, entry, elapsed }): MockMessage[] => {
+    const answer = entry();
+    return [
+      { id: newId(), sender: "user", text: question, timestamp: at(offset) },
+      {
+        id: newId(),
+        sender: "assistant",
+        text: answer.answer,
+        timestamp: at(offset, 12000),
+        elapsed_time: elapsed,
+        inference: inferenceOf(answer.tools, stepsAt(planRun(answer), Infinity)),
+      },
+    ];
+  });
+  return {
+    sessionId: INCIDENT_SESSION_ID,
+    userId: "mock-user",
+    title: ALB_FIRST_QUESTION,
+    createdAt: messages[0].timestamp,
+    updatedAt: messages[messages.length - 1].timestamp,
+    messages,
+  };
+};
+
+// 처음 열었을 때 보이는 예시 대화: 데모의 첫 질문과 그 답 (demo/answers.ts), 그리고 끝난 장애 대응 대화 (관리자만: 진단은 관리자 전용)
 const seedSessions = (): MockSession[] => {
   const time = now();
   const question = demoFirstQuestion(mockIsAdmin());
@@ -769,6 +1054,7 @@ const seedSessions = (): MockSession[] => {
         },
       ],
     },
+    ...(mockIsAdmin() ? [incidentSession()] : []),
   ];
 };
 
@@ -888,6 +1174,7 @@ const auditRecordsOf = (
   time: Date,
   redacted: Record<string, number> = {},
   answer?: string,
+  sessionId?: string, // 같은 대화의 질문들을 묶을 때 (예시 시나리오의 장애 대응)
 ): AuditRecord[] => {
   const requestId = newId();
   const common = {
@@ -895,7 +1182,7 @@ const auditRecordsOf = (
     ...("email" in user && { email: user.email }),
     source: user.source,
     requestId,
-    sessionId: user.source === "web" ? newId() : undefined,
+    sessionId: sessionId ?? (user.source === "web" ? newId() : undefined),
   };
   let at = time.getTime() + 900; // 첫 도구는 첫 사고 뒤에 시작한다
   const toolRecords = tools.map((tool): AuditRecord => {
@@ -1155,7 +1442,8 @@ const adminAuditRecord = (event: AdminEvent, target: ManagedUser, roles?: { from
 // 판정이 서로 다른 변경 작업 여섯 가지와 사용자 관리 기록을 기본 기록에 넣는다.
 // 변경 작업은 데모의 Frothly 사고(demo/frothly.ts) 뒤에 Vigie로 한 일이다. 시각은 그 기록의 시간 축 위에 둔다 (검색어는 괄호 안)
 //   사고: web_admin 키로 권한 탐색 → 키 비활성화 → frothlywebcode 공개 읽기·쓰기 ACL(56분) → 웹 보안 그룹 UDP 11211 개방(8분)
-//   1 정상 승인·실행            모든 층 정상                          ("frothlywebcode 퍼블릭": 공개됐던 버킷의 퍼블릭 액세스 차단 켜기)
+//   1 정상 승인·실행            모든 층 정상                          ("frothlyweblogs 퍼블릭": 공개 사고 뒤 웹 로그 버킷에도 예방으로
+//                                                                     퍼블릭 액세스 차단 켜기. frothlywebcode는 목업 상태와 맞게 꺼진 채 둔다)
 //   2 거절                      효과 정상(거절), AWS 바뀌지 않음       ("Forensic": 유휴로 보인 조사용 인스턴스 중지를 결정자가 거절)
 //   3 실행 실패                 효과 주의(승인했지만 실패)             ("IncorrectInstanceState": 이미 종료된 웹 서버를 중지하려 함)
 //   4 의심 뒤 요청 → 실행        체류·판단·유입 주의, 매개 흔적         ("의심 뒤 요청", "로그에 적힌": 웹 서버 로그에 심긴 지시로
@@ -1210,8 +1498,9 @@ const scenarioQuestion = (
   tools: MockTool[],
   time: Date,
   answer: string,
+  sessionId?: string,
 ) => {
-  const records = auditRecordsOf(user, question, tools, time, {}, answer);
+  const records = auditRecordsOf(user, question, tools, time, {}, answer, sessionId);
   return { records, requestId: records[records.length - 1].requestId };
 };
 
@@ -1233,19 +1522,20 @@ function seedScenarios(): AuditRecord[] {
   const MIN = 60 * 1000;
   const FORENSIC = "i-08e52f8b5a034012d"; // Bud's Forensic AMI (조사용으로 띄운 인스턴스)
 
-  // 1 정상 승인·실행: 공개 ACL을 되돌린 뒤, 다시 공개되지 않게 퍼블릭 액세스 차단을 켠다
+  // 1 정상 승인·실행: 공개 사고 뒤, 같은 계정의 웹 로그 버킷(frothlyweblogs)에도 예방으로 퍼블릭 액세스 차단을 켠다.
+  //   공개됐던 frothlywebcode는 여기서 켜지 않는다 (목업을 열면 차단이 꺼져 있어, 대화에서 켜는 시연과 맞게: 7의 대화)
   {
     const t = incidentTime(-4400); // ACL 원복(-4646) 몇 분 뒤
     const action: ScenarioAction = {
       id: "5f1c0a2e-0001-4c3b-9d10-aa0000000001",
       tool: "enableS3PublicAccessBlock",
-      args: { bucket_name: "frothlywebcode" },
-      summary: "frothlywebcode 버킷 퍼블릭 액세스 차단 꺼짐 → 켜짐",
+      args: { bucket_name: "frothlyweblogs" },
+      summary: "frothlyweblogs 버킷 퍼블릭 액세스 차단 꺼짐 → 켜짐",
     };
-    const q = scenarioQuestion(lee, "frothlywebcode 버킷이 다시 공개되지 않게 막아줘", [
+    const q = scenarioQuestion(lee, "웹 로그 버킷 frothlyweblogs도 공개되지 않게 막아줘", [
       { tool_name: "listS3Buckets", input: {}, status: "ok" },
       { tool_name: "enableS3PublicAccessBlock", input: action.args, status: "ok" },
-    ], t, "`frothlywebcode` 버킷의 퍼블릭 액세스 차단 네 가지를 모두 켜려면 승인이 필요합니다. 켜면 ACL이나 버킷 정책으로 다시 공개할 수 없습니다.");
+    ], t, "`frothlyweblogs` 버킷의 퍼블릭 액세스 차단 네 가지를 모두 켜려면 승인이 필요합니다. 지금 공개된 것은 아니지만, 켜 두면 ACL이나 버킷 정책으로 공개할 수 없습니다.");
     out.push(
       ...q.records,
       scenarioEvent(action, "requested", lee, new Date(t.getTime() + 5000), q.requestId),
@@ -1364,7 +1654,8 @@ function seedScenarios(): AuditRecord[] {
     return `${kst.toISOString().slice(5, 10)} ${kst.toISOString().slice(11, 16)}`;
   };
   {
-    // 7 공개 버킷: ACL을 되돌리기(-4646) 전에 관리자가 확인했다
+    // 7 공개 버킷: ACL을 되돌리기(-4646) 전에 관리자가 확인했고, bstoll이 되돌린 뒤 같은 대화에서 다시 진단했다.
+    //   다시 진단은 원인 없음, 퍼블릭 액세스 차단 꺼짐(L6 주의)으로 끝난다: 목업의 지금 상태(차단 꺼짐)로 이어진다
     const q = scenarioQuestion(kim, "frothlywebcode 버킷이 공개된 거 맞아? 원인도 알려줘", [
       { tool_name: "diagnoseService", input: { service: "s3", resource: "frothlywebcode" }, status: "ok",
         diagnosis: publicWebcodeDiagnosis(clock) },
@@ -1376,25 +1667,34 @@ function seedScenarios(): AuditRecord[] {
       "- **주의 (L7)**: 버전 관리가 꺼져 있어 덮어쓴 파일은 되돌릴 수 없습니다",
       "",
       "먼저 ACL을 비공개로 되돌리고, 퍼블릭 액세스 차단을 켜는 것을 권합니다. 차단 켜기는 제가 승인 요청으로 만들 수 있습니다.",
-    ].join("\n"));
+    ].join("\n"), S3_INCIDENT_SESSION);
     out.push(...q.records);
+    // bstoll이 콘솔에서 ACL을 되돌린(-4646) 뒤 다시 진단: 공개 ACL이 없어 원인은 없고, 차단은 아직 꺼져 있다
+    const recheck = scenarioQuestion(kim, "다시 진단해 줘", [
+      { tool_name: "diagnoseService", input: { service: "s3", resource: "frothlywebcode" }, status: "ok",
+        diagnosis: webcodeDiagnosis(false, [
+          `${clock(-4646)} PutBucketAcl (bstoll → frothlywebcode)`,
+          `${clock(-8014)} PutBucketAcl (bstoll → frothlywebcode)`,
+        ]) },
+    ], incidentTime(-4500), [
+      "다시 진단한 결과, **지금은 공개되어 있지 않습니다.** 공개 ACL이 없어 원인은 없습니다.",
+      "",
+      `- **리소스 변경 기록 (L2)**: ${clock(-4646)}에 bstoll이 콘솔에서 ACL을 되돌렸습니다 (PutBucketAcl). 앞의 공개(${clock(-8014)})와 함께 보이지만, 다른 층에 이상이 없어 원인이 아닙니다`,
+      "- **주의 (L6 권한·한도)**: 퍼블릭 액세스 차단 네 가지가 모두 꺼져 있어, ACL이나 정책 하나로 다시 공개할 수 있습니다",
+      "- **주의 (L7 데이터·의존성)**: 버전 관리가 꺼져 있습니다",
+      "",
+      "다시 공개되지 않게 퍼블릭 액세스 차단을 켜 두기를 권합니다. \"퍼블릭 액세스 차단 켜 줘\"라고 하면 승인 요청을 만듭니다.",
+    ].join("\n"), S3_INCIDENT_SESSION);
+    out.push(...recheck.records);
   }
   {
-    // 8 웹 ALB 5xx: bstoll이 웹 서버 대상 세 대를 직접 종료한(-3332) 직후
-    const q = scenarioQuestion(demo, "웹 사이트가 502, 503을 내요. frothly-web-alb 진단해줘", [
-      { tool_name: "diagnoseService", input: { service: "alb", resource: "frothly-web-alb" }, status: "ok",
-        diagnosis: webAlbDiagnosis(clock) },
-    ], incidentTime(-3180), [
-      "**대상 웹 서버 세 대가 모두 종료 중이라** ALB가 보낼 곳이 없습니다.",
-      "",
-      "- **원인 (L5 인스턴스·실행 환경)**: 대상 EC2 3대가 모두 shutting-down 상태입니다 (사용자가 시작한 종료)",
-      `- **계기 (L2 리소스 변경 기록)**: ${clock(-3332)}에 bstoll이 TerminateInstances를 불렀습니다`,
-      "- **증상 (L4 로드 밸런서)**: 대상이 모두 Target.InvalidState이고, ALB가 만든 5xx가 212건입니다",
-      "- 네트워크(L3)·연결 한도(L6)·응답 시간(L7)은 정상입니다",
-      "",
-      "Auto Scaling 그룹이 새 인스턴스를 띄우는지 확인하고, 종료가 의도한 것인지 bstoll에게 확인해 주세요.",
-    ].join("\n"));
-    out.push(...q.records);
+    // 8 웹 ALB 5xx: bstoll이 웹 서버 대상 세 대를 직접 종료한(-3332) 직후. 대화 목록의 끝난 대응 대화(incidentSession)와
+    //   같은 질문들이다: 진단 → "종료된 거 다시 켜 줘"(종료된 인스턴스는 켤 수 없다) → 다시 진단(복구)
+    for (const turn of INCIDENT_TURNS) {
+      const entry = turn.entry();
+      const q = scenarioQuestion(demo, turn.question, entry.tools, incidentTime(turn.offset), entry.answer, INCIDENT_SESSION_ID);
+      out.push(...q.records);
+    }
   }
 
   {
@@ -1695,6 +1995,7 @@ const executeMock = (action: PendingAction): { event_source: string; event_name:
     }
     case "enableS3PublicAccessBlock":
       mockResources.webcodeBlocked = true;
+      mockResources.webcodeBlockedAt = diagNow();
       return { event_source: "s3.amazonaws.com", event_name: "PutPublicAccessBlock" };
     default: // setAlarmActions
       mockResources.alarmActions = false;
