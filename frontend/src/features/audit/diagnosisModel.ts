@@ -1,43 +1,45 @@
-// 서비스 진단 층 그림의 모양과 설명 (AuditDiagnosis.tsx). 판정은 서버(mcp/lambda_mcp/diagnose.py)가 내고, 여기에는 그리는 법만 둔다.
+// 서비스 진단 층 그림의 설명과 고르는 차례 (AuditDiagnosis.tsx). 판정은 서버(mcp/lambda_mcp/diagnose.py)가 내고, 여기에는 그리는 법만 둔다.
 //
-// 서비스마다 요청이 지나가는 길이 다르다. 그래서 층 일곱 개를 한 줄로 늘어놓지 않고 그 서비스의 길 위에 놓는다
-//   위 띠      L2 변경 (시간 축: 증상 직전에 무엇이 바뀌었나)
-//   가운데 길  들어오는 쪽 → 그 서비스의 차례로 놓은 층들 → 나가는 쪽
-//                ALB     사용자 → L3 입구 → L4 ALB → L5 대상 EC2 → L7 DB·외부 API
-//                EC2     클라이언트 → L4 대상 그룹 → L3 보안 그룹·NACL → L5 인스턴스 → L7 의존성
-//                Lambda  호출 → L4 API Gateway → L7 이벤트 소스 → L5 함수 실행 → L3 VPC 경로 → AWS API·DB
-//                S3      요청자 → L4 앞단 → L3 VPC 엔드포인트 → L6 차단·정책·ACL → L5 (없음) → L7 버전 관리
-//                RDS     애플리케이션 → L4 RDS Proxy → L3 보안 그룹·NACL → L5 DB 인스턴스 → L7 복제·디스크·백업
-//                VPC     출발지 → L5 양쪽 인스턴스 → L3 보안 그룹·NACL·경로 → L6 NAT → 목적지
-//                키 유출  유출된 키 → L3 쓴 곳 → L6 권한·지속성 → L5 컴퓨팅 남용 → L7 데이터 접근
-//                비용     청구서 → L5 컴퓨팅 → L3 전송·NAT → L4 앞단 → L7 저장·로그
-//   아래 띠    길에 없는 층 (보통 L6 권한·한도) · 맨 아래 L1 AWS 자체 (모든 것이 올라탄 바닥)
+// 그림은 L1 AWS부터 L7 데이터·의존성까지 일곱 층을 한 줄에 네 층씩 차례로 놓고, 아래에는 고른 층 하나만 자세히 쓴다.
 // 설명: 층마다 이 서비스에서 무엇을 묻고 무엇을 보는지 (런북의 진단 단계를 줄인 것)
-import type { DiagnosisLayerId, DiagnosisStatus } from '@/types/audit';
+import type { DiagnosisLayer, DiagnosisLayerId, DiagnosisStatus } from '@/types/audit';
 
 export interface ServiceMap {
-    entry: string; // 들어오는 쪽 (층이 아닌 글자)
-    path: DiagnosisLayerId[]; // 길 위의 층 (그 서비스의 차례)
-    exit?: string; // 나가는 쪽
-    descriptions: Record<DiagnosisLayerId, string>;
+    descriptions: Record<DiagnosisLayerId, string>; // 층마다 이 서비스에서 보는 것
 }
 
-// 판정의 이름과 배지 (공통 배지 components/badge.css). 원인 빨강 · 증상 노랑 · 정상 파랑 · 나머지 옅은 점
-export const DIAGNOSIS_STATUS: Record<DiagnosisStatus, { label: string; badge: string; hint: string }> = {
+// 그림의 차례: 바닥(AWS)부터 위로
+export const LAYER_ORDER: DiagnosisLayerId[] = ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7'];
+
+// 화면의 판정은 세 가지뿐이다: 원인 · 의심 · 정상. 서버의 여섯 판정을 이렇게 묶는다
+//   원인  cause                      이 층에서 장애를 설명하는 것을 찾았다
+//   의심  symptom · warn · unknown   이상이 보이거나(다른 층의 결과 · 위험한 설정) 보지 못했다. 사람이 확인해 볼 곳
+//   정상  ok · skip                  문제를 찾지 못했다 (이 서비스에 없는 층 포함. 무엇을 봤는지는 설명에 있다)
+export type ViewStatus = 'cause' | 'suspect' | 'ok';
+
+export const VIEW_OF: Record<DiagnosisStatus, ViewStatus> = {
+    cause: 'cause',
+    symptom: 'suspect',
+    warn: 'suspect',
+    unknown: 'suspect',
+    ok: 'ok',
+    skip: 'ok',
+};
+
+// 이름과 배지 (공통 배지 components/badge.css). 칸 테두리 · 고른 칸 바탕도 같은 색 (audit.css의 is-cause · is-suspect · is-ok)
+export const VIEW_STATUS: Record<ViewStatus, { label: string; badge: string; hint: string }> = {
     cause: { label: '원인', badge: 'is-fail', hint: '이 층에서 장애를 설명하는 것을 찾았습니다' },
-    symptom: { label: '증상', badge: 'is-warn', hint: '이상이 보이지만 다른 층의 결과입니다' },
-    warn: { label: '주의', badge: 'is-quiet', hint: '지금 장애의 원인은 아니지만 위험한 설정입니다' },
-    ok: { label: '정상', badge: 'is-ok', hint: '확인한 항목이 모두 정상입니다' },
-    unknown: { label: '확인 불가', badge: 'is-quiet is-empty', hint: '볼 수 없었습니다. 사람이 확인해야 합니다' },
-    skip: { label: '해당 없음', badge: 'is-quiet is-empty', hint: '이 서비스에는 없는 층입니다' },
+    suspect: { label: '의심', badge: 'is-warn', hint: '이상이 보이거나 확인하지 못했습니다. 사람이 확인해 볼 곳입니다' },
+    ok: { label: '정상', badge: 'is-ok', hint: '문제를 찾지 못했습니다' },
 };
 
 // 판정 개수의 차례 (무거운 것부터)
-export const STATUS_ORDER: DiagnosisStatus[] = ['cause', 'symptom', 'warn', 'ok', 'unknown', 'skip'];
+export const VIEW_ORDER: ViewStatus[] = ['cause', 'suspect', 'ok'];
+
+// 층 · 항목의 화면 판정 (모르는 판정은 의심으로)
+export const viewOf = (status: DiagnosisStatus): ViewStatus => VIEW_OF[status] ?? 'suspect';
 
 const ALB: ServiceMap = {
-    entry: '사용자',
-    path: ['L3', 'L4', 'L5', 'L7'],
     descriptions: {
         L1: 'AWS 쪽 장애인가. 대상 EC2의 시스템 상태 검사(호스트·네트워크)와 예정 이벤트를 봅니다. AWS Health는 지원 플랜에 묶여 있어 사람이 확인합니다.',
         L2: '증상 직전에 무엇이 바뀌었나. ALB·대상 그룹·보안 그룹·대상 인스턴스와 관련된 CloudTrail 쓰기 이벤트입니다. 다른 층에 이상이 있을 때만 계기로 봅니다.',
@@ -50,8 +52,6 @@ const ALB: ServiceMap = {
 };
 
 const EC2: ServiceMap = {
-    entry: '클라이언트',
-    path: ['L4', 'L3', 'L5', 'L7'],
     descriptions: {
         L1: 'AWS 쪽 장애인가. 시스템 상태 검사(호스트 하드웨어·네트워크)와 AWS가 예정한 이벤트(퇴역·재부팅)를 봅니다.',
         L2: '증상 직전에 무엇이 바뀌었나. 인스턴스·보안 그룹·Auto Scaling 그룹과 관련된 CloudTrail 쓰기 이벤트입니다.',
@@ -64,9 +64,6 @@ const EC2: ServiceMap = {
 };
 
 const LAMBDA: ServiceMap = {
-    entry: '호출',
-    path: ['L4', 'L7', 'L5', 'L3'],
-    exit: 'AWS API·DB',
     descriptions: {
         L1: 'AWS 쪽 장애인가. Lambda 서비스 장애는 AWS Health로 봐야 해서 사람이 확인합니다.',
         L2: '증상 직전에 무엇이 바뀌었나. 함수 코드·설정·동시성 변경과 실행 역할에 관련된 CloudTrail 쓰기 이벤트입니다.',
@@ -79,8 +76,6 @@ const LAMBDA: ServiceMap = {
 };
 
 const S3: ServiceMap = {
-    entry: '요청자',
-    path: ['L4', 'L3', 'L6', 'L5', 'L7'],
     descriptions: {
         L1: 'AWS 쪽 장애인가. S3 서비스 장애는 AWS Health로 봐야 해서 사람이 확인합니다.',
         L2: '증상 직전에 무엇이 바뀌었나. 버킷 정책·ACL·퍼블릭 액세스 차단 설정과 관련된 CloudTrail 쓰기 이벤트입니다.',
@@ -93,8 +88,6 @@ const S3: ServiceMap = {
 };
 
 const RDS: ServiceMap = {
-    entry: '애플리케이션',
-    path: ['L4', 'L3', 'L5', 'L7'],
     descriptions: {
         L1: 'AWS 쪽 장애인가. RDS가 알린 이벤트 중 장애(failure), 장애 조치(failover)·복구·유지 관리를 봅니다. 장애 조치 동안에는 연결이 끊기고 DNS가 새 인스턴스를 가리킵니다.',
         L2: '증상 직전에 무엇이 바뀌었나. DB 인스턴스·파라미터 그룹·보안 그룹과 관련된 CloudTrail 쓰기 이벤트입니다.',
@@ -107,9 +100,6 @@ const RDS: ServiceMap = {
 };
 
 const VPC: ServiceMap = {
-    entry: '출발지',
-    path: ['L5', 'L3', 'L6'],
-    exit: '목적지',
     descriptions: {
         L1: 'AWS 쪽 장애인가. 양쪽 인스턴스의 시스템 상태 검사를 봅니다.',
         L2: '증상 직전에 무엇이 바뀌었나. 양쪽 인스턴스·보안 그룹·서브넷·NAT와 관련된 CloudTrail 쓰기 이벤트입니다.',
@@ -122,8 +112,6 @@ const VPC: ServiceMap = {
 };
 
 const CREDENTIAL: ServiceMap = {
-    entry: '유출된 키',
-    path: ['L3', 'L6', 'L5', 'L7'],
     descriptions: {
         L1: '자격 증명 사고는 AWS 쪽 장애가 아니라 해당 없음입니다.',
         L2: '이 키로 무엇을 바꿨나. 이 키가 부른 쓰기 API(CloudTrail)와 감사 기록·탐지를 끄려 한 흔적(StopLogging, DeleteDetector 등)을 봅니다.',
@@ -136,8 +124,6 @@ const CREDENTIAL: ServiceMap = {
 };
 
 const COST: ServiceMap = {
-    entry: '청구서',
-    path: ['L5', 'L3', 'L4', 'L7'],
     descriptions: {
         L1: 'AWS 쪽 가격 변경·청구 오류는 이 절차가 보지 않습니다.',
         L2: '비용을 늘리는 변경이 있었나. 인스턴스 시작, NAT·볼륨·엔드포인트 생성, 로그 구독 같은 계정 전체의 쓰기 이벤트를 봅니다. 급증이 있을 때만 계기로 봅니다.',
@@ -160,15 +146,56 @@ export const SERVICE_MAPS: Record<string, ServiceMap> = {
     cost: COST,
 };
 
-// 모르는 서비스(나중에 더한 서비스를 옛 화면이 받을 때): 층 차례대로 한 줄
+// 모르는 서비스(나중에 더한 서비스를 옛 화면이 받을 때): 설명 없이 판정만
 export const FALLBACK_MAP: ServiceMap = {
-    entry: '요청',
-    path: ['L3', 'L4', 'L5', 'L7'],
     descriptions: { L1: '', L2: '', L3: '', L4: '', L5: '', L6: '', L7: '' },
 };
 
-// 띠: 위는 L2, 아래는 길에 없는 층(L2·L1 말고)과 맨 아래 L1
-export const bandsOf = (map: ServiceMap) => {
-    const below = (['L6', 'L3', 'L4', 'L5', 'L7'] as DiagnosisLayerId[]).filter((id) => !map.path.includes(id));
-    return { top: 'L2' as DiagnosisLayerId, below: [...below, 'L1' as DiagnosisLayerId] };
-};
+// ---------------------------------------------------------------- 아래 설명: 처음 고를 층
+// 그림에는 판정만 두고, 문장은 아래 설명에 고른 층 하나만 쓴다. 처음에는 가장 먼저 읽어야 할 층을 고른다.
+// 차례는 서버 요약(diagnose._summary)과 같다: 무엇이 고장 났나(L2가 아닌 원인) → 무엇이 계기였나(L2 원인) → 증상 → 주의,
+// 그다음 보지 못한 층. 모두 정상이면 첫 층(L1)
+const FIRST_ORDER: ((layer: DiagnosisLayer) => boolean)[] = [
+    (layer) => layer.status === 'cause' && layer.id !== 'L2',
+    (layer) => layer.status === 'cause',
+    (layer) => layer.status === 'symptom',
+    (layer) => layer.status === 'warn',
+    (layer) => layer.status === 'unknown',
+];
+
+export function firstLayer(layers: DiagnosisLayer[]): DiagnosisLayer | undefined {
+    for (const match of FIRST_ORDER) {
+        const found = layers.find(match);
+        if (found) return found;
+    }
+    return layers[0];
+}
+
+// 괄호 밖의 구분자로만 나눈다 ("(Client.UserInitiatedShutdown: …)"이나 "(처음 …, 마지막 …)" 안은 나누지 않는다)
+function splitTop(text: string, separator: string): string[] {
+    const parts: string[] = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === '(' || ch === '[') depth++;
+        else if ((ch === ')' || ch === ']') && depth > 0) depth--;
+        else if (depth === 0 && text.startsWith(separator, i)) {
+            parts.push(text.slice(start, i));
+            start = i + separator.length;
+            i += separator.length - 1;
+        }
+    }
+    parts.push(text.slice(start));
+    return parts.map((part) => part.trim()).filter(Boolean);
+}
+
+// 판정 글을 앞말과 나머지로: "인스턴스 2대 모두가 실행 중이 아닙니다: i-… stopped, …" → [앞말, 나머지].
+// 설명 칸은 앞말을 크게, 나머지(ID·사유)를 그 아래 보통 크기로 쓴다.
+// 콜론이 없으면 첫 문장까지를 앞말로 둔다 ("대상 3대가 모두 정상이 아닙니다 (…). 모두 unhealthy면 …" → 두 문장째부터 나머지)
+export function splitFinding(finding: string): [string, string] {
+    const [head, ...rest] = splitTop(finding, ': ');
+    if (rest.length) return [head, rest.join(': ')];
+    const [first, ...more] = splitTop(finding, '. ');
+    return more.length ? [first, more.join('. ')] : [first ?? '', ''];
+}
