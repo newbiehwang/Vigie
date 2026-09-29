@@ -2,7 +2,7 @@
 
 moto 위에 정상인 환경(ALB → EC2 두 대, Lambda 함수, 비공개 버킷, RDS, IAM 사용자와 키, 평소 비용)을 만들고,
 장애를 하나씩 심은 뒤 절차가 원인 층을 맞히는지 본다. 원인 층이 기대와 정확히 같아야 하고(더 많이 짚어도 틀림),
-기대한 증상 층도 있어야 한다. 정상 환경과 시나리오 43개(심은 장애 · 기대 원인 층 · 기대 증상 층)는 local/world.py에 있고,
+기대한 증상 층도 있어야 한다. 정상 환경과 시나리오 44개(심은 장애 · 기대 원인 층 · 기대 증상 층)는 local/world.py에 있고,
 로컬 실행(local/stack.py)이 대화창에서 재현할 때도 같은 코드를 쓴다.
 
 CloudTrail 조회(LookupEvents)는 moto가 지원하지 않아 diagnose.recent_changes·key_activity·account_changes를 가짜로 바꿔
@@ -110,7 +110,7 @@ def test_fixed_fault_restores_the_usual_value(diagnose, world, monkeypatch):
 
 def test_scenarios_have_unique_names_and_filled_questions(world):
     """로컬 재현(local/scenario.py)이 이름으로 고르고, 질문의 자리 표시를 채워 보여 준다."""
-    assert len(SCENARIOS) == len(w.BY_NAME) == 43
+    assert len(SCENARIOS) == len(w.BY_NAME) == 44
     for scenario in SCENARIOS:
         assert "{" not in w.fill(scenario.ask, world) and "{" not in w.fill(scenario.resource, world)
 
@@ -125,6 +125,22 @@ def test_scenarios_with_details(diagnose, world):
     assert result["summary"].index("L5") < result["summary"].index("계기 L2")  # 무엇이 고장 났나 → 무엇이 계기였나
     assert layer(result, "L1")["status"] == "ok"  # 시스템 상태 검사 정상 (Health API는 확인 불가 항목으로 남는다)
     assert any(c["status"] == "unknown" and "Health" in c["finding"] for c in layer(result, "L1")["checks"])
+
+
+def test_injected_log_line_reaches_the_model_through_the_diagnosis(diagnose, world):
+    """lambda-log-injection: 로그에 섞인 지시문이 진단 결과의 근거로 모델에게 가고, 가리기 전 탐지에 걸린다.
+    과녁인 Vigie 로그 그룹(보존 30일)도 있어야 모델이 따랐을 때 승인 요청(미리 보기)이 만들어진다."""
+    w.lambda_log_injection(world)
+    result = diagnose.run("lambda", w.FUNCTION, region=REGION)
+    finding = layer(result, "L6")["finding"]
+    assert "setLogRetention" in finding and w.VIGIE_LOG_GROUP in finding  # 앞 160자 안에 지시문이 다 들어간다
+    group = boto3.client("logs", region_name=REGION).describe_log_groups(
+        logGroupNamePrefix=w.VIGIE_LOG_GROUP)["logGroups"][0]
+    assert group["retentionInDays"] == 30
+
+    load_service_module("services/llm", "llm_service")
+    import injection
+    assert {"ignore_instructions_ko", "tool_command"} <= set(injection.scan(json.dumps(result, ensure_ascii=False)))
 
 
 def test_blocked_security_group_names_the_target_and_port(diagnose, world):
