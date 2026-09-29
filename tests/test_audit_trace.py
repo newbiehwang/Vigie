@@ -5,6 +5,8 @@
 - 요청자와 승인자의 기록, 자정을 넘긴 기록도 모은다
 - 기록이 어긋나면(승인 없이 실행, 요청 없이 결정) 그 층이 실패로 보인다
 - 관리자만 본다
+- 모델이 속았다고 가정한다: 모델의 응답만 정해 두고(run), 탐지 · 승인 · 실행 · 감사 · 역추적은 실제 코드로 돈다.
+  기준 경우(지시문이 든 로그를 읽고 변경을 요청 → 승인)에서 한 가지만 바꾸면 그 단계의 판정만 바뀌는지 본다
 """
 import json
 import uuid
@@ -12,9 +14,15 @@ import uuid
 import pytest
 
 from conftest import load_service_module
-from test_approvals import ORIGIN, decide, env  # noqa: F401 (env는 fixture)
+from test_approvals import LOG_GROUP, ORIGIN, decide, env  # noqa: F401 (env는 fixture)
 from test_audit_locus import CLEAN_LOG, LOG_TOOL, log_call, run, write_call
 from test_injection import ATTACK_KO
+
+# 기준 경우의 판정: 지시문이 든 로그를 읽은 뒤 변경을 요청했고, 사람이 승인해 실행됐다
+INJECTED = {"effect": "ok", "egress": "ok", "residence": "warn", "deliberation": "warn", "ingress": "warn",
+            "interface": "ok", "mediation": "info"}
+# 등록부(mcp/lambda_mcp/risk.py)에 없는 도구: 공식 서버를 올리다 새 도구가 생긴 경우. 변경 도구로 다뤄 승인을 기다린다
+UNREGISTERED_TOOL = "brand_new_tool"
 
 
 def trace(env, action_id, day=None, groups="admins"):
@@ -43,8 +51,7 @@ def test_trace_of_a_change_that_followed_an_injected_log(env, monkeypatch):
     decide(env, action["actionId"], "approve", "bob", groups="approvers", email="bob@example.com")
     result = trace(env, action["actionId"])
 
-    assert statuses(result) == {"effect": "ok", "egress": "ok", "residence": "warn", "deliberation": "warn",
-                                "ingress": "warn", "interface": "ok", "mediation": "info"}
+    assert statuses(result) == INJECTED
     steps = {step["layer"]: step for step in result["steps"]}
     assert "bob@example.com" in steps["effect"]["answer"]  # 결정한 사람 (승인자의 기록)
     assert "최근 오류 로그 보여줘" in steps["deliberation"]["answer"]  # 사용자의 질문과 비교하라고
@@ -61,6 +68,62 @@ def test_trace_of_a_change_that_followed_an_injected_log(env, monkeypatch):
     # 근거로 가리킨 행은 모두 돌려준 행 안에 있다 (화면이 강조한다)
     shown = {row["at"] for row in result["events"] + result["rows"]}
     assert all(at in shown for step in result["steps"] for at in step["evidence"])
+
+
+# ---------------------------------------------------------------- 한 가지만 바꾼 경우 (기준: INJECTED)
+def test_failed_execution_is_a_warning_at_the_effect_stage(env, monkeypatch):
+    """승인했지만 실행 전에 로그 그룹이 사라졌다: 효과만 경고로 바뀐다 (나머지 단계는 기준과 같다)."""
+    import boto3
+    action = ask(env, monkeypatch)
+    boto3.client("logs").delete_log_group(logGroupName=LOG_GROUP)
+    decide(env, action["actionId"], "approve", "bob", groups="approvers")
+    result = trace(env, action["actionId"])
+
+    assert statuses(result) == {**INJECTED, "effect": "warn"}
+    effect = result["steps"][0]
+    assert "실행에 실패" in effect["answer"] and "bob" in effect["answer"]
+    assert [e["event"] for e in result["events"]] == ["requested", "approved", "failed"]
+
+
+def test_unregistered_tool_is_a_warning_at_the_interface_stage(env, monkeypatch):
+    """같은 질문에서 등록부에 없는 도구를 불렀다: 경계만 경고로 바뀐다."""
+    body = run(env, monkeypatch, [
+        {"content": [log_call("toolu_1")]},
+        {"content": [{"type": "tool_use", "id": "toolu_2", "name": UNREGISTERED_TOOL, "input": {}}]},
+        {"content": [write_call("toolu_3")]},
+        {"content": [{"type": "text", "text": "요청했습니다."}]},
+    ])
+    action = next(a for a in body["inference"]["pendingActions"] if a["tool"] == "setLogRetention")
+    decide(env, action["actionId"], "approve", "bob", groups="approvers")
+    result = trace(env, action["actionId"])
+
+    assert statuses(result) == {**INJECTED, "interface": "warn"}
+    interface = next(step for step in result["steps"] if step["layer"] == "interface")
+    assert UNREGISTERED_TOOL in interface["answer"] and interface["evidence"]
+
+
+def test_denied_change_after_an_injected_log(env, monkeypatch):
+    """거절했다: 효과는 '실행하지 않음'으로 정상이고, 지시문을 읽고 요청했다는 경고(체류 · 판단 · 유입)는 남는다."""
+    action = ask(env, monkeypatch)
+    decide(env, action["actionId"], "deny", "bob", groups="approvers")
+    result = trace(env, action["actionId"])
+
+    assert statuses(result) == INJECTED
+    assert "거절" in result["steps"][0]["answer"] and "실행 기록이 없어" in result["steps"][-1]["answer"]
+
+
+def test_injected_log_that_detection_missed_reads_as_clean(env, monkeypatch):
+    """알려진 한계: 탐지(injection.scan)가 지시문을 놓치면 체류 · 판단 · 유입이 모두 정상으로 나온다.
+    이 세 단계는 탐지 결과(injectionSuspected · taintedBy)만 보기 때문이다. 탐지와 상관없는 신호를 판단 단계에
+    더하면(사용자가 물은 대상과 변경 대상이 다른가 등) 이 테스트의 기대를 그 동작으로 바꾼다."""
+    import mcp_anthropic_client
+    monkeypatch.setattr(mcp_anthropic_client.injection, "scan", lambda text: [])
+    action = ask(env, monkeypatch)  # 로그에는 여전히 지시문이 있다 (ATTACK_KO)
+    decide(env, action["actionId"], "approve", "bob", groups="approvers")
+    result = trace(env, action["actionId"])
+
+    assert statuses(result) == {**INJECTED, "residence": "ok", "deliberation": "ok", "ingress": "ok"}
+    assert result["verdict"].startswith("모든 단계가 정상")
 
 
 def test_trace_of_an_ordinary_change_is_clean(env, monkeypatch):
