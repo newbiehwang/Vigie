@@ -1,6 +1,6 @@
 // 서비스 진단 층 그림의 설명과 고르는 차례 (AuditDiagnosis.tsx). 판정은 서버(mcp/lambda_mcp/diagnose.py)가 내고, 여기에는 그리는 법만 둔다.
 //
-// 그림은 L1 AWS 자체부터 L7 데이터·의존성까지 일곱 층을 가로 한 줄에 차례로 놓고, 아래에는 고른 층 하나만 자세히 쓴다.
+// 그림은 L1 AWS부터 L7 데이터·의존성까지 일곱 층을 한 줄에 네 층씩 차례로 놓고, 아래에는 고른 층 하나만 자세히 쓴다.
 // 설명: 층마다 이 서비스에서 무엇을 묻고 무엇을 보는지 (런북의 진단 단계를 줄인 것)
 import type { DiagnosisLayer, DiagnosisLayerId, DiagnosisStatus } from '@/types/audit';
 
@@ -8,7 +8,7 @@ export interface ServiceMap {
     descriptions: Record<DiagnosisLayerId, string>; // 층마다 이 서비스에서 보는 것
 }
 
-// 그림의 차례: 바닥(AWS 자체)부터 위로
+// 그림의 차례: 바닥(AWS)부터 위로
 export const LAYER_ORDER: DiagnosisLayerId[] = ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7'];
 
 // 화면의 판정은 세 가지뿐이다: 원인 · 의심 · 정상. 서버의 여섯 판정을 이렇게 묶는다
