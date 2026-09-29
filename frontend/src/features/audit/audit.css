@@ -1643,17 +1643,20 @@
   color: var(--ink-2);
 }
 
-/* 그림과 설명 칸: 처리 단계와 같은 두 열. 설명 칸이 그림보다 길 수 있어 위로 맞춘다 */
+/* 그림과 설명 칸: 처리 단계와 같은 두 열. 설명 칸은 그림 높이의 가운데에 (처리 단계처럼) */
 .audit-diag-body {
-  align-items: start;
-  margin-top: 8px;
+  align-items: center;
+  column-gap: 32px;
+  margin-top: 12px;
 }
 
-/* 셰브런 쌓기. 조각끼리 셰브런 깊이(--chev)만큼 겹쳐, 위 조각의 뾰족한 끝이 아래 조각의 홈에 들어간다 (사이 틈 3px) */
+/* 셰브런 쌓기. 조각끼리 셰브런 깊이(--chev)만큼 겹쳐, 위 조각의 뾰족한 끝이 아래 조각의 홈에 들어간다.
+   사이 틈(--gap)을 넉넉히 두어 층이 한 장씩 떨어져 보이게 한다 */
 .audit-stack {
-  --chev: 9px;
+  --chev: 12px;
+  --gap: 7px;
   display: grid;
-  padding: 4px 12px 8px 0; /* 오른쪽: 고른 조각이 떠오를 자리 */
+  padding: 6px 14px 10px 0; /* 오른쪽: 고른 조각이 떠오를 자리 */
 }
 
 /* 조각: 모양 · 판정 바탕은 안쪽(.audit-stack-shape)이 그리고, 버튼은 떠오르기 · 그림자 · 옅어지기만 맡는다.
@@ -1675,16 +1678,18 @@
 }
 
 .audit-stack-seg + .audit-stack-seg {
-  margin-top: calc(3px - var(--chev));
+  margin-top: calc(var(--gap) - var(--chev));
 }
 
+/* 처리 단계 조각처럼 두 줄: 작은 번호 위, 이름 아래. 글자는 셰브런 깊이만큼 내려 모양의 가운데에 */
 .audit-stack-shape {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: var(--chev) 14px 0;
+  gap: 1px;
+  min-height: 60px;
+  padding: var(--chev) 18px 2px;
   background: var(--line-soft);
   clip-path: polygon(0 0, 50% var(--chev), 100% 0, 100% calc(100% - var(--chev)), 50% 100%, 0 calc(100% - var(--chev)));
   pointer-events: auto;
@@ -1696,13 +1701,15 @@
   font-family: var(--font-label);
   font-size: 10px;
   font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
   color: var(--ink-3);
 }
 
 .audit-stack-label {
   min-width: 0;
   font-family: var(--font-label);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.3;
   color: var(--ink-2);
@@ -1721,7 +1728,7 @@
 }
 
 .audit-stack-seg.is-selected {
-  transform: translateX(8px);
+  transform: translateX(10px);
   filter: drop-shadow(0 4px 8px rgba(10, 22, 40, 0.16));
 }
 
@@ -1761,7 +1768,8 @@
 /* 설명 칸: 처리 단계 설명 칸(.audit-cycle-panel)에 판정 상자 · 확인한 다른 항목 */
 .audit-diag-panel {
   min-height: 0;
-  align-content: start;
+  align-content: center;
+  gap: 10px;
 }
 
 .audit-diag-panel .audit-cycle-panel-head {
@@ -1865,7 +1873,7 @@
     width: 100%;
     max-width: 300px;
     margin: 0 auto;
-    padding: 4px 8px 8px;
+    padding: 4px 10px 8px;
   }
 
   .audit-diag-checks li {
