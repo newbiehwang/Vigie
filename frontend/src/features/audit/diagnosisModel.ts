@@ -11,18 +11,33 @@ export interface ServiceMap {
 // 그림의 차례: 바닥(AWS 자체)부터 위로
 export const LAYER_ORDER: DiagnosisLayerId[] = ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7'];
 
-// 판정의 이름과 배지 (공통 배지 components/badge.css). 원인 빨강 · 증상 노랑 · 정상 파랑 · 나머지 옅은 점
-export const DIAGNOSIS_STATUS: Record<DiagnosisStatus, { label: string; badge: string; hint: string }> = {
+// 화면의 판정은 세 가지뿐이다: 원인 · 의심 · 정상. 서버의 여섯 판정을 이렇게 묶는다
+//   원인  cause                      이 층에서 장애를 설명하는 것을 찾았다
+//   의심  symptom · warn · unknown   이상이 보이거나(다른 층의 결과 · 위험한 설정) 보지 못했다. 사람이 확인해 볼 곳
+//   정상  ok · skip                  문제를 찾지 못했다 (이 서비스에 없는 층 포함. 무엇을 봤는지는 설명에 있다)
+export type ViewStatus = 'cause' | 'suspect' | 'ok';
+
+export const VIEW_OF: Record<DiagnosisStatus, ViewStatus> = {
+    cause: 'cause',
+    symptom: 'suspect',
+    warn: 'suspect',
+    unknown: 'suspect',
+    ok: 'ok',
+    skip: 'ok',
+};
+
+// 이름과 배지 (공통 배지 components/badge.css). 칸 테두리 · 고른 칸 바탕도 같은 색 (audit.css의 is-cause · is-suspect · is-ok)
+export const VIEW_STATUS: Record<ViewStatus, { label: string; badge: string; hint: string }> = {
     cause: { label: '원인', badge: 'is-fail', hint: '이 층에서 장애를 설명하는 것을 찾았습니다' },
-    symptom: { label: '증상', badge: 'is-warn', hint: '이상이 보이지만 다른 층의 결과입니다' },
-    warn: { label: '주의', badge: 'is-quiet', hint: '지금 장애의 원인은 아니지만 위험한 설정입니다' },
-    ok: { label: '정상', badge: 'is-ok', hint: '확인한 항목이 모두 정상입니다' },
-    unknown: { label: '확인 불가', badge: 'is-quiet is-empty', hint: '볼 수 없었습니다. 사람이 확인해야 합니다' },
-    skip: { label: '해당 없음', badge: 'is-quiet is-empty', hint: '이 서비스에는 없는 층입니다' },
+    suspect: { label: '의심', badge: 'is-warn', hint: '이상이 보이거나 확인하지 못했습니다. 사람이 확인해 볼 곳입니다' },
+    ok: { label: '정상', badge: 'is-ok', hint: '문제를 찾지 못했습니다' },
 };
 
 // 판정 개수의 차례 (무거운 것부터)
-export const STATUS_ORDER: DiagnosisStatus[] = ['cause', 'symptom', 'warn', 'ok', 'unknown', 'skip'];
+export const VIEW_ORDER: ViewStatus[] = ['cause', 'suspect', 'ok'];
+
+// 층 · 항목의 화면 판정 (모르는 판정은 의심으로)
+export const viewOf = (status: DiagnosisStatus): ViewStatus => VIEW_OF[status] ?? 'suspect';
 
 const ALB: ServiceMap = {
     descriptions: {
@@ -136,31 +151,24 @@ export const FALLBACK_MAP: ServiceMap = {
     descriptions: { L1: '', L2: '', L3: '', L4: '', L5: '', L6: '', L7: '' },
 };
 
-// ---------------------------------------------------------------- 아래 설명: 처음 고를 층과 이름표
-// 그림에는 판정만 두고, 문장은 아래 설명에 고른 층 하나만 쓴다. 처음에는 가장 먼저 읽어야 할 문제 층을 고른다.
-// 문제 층의 차례는 서버 요약(diagnose._summary)과 같다: 무엇이 고장 났나(L2가 아닌 원인) → 무엇이 계기였나(L2) → 증상 → 주의.
-// 고장 난 곳을 못 찾았는데 L2가 원인이면 그 변경이 가장 유력한 원인이다 (이름표도 '원인').
-export interface DetailSection {
-    layer: DiagnosisLayer;
-    label: string; // 제목의 판정 이름 (L2가 계기면 '계기')
-}
+// ---------------------------------------------------------------- 아래 설명: 처음 고를 층
+// 그림에는 판정만 두고, 문장은 아래 설명에 고른 층 하나만 쓴다. 처음에는 가장 먼저 읽어야 할 층을 고른다.
+// 차례는 서버 요약(diagnose._summary)과 같다: 무엇이 고장 났나(L2가 아닌 원인) → 무엇이 계기였나(L2 원인) → 증상 → 주의,
+// 그다음 보지 못한 층. 모두 정상이면 첫 층(L1)
+const FIRST_ORDER: ((layer: DiagnosisLayer) => boolean)[] = [
+    (layer) => layer.status === 'cause' && layer.id !== 'L2',
+    (layer) => layer.status === 'cause',
+    (layer) => layer.status === 'symptom',
+    (layer) => layer.status === 'warn',
+    (layer) => layer.status === 'unknown',
+];
 
-export function problemSections(layers: DiagnosisLayer[]): DetailSection[] {
-    const of = (status: DiagnosisStatus) => layers.filter((layer) => layer.status === status);
-    const causes = of('cause');
-    const broken = causes.filter((layer) => layer.id !== 'L2');
-    const change = causes.find((layer) => layer.id === 'L2');
-    return [
-        ...broken.map((layer) => ({ layer, label: '원인' })),
-        ...(change ? [{ layer: change, label: broken.length ? '계기' : '원인' }] : []),
-        ...of('symptom').map((layer) => ({ layer, label: '증상' })),
-        ...of('warn').map((layer) => ({ layer, label: '주의' })),
-    ];
-}
-
-// 설명 제목의 이름표: 문제 층은 위 차례의 이름표(L2는 '계기'일 수 있다), 나머지는 판정 이름
-export function sectionOf(layer: DiagnosisLayer, problems: DetailSection[]): DetailSection {
-    return problems.find((section) => section.layer.id === layer.id) ?? { layer, label: DIAGNOSIS_STATUS[layer.status]?.label ?? layer.status };
+export function firstLayer(layers: DiagnosisLayer[]): DiagnosisLayer | undefined {
+    for (const match of FIRST_ORDER) {
+        const found = layers.find(match);
+        if (found) return found;
+    }
+    return layers[0];
 }
 
 // 괄호 밖의 구분자로만 나눈다 ("(Client.UserInitiatedShutdown: …)"이나 "(처음 …, 마지막 …)" 안은 나누지 않는다)
