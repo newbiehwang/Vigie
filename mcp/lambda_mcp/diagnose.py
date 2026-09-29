@@ -12,22 +12,22 @@
 - tests/test_diagnose.py가 moto로 장애를 심고(대상 중지, 보안 그룹 차단, 예약 동시성 0, 버킷 공개 …) 원인 층을 맞히는지 채점한다.
 
 진단 층 (요청이 지나가는 길을 층으로 고정했다. 서비스마다 층이 가리키는 부품이 다르다: SERVICES의 components)
-    L1 AWS 자체        AWS 쪽 장애인가 (하드웨어 상태 검사·예정 이벤트. Health API는 Business Support 이상이라 사람이 확인)
-    L2 변경            직전에 무엇이 바뀌었나 (CloudTrail 쓰기 이벤트 중 이 자원과 관련된 것)
-    L3 입구·네트워크    요청이 목적지까지 가나 (서브넷 경로, 보안 그룹, NACL)
+    L1 AWS              AWS 쪽 장애인가 (하드웨어 상태 검사·예정 이벤트. Health API는 Business Support 이상이라 사람이 확인)
+    L2 리소스 변경 기록  직전에 누가 어떤 리소스를 바꿨나 (CloudTrail 쓰기 이벤트 중 이 자원과 관련된 것)
+    L3 네트워크 경로     요청이 목적지까지 가나 (서브넷 경로, 보안 그룹, NACL)
     L4 로드 밸런서·게이트웨이  앞단이 뒤에 닿나 (리스너, 대상 그룹, 대상 헬스, ELB가 만든 5xx)
-    L5 컴퓨팅          실행이 되나 (인스턴스 상태·상태 검사·CPU, Lambda 오류·시간 초과)
+    L5 인스턴스·실행 환경  실행이 되나 (인스턴스 상태·상태 검사·CPU, Lambda 오류·시간 초과)
     L6 권한·한도        막혔나 (동시성, 권한 거부, 공개 설정, 연결 한도)
     L7 데이터·의존성    뒤가 느리거나 죽었나 (대상 응답 시간, 이벤트 소스, 데이터 보호)
 
 판정 (층의 판정 = 그 층 항목 중 가장 무거운 것. 무거운 차례: 원인 > 증상 > 주의 > 정상 > 확인 불가 > 해당 없음)
     cause    원인      이 층에서 장애를 설명하는 것을 찾았다 (예: 대상 인스턴스가 모두 멈춤)
-    symptom  증상      이상이 보이지만 다른 층의 결과다 (예: 대상이 모두 unhealthy → 원인은 컴퓨팅이나 네트워크)
+    symptom  증상      이상이 보이지만 다른 층의 결과다 (예: 대상이 모두 unhealthy → 원인은 인스턴스나 네트워크 경로)
     warn     주의      지금 장애의 원인은 아니지만 위험한 설정 (예: 버전 관리 꺼짐)
     ok       정상
     unknown  확인 불가  볼 수 없었다 (권한 없음, 지표 없음, API가 지원 플랜에 묶임)
-    skip     해당 없음  이 서비스에는 없는 층 (예: S3의 컴퓨팅)
-- L2 변경은 다른 층에 원인·증상이 있을 때만 원인(계기)이 된다. 장애가 없으면 변경이 있어도 정상이다.
+    skip     해당 없음  이 서비스에는 없는 층 (예: S3의 인스턴스·실행 환경)
+- L2 리소스 변경 기록은 다른 층에 원인·증상이 있을 때만 원인(계기)이 된다. 장애가 없으면 변경이 있어도 정상이다.
 - 원인이 여럿이면 모두 원인이다. 요약은 L2가 아닌 원인(무엇이 고장 났나)을 먼저, L2(무엇이 계기였나)를 뒤에 쓴다.
 
 모두 조회 API만 부른다 (Describe*·Get*·List*·LookupEvents·FilterLogEvents·GetMetricData). AWS를 바꾸지 않는다.
@@ -43,11 +43,11 @@ from botocore.exceptions import ClientError
 
 # ---------------------------------------------------------------- 층과 판정
 LAYERS: List[Tuple[str, str]] = [
-    ("L1", "AWS 자체"),
-    ("L2", "변경"),
-    ("L3", "입구·네트워크"),
+    ("L1", "AWS"),
+    ("L2", "리소스 변경 기록"),
+    ("L3", "네트워크 경로"),
     ("L4", "로드 밸런서·게이트웨이"),
-    ("L5", "컴퓨팅"),
+    ("L5", "인스턴스·실행 환경"),
     ("L6", "권한·한도"),
     ("L7", "데이터·의존성"),
 ]
@@ -97,7 +97,7 @@ class Diagnosis:
         return max((c["status"] for c in checks), key=WEIGHT.get) if checks else SKIP
 
     def has_trouble(self, except_layer: str = "") -> bool:
-        """다른 층에 원인이나 증상이 있나 (L2 변경을 계기로 볼지 정할 때)."""
+        """다른 층에 원인이나 증상이 있나 (L2 리소스 변경 기록을 계기로 볼지 정할 때)."""
         return any(self.status_of(layer) in (CAUSE, SYMPTOM) for layer, _ in LAYERS if layer != except_layer)
 
     def result(self, components: Dict[str, str], title: str) -> Dict[str, Any]:
@@ -126,11 +126,11 @@ def _summary(layers: List[Dict[str, Any]]) -> str:
         parts = [f"{layer['id']} {layer['name']}: {layer['finding']}" for layer in causes if layer["id"] != "L2"]
         if by_id["L2"]["status"] == CAUSE:
             if not parts and not symptoms:  # 변경 자체가 사고다 (자격 증명: 기록 끄기 등)
-                return f"원인 — L2 변경: {by_id['L2']['finding']}"
+                return f"원인 — L2 {LAYER_NAMES['L2']}: {by_id['L2']['finding']}"
             if not parts:  # 고장 난 곳은 못 찾았지만 증상 직전에 변경이 있었다 → 그 변경이 가장 유력하다
                 return (f"원인 — 증상 직전의 변경(L2): {by_id['L2']['finding']} / 증상 — "
                         + " / ".join(f"{layer['id']} {layer['name']}: {layer['finding']}" for layer in symptoms))
-            parts.append(f"계기 L2 변경: {by_id['L2']['finding']}")
+            parts.append(f"계기 L2 {LAYER_NAMES['L2']}: {by_id['L2']['finding']}")
         return "원인 — " + " / ".join(parts)
     if symptoms:
         return ("원인 층을 특정하지 못했습니다. 증상 — "
@@ -188,7 +188,7 @@ def _clock(moment: Any) -> str:
 
 
 def recent_changes(clients: Clients, identifiers: Iterable[str], start: datetime, end: datetime) -> List[Dict[str, str]]:
-    """CloudTrail의 최근 쓰기 이벤트 중 이 자원과 관련된 것 (L2 변경). 조회만 (LookupEvents, 최근 90일, 무료).
+    """CloudTrail의 최근 쓰기 이벤트 중 이 자원과 관련된 것 (L2 리소스 변경 기록). 조회만 (LookupEvents, 최근 90일, 무료).
     LookupEvents는 조건을 하나만 받아서 ReadOnly=false로 쓰기 이벤트만 받은 뒤 자원 이름·ID로 거른다.
     tests/test_diagnose.py가 이 함수를 가짜로 바꿔 변경을 심는다 (moto는 LookupEvents를 지원하지 않는다)."""
     wanted = [identifier for identifier in identifiers if identifier]
@@ -214,7 +214,7 @@ def recent_changes(clients: Clients, identifiers: Iterable[str], start: datetime
 
 
 def _check_changes(d: Diagnosis, clients: Clients, identifiers: Iterable[str]) -> None:
-    """L2 변경. 다른 층의 판정이 모두 나온 뒤에 부른다 (장애가 있을 때만 변경을 계기로 본다)."""
+    """L2 리소스 변경 기록. 다른 층의 판정이 모두 나온 뒤에 부른다 (장애가 있을 때만 변경을 계기로 본다)."""
     try:
         changes = recent_changes(clients, identifiers, d.start - timedelta(hours=CHANGE_LEAD_HOURS), d.now)
     except Exception as error:  # 권한 없음, 모킹 환경 등
@@ -478,10 +478,10 @@ def _alb(d: Diagnosis, clients: Clients) -> List[str]:
         ("response_time", "TargetResponseTime", "Maximum"),
     ], d.start, d.now)
 
-    # L1 AWS 자체
+    # L1 AWS
     _check_hardware(d, ec2, instance_ids)
 
-    # L3 입구·네트워크: 서브넷 경로, ALB 보안 그룹, 대상 보안 그룹, NACL
+    # L3 네트워크 경로: 서브넷 경로, ALB 보안 그룹, 대상 보안 그룹, NACL
     subnets = _subnets(ec2, lb_subnet_ids + [i.get("SubnetId", "") for i in instances.values() if i.get("SubnetId")])
     lb_networks = [ipaddress.ip_network(subnets[s]["CidrBlock"]) for s in lb_subnet_ids if s in subnets]
     if internet_facing:
@@ -599,7 +599,7 @@ def _alb(d: Diagnosis, clients: Clients) -> List[str]:
                 f"리스너 {len(listeners)}개, 대상 {len(targets)}대가 모두 정상이고 ALB가 만든 5xx가 없습니다",
                 "elbv2:DescribeListeners · DescribeTargetHealth · HTTPCode_ELB_5XX_Count")
 
-    # L5 컴퓨팅 (대상 EC2)
+    # L5 인스턴스·실행 환경 (대상 EC2)
     if instances:
         _check_instances(d, ec2, cloudwatch, instances, network_blamed=bool(network_blamed_targets),
                          health_reasons=health_reasons)
@@ -607,7 +607,7 @@ def _alb(d: Diagnosis, clients: Clients) -> List[str]:
         d.check("L5", "대상", UNKNOWN, "대상이 EC2 인스턴스가 아닙니다 (IP·Lambda 대상은 이 절차가 보지 않습니다)",
                 "elbv2:DescribeTargetHealth")
     else:
-        d.skip("L5", "등록된 대상이 없어 볼 컴퓨팅이 없습니다")
+        d.skip("L5", "등록된 대상이 없어 볼 인스턴스가 없습니다")
     if _count(values["target5xx"]):
         d.check("L5", "대상이 만든 5xx", SYMPTOM,
                 f"대상(애플리케이션)이 만든 5xx {_count(values['target5xx'])}건 → 애플리케이션 로그에서 경로·대상별로 나눠 보세요",
@@ -716,7 +716,7 @@ def _ec2(d: Diagnosis, clients: Clients) -> List[str]:
     if not memberships and d.status_of("L4") == SKIP:
         d.skip("L4", "로드 밸런서 대상 그룹에 들어 있지 않습니다")
 
-    # L5 컴퓨팅
+    # L5 인스턴스·실행 환경
     _check_instances(d, ec2, cloudwatch, instances, network_blamed=d.status_of("L3") == CAUSE,
                      health_reasons=health_reasons)
 
@@ -840,7 +840,7 @@ def _lambda(d: Diagnosis, clients: Clients) -> List[str]:
     # L4
     d.skip("L4", "API Gateway·함수 URL 앞단은 이 절차가 보지 않습니다. API Gateway 뒤라면 함수의 스로틀이 클라이언트에 500으로 보입니다")
 
-    # L5 컴퓨팅 (함수 실행)
+    # L5 인스턴스·실행 환경 (함수 실행)
     if config.get("State") in ("Failed", "Inactive"):
         d.check("L5", "함수 상태", CAUSE, f"함수 상태가 {config.get('State')}입니다 ({config.get('StateReason', '')})",
                 "lambda:GetFunctionConfiguration State")
@@ -961,7 +961,7 @@ def _s3(d: Diagnosis, clients: Clients) -> List[str]:
     d.check("L1", "AWS Health 이벤트", UNKNOWN, HEALTH_NOTE, "health:DescribeEvents")
     d.skip("L3", "VPC 엔드포인트 정책은 이 절차가 보지 않습니다 (VPC 안에서만 403이면 엔드포인트 정책을 확인)")
     d.skip("L4", "S3 앞단(CloudFront 등)은 이 절차가 보지 않습니다")
-    d.skip("L5", "S3는 관리형 저장소라 컴퓨팅 층이 없습니다")
+    d.skip("L5", "S3는 관리형 저장소라 인스턴스·실행 환경 층이 없습니다")
 
     # L6 권한·한도: 계정·버킷 퍼블릭 액세스 차단, 정책, ACL, 요청 오류
     account_block: Dict[str, bool] = {}
@@ -1509,11 +1509,11 @@ def _credential(d: Diagnosis, clients: Clients) -> None:
 
     d.skip("L4", "앞단이 없는 API 호출입니다")
 
-    # L5: 컴퓨팅 남용 (채굴의 흔한 흔적) + GuardDuty
+    # L5: 인스턴스·함수 남용 (채굴의 흔한 흔적) + GuardDuty
     compute = [e for e in ok if e["event"] in COMPUTE_EVENTS]
     if compute:
         where = sorted({e["region"] for e in compute if e["region"]})
-        d.check("L5", "컴퓨팅 생성", CAUSE,
+        d.check("L5", "인스턴스·함수 생성", CAUSE,
                 f"{_names(compute)} ({', '.join(where[:4])}) — 채굴용 인스턴스를 띄우는 흔한 흔적입니다. 모든 리전을 확인하세요",
                 "cloudtrail:LookupEvents RunInstances")
     try:
@@ -1534,7 +1534,7 @@ def _credential(d: Diagnosis, clients: Clients) -> None:
     except Exception as error:
         d.check("L5", "GuardDuty", UNKNOWN, f"GuardDuty를 조회하지 못했습니다 ({_code(error)})", "guardduty:ListFindings")
     if d.status_of("L5") in (SKIP, UNKNOWN):
-        d.check("L5", "컴퓨팅 생성", OK, "인스턴스·함수·컨테이너를 만든 흔적이 없습니다", "cloudtrail:LookupEvents")
+        d.check("L5", "인스턴스·함수 생성", OK, "인스턴스·함수·컨테이너를 만든 흔적이 없습니다", "cloudtrail:LookupEvents")
 
     # L6: 권한 — 지속성 확보, 권한 더듬기, 키 상태·권한 범위
     persistence = [e for e in ok if e["event"] in PERSISTENCE_EVENTS]
@@ -1592,7 +1592,7 @@ DATA_SERVICES = ("Amazon Simple Storage Service", "AmazonCloudWatch", "Amazon Dy
                  "Amazon Elastic File System", "AWS CloudTrail")
 EDGE_SERVICES = ("Amazon Elastic Load Balancing", "Amazon API Gateway", "Amazon CloudFront")
 COST_LAYER_NAMES = {"L3": "데이터 전송·NAT", "L4": "앞단 (로드 밸런서·API Gateway·CloudFront)",
-                    "L5": "컴퓨팅", "L7": "저장·로그·요청"}
+                    "L5": "인스턴스·실행 환경", "L7": "저장·로그·요청"}
 
 
 def cost_layer(service: str, usage: str) -> str:
@@ -1743,7 +1743,7 @@ SERVICES: Dict[str, Dict[str, Any]] = {
         "L7": "이벤트 소스 · 비동기 전달"}},
     "s3": {"title": "S3", "run": _s3, "components": {
         "L1": "S3 서비스", "L2": "CloudTrail 쓰기 이벤트 (정책·ACL·차단)", "L3": "VPC 엔드포인트",
-        "L4": "앞단 (CloudFront 등)", "L5": "관리형 (컴퓨팅 없음)", "L6": "퍼블릭 액세스 차단 · 정책 · ACL · 요청 한도",
+        "L4": "앞단 (CloudFront 등)", "L5": "관리형 (인스턴스 없음)", "L6": "퍼블릭 액세스 차단 · 정책 · ACL · 요청 한도",
         "L7": "버전 관리 (복구 가능성)"}},
     "rds": {"title": "RDS", "run": _rds, "components": {
         "L1": "RDS 이벤트 (장애·장애 조치·유지 관리)", "L2": "CloudTrail 쓰기 이벤트 (DB·파라미터·보안 그룹)",
@@ -1754,12 +1754,12 @@ SERVICES: Dict[str, Dict[str, Any]] = {
         "L3": "보안 그룹 · NACL · 라우팅 테이블 · 흐름 로그", "L4": "로드 밸런서 (거치지 않음)", "L5": "출발지 · 목적지 인스턴스",
         "L6": "NAT 게이트웨이 포트 한도", "L7": "DNS 해석"}},
     "credential": {"title": "자격 증명 유출", "run": _credential, "default_hours": 24, "components": {
-        "L1": "AWS 자체 (해당 없음)", "L2": "이 키가 바꾼 것 (쓰기 이벤트·기록 끄기)", "L3": "쓴 곳 (IP · 도구 · 리전)",
-        "L4": "앞단 (해당 없음)", "L5": "컴퓨팅 남용 (채굴 흔적 · GuardDuty)", "L6": "지속성 확보 · 권한 더듬기 · 키 상태",
+        "L1": "AWS (해당 없음)", "L2": "이 키가 바꾼 것 (쓰기 이벤트·기록 끄기)", "L3": "쓴 곳 (IP · 도구 · 리전)",
+        "L4": "앞단 (해당 없음)", "L5": "인스턴스·함수 남용 (채굴 흔적 · GuardDuty)", "L6": "지속성 확보 · 권한 더듬기 · 키 상태",
         "L7": "데이터 접근 (비밀 값 · 버킷 공개 · 스냅샷 공유)"}},
     "cost": {"title": "비용 급증", "run": _cost, "fixed_hours": RECENT_DAYS * 24, "components": {
         "L1": "AWS 가격·청구 (해당 없음)", "L2": "비용을 늘리는 변경", "L3": "데이터 전송 · NAT",
-        "L4": "로드 밸런서 · API Gateway · CloudFront", "L5": "컴퓨팅 (EC2 · Lambda · RDS · 컨테이너)",
+        "L4": "로드 밸런서 · API Gateway · CloudFront", "L5": "인스턴스·실행 환경 (EC2 · Lambda · RDS · 컨테이너)",
         "L6": "예산 · 이상 탐지 감시", "L7": "저장 · 로그 · 요청"}},
 }
 ALIASES = {"elb": "alb", "elbv2": "alb", "loadbalancer": "alb", "instance": "ec2", "function": "lambda", "bucket": "s3",

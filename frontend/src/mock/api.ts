@@ -1372,7 +1372,7 @@ function seedScenarios(): AuditRecord[] {
       "네, **공개되어 있습니다.** 진단 절차의 판정입니다.",
       "",
       "- **원인 (L6 권한·한도)**: 버킷 ACL이 모든 사용자(AllUsers)에게 READ와 WRITE를 줍니다. 누구나 객체를 읽고 올릴 수 있습니다",
-      `- **계기 (L2 변경)**: ${clock(-8014)}에 bstoll이 콘솔에서 PutBucketAcl을 불렀습니다`,
+      `- **계기 (L2 리소스 변경 기록)**: ${clock(-8014)}에 bstoll이 콘솔에서 PutBucketAcl을 불렀습니다`,
       "- **주의 (L7)**: 버전 관리가 꺼져 있어 덮어쓴 파일은 되돌릴 수 없습니다",
       "",
       "먼저 ACL을 비공개로 되돌리고, 퍼블릭 액세스 차단을 켜는 것을 권합니다. 차단 켜기는 제가 승인 요청으로 만들 수 있습니다.",
@@ -1387,8 +1387,8 @@ function seedScenarios(): AuditRecord[] {
     ], incidentTime(-3180), [
       "**대상 웹 서버 세 대가 모두 종료 중이라** ALB가 보낼 곳이 없습니다.",
       "",
-      "- **원인 (L5 컴퓨팅)**: 대상 EC2 3대가 모두 shutting-down 상태입니다 (사용자가 시작한 종료)",
-      `- **계기 (L2 변경)**: ${clock(-3332)}에 bstoll이 TerminateInstances를 불렀습니다`,
+      "- **원인 (L5 인스턴스·실행 환경)**: 대상 EC2 3대가 모두 shutting-down 상태입니다 (사용자가 시작한 종료)",
+      `- **계기 (L2 리소스 변경 기록)**: ${clock(-3332)}에 bstoll이 TerminateInstances를 불렀습니다`,
       "- **증상 (L4 로드 밸런서)**: 대상이 모두 Target.InvalidState이고, ALB가 만든 5xx가 212건입니다",
       "- 네트워크(L3)·연결 한도(L6)·응답 시간(L7)은 정상입니다",
       "",
@@ -1407,7 +1407,7 @@ function seedScenarios(): AuditRecord[] {
       "",
       `- **증상 (L6 권한)**: ${clock(-21542)}부터 11분 동안 IAM·S3·EC2에 부른 4건이 모두 거부됐습니다 (ListAccessKeys, ListBuckets, DescribeAccountAttributes, GetUser)`,
       "- **증상 (L3 쓴 곳)**: 서로 다른 IP 세 곳에서 썼습니다",
-      "- 쓰기·컴퓨팅 생성·데이터 접근 흔적은 없습니다 (S3 객체 읽기는 관리 이벤트로 보이지 않습니다)",
+      "- 쓰기·인스턴스·함수 생성·데이터 접근 흔적은 없습니다 (S3 객체 읽기는 관리 이벤트로 보이지 않습니다)",
       "",
       "키가 아직 **활성**입니다. 지우지 말고 먼저 비활성화하고(조사 기록을 남기려고), 키가 어디에 노출됐는지 찾아 주세요.",
     ].join("\n"));
