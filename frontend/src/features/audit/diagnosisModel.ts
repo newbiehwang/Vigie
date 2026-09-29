@@ -11,9 +11,9 @@
 //                VPC     출발지 → L5 양쪽 인스턴스 → L3 보안 그룹·NACL·경로 → L6 NAT → 목적지
 //                키 유출  유출된 키 → L3 쓴 곳 → L6 권한·지속성 → L5 컴퓨팅 남용 → L7 데이터 접근
 //                비용     청구서 → L5 컴퓨팅 → L3 전송·NAT → L4 앞단 → L7 저장·로그
-//   아래 띠    길에 없는 층 (보통 L6 권한·한도) · 맨 아래 L1 AWS 자체 (모든 것이 올라탄 바닥)
+//   길 옆      길에 없는 층 (보통 L6 권한·한도) · 맨 아래 띠 L1 AWS 자체 (모든 것이 올라탄 바닥)
 // 설명: 층마다 이 서비스에서 무엇을 묻고 무엇을 보는지 (런북의 진단 단계를 줄인 것)
-import type { DiagnosisLayerId, DiagnosisStatus } from '@/types/audit';
+import type { DiagnosisLayer, DiagnosisLayerId, DiagnosisStatus } from '@/types/audit';
 
 export interface ServiceMap {
     entry: string; // 들어오는 쪽 (층이 아닌 글자)
@@ -167,23 +167,34 @@ export const FALLBACK_MAP: ServiceMap = {
     descriptions: { L1: '', L2: '', L3: '', L4: '', L5: '', L6: '', L7: '' },
 };
 
-// 띠: 위는 L2, 아래는 길에 없는 층(L2·L1 말고)과 맨 아래 L1
+// 길 밖의 층: 위는 L2(시간 축), 길 옆은 길에 없는 층(L2·L1 말고, 보통 L6), 바닥은 L1(모든 것이 올라탄 곳)
 export const bandsOf = (map: ServiceMap) => {
-    const below = (['L6', 'L3', 'L4', 'L5', 'L7'] as DiagnosisLayerId[]).filter((id) => !map.path.includes(id));
-    return { top: 'L2' as DiagnosisLayerId, below: [...below, 'L1' as DiagnosisLayerId] };
+    const side = (['L6', 'L3', 'L4', 'L5', 'L7'] as DiagnosisLayerId[]).filter((id) => !map.path.includes(id));
+    return { top: 'L2' as DiagnosisLayerId, side, floor: 'L1' as DiagnosisLayerId };
 };
 
-// ---------------------------------------------------------------- 띠의 판정 한 줄
-// 이상이 있는 띠(L2 계기 등)에는 판정 글을 한 줄로 줄여 적는다. 전체 글과 근거는 설명 칸에.
-//   관련 변경 2건: 09-29 15:16 StopInstances (alice → i-0a1b…), 09-29 15:16 StopInstances (…)
-//   → 관련 변경 2건 — 09-29 15:16 StopInstances (alice → i-0a1b…) 외 1건
-const BRIEF_ITEMS_MAX = 60; // 콜론 뒤 목록에서 보일 글자 수 (넘으면 '외 N건')
-const BRIEF_MAX = 90; // 한 줄 전체의 최대 글자 수 (목록이 없는 긴 판정 글은 말줄임표로)
+// ---------------------------------------------------------------- 아래 설명: 펼칠 층과 차례
+// 그림에는 판정만 두고, 문장은 아래 설명에 모은다. 누르지 않아도 읽히도록 문제가 있는 층을 차례로 모두 펼친다.
+// 차례는 서버 요약(diagnose._summary)과 같다: 무엇이 고장 났나(L2가 아닌 원인) → 무엇이 계기였나(L2) → 증상 → 주의.
+// 고장 난 곳을 못 찾았는데 L2가 원인이면 그 변경이 가장 유력한 원인이다 (이름표도 '원인').
+// 확인 불가·정상·해당 없음 층은 그림에서 누르면 펼친다.
+export interface DetailSection {
+    layer: DiagnosisLayer;
+    label: string; // 제목의 판정 이름 (L2가 계기면 '계기')
+}
 
-// 띠에 판정 한 줄을 적는 판정 (확인 불가는 이상이 아니라 볼 수 없었다는 뜻이라 배지만으로 충분하다)
-export const FINDING_STATUSES: DiagnosisStatus[] = ['cause', 'symptom', 'warn'];
-
-const clip = (text: string) => (text.length > BRIEF_MAX ? `${text.slice(0, BRIEF_MAX - 1).trimEnd()}…` : text);
+export function problemSections(layers: DiagnosisLayer[]): DetailSection[] {
+    const of = (status: DiagnosisStatus) => layers.filter((layer) => layer.status === status);
+    const causes = of('cause');
+    const broken = causes.filter((layer) => layer.id !== 'L2');
+    const change = causes.find((layer) => layer.id === 'L2');
+    return [
+        ...broken.map((layer) => ({ layer, label: '원인' })),
+        ...(change ? [{ layer: change, label: broken.length ? '계기' : '원인' }] : []),
+        ...of('symptom').map((layer) => ({ layer, label: '증상' })),
+        ...of('warn').map((layer) => ({ layer, label: '주의' })),
+    ];
+}
 
 // 괄호 밖의 구분자로만 나눈다 ("(Client.UserInitiatedShutdown: …)"이나 "(처음 …, 마지막 …)" 안은 나누지 않는다)
 function splitTop(text: string, separator: string): string[] {
@@ -205,26 +216,11 @@ function splitTop(text: string, separator: string): string[] {
 }
 
 // 판정 글을 앞말과 나머지로: "인스턴스 2대 모두가 실행 중이 아닙니다: i-… stopped, …" → [앞말, 나머지].
-// 설명 칸은 앞말을 크게, 나머지(ID·사유)를 그 아래 보통 크기로 쓴다. 콜론이 없으면 나머지는 빈 글
+// 설명 칸은 앞말을 크게, 나머지(ID·사유)를 그 아래 보통 크기로 쓴다.
+// 콜론이 없으면 첫 문장까지를 앞말로 둔다 ("대상 3대가 모두 정상이 아닙니다 (…). 모두 unhealthy면 …" → 두 문장째부터 나머지)
 export function splitFinding(finding: string): [string, string] {
     const [head, ...rest] = splitTop(finding, ': ');
-    return [head ?? '', rest.join(': ')];
+    if (rest.length) return [head, rest.join(': ')];
+    const [first, ...more] = splitTop(finding, '. ');
+    return more.length ? [first, more.join('. ')] : [first ?? '', ''];
 }
-
-// 판정 글 하나를 한 줄로: "앞말: 항목1, 항목2, 항목3 → 덧붙임" → "앞말 — 항목1, 항목2 외 1건"
-export function briefOf(finding: string): string {
-    const [head, ...rest] = splitTop(finding, ': ');
-    if (!rest.length) return clip(head ?? '');
-    const listed = splitTop(rest.join(': '), ' → ')[0] ?? ''; // 목록 뒤의 권고("→ …")는 설명 칸에만
-    const items = splitTop(listed, ', ');
-    const shown: string[] = [];
-    for (const item of items) {
-        if (shown.length && [...shown, item].join(', ').length > BRIEF_ITEMS_MAX) break;
-        shown.push(item);
-    }
-    const more = items.length - shown.length;
-    return clip(`${head} — ${shown.join(', ')}${more > 0 ? ` 외 ${more}건` : ''}`);
-}
-
-// 길에 없는 층 중 조용한 것(정상 · 해당 없음)은 띠 대신 '그 밖의 층' 한 줄의 작은 칩으로 모은다
-export const QUIET_STATUSES: DiagnosisStatus[] = ['ok', 'skip'];
