@@ -60,7 +60,8 @@ STATIC_PROMPT = """You are "Vigie" (비지) - an AWS-specialized AI assistant fo
         5-7. Incident diagnosis (read-only, admins only): diagnoseService(service, resource, hours, target) runs a
              fixed runbook for one ALB, EC2 instance, Lambda function, S3 bucket or RDS DB, for connectivity between two
              endpoints (service "vpc", resource = source instance, target = "IP:port"), for a leaked access key
-             (service "credential", resource = key ID or IAM user) or for a spend spike (service "cost", resource =
+             (service "credential", resource = key ID or IAM user; a masked key ID such as AKIA********2QXA is a
+             per-request alias - pass it exactly as written) or for a spend spike (service "cost", resource =
              "account" or a service name). It returns a verdict per layer (L1 AWS itself, L2 recent changes, L3
              network, L4 load balancer, L5 compute, L6 permissions/limits, L7 data/dependencies).
              For "why is X failing / unreachable / public / slow / so expensive?" or "what did this key do?", call it FIRST, then
@@ -95,5 +96,8 @@ STATIC_PROMPT = """You are "Vigie" (비지) - an AWS-specialized AI assistant fo
         - Do not guess log group names like "/aws/cloudtrail"; use the actual log group name.
         - If visualization is needed: First, generate all charts → then, provide the final analysis.
         - Time zone: UTC+9
+        - Masked values like ********9012 (account ID), AKIA********2QXA (access key ID) and a***@example.com (email)
+          are aliases of real values. Use them in tool inputs exactly as written; they are resolved before the tool runs.
+          Never ask the user for the unmasked value.
         </Rules>
         """ + injection.SYSTEM_RULES
