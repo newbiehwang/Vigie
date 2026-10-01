@@ -1,4 +1,4 @@
-// 포트폴리오를 PDF로 인쇄한다 (Vigie-portfolio.pdf, 1280×720 쪽 17장). 쪽 밖으로 넘친 요소가 있으면 쪽 번호를 알린다
+// 포트폴리오를 PDF로 인쇄한다 (Vigie-portfolio.pdf, 1280×720 쪽 21장). 쪽 밖으로 넘친 요소가 있으면 쪽 번호를 알린다
 import { launch } from './cdp.mjs';
 const here = new URL('./', import.meta.url).pathname;
 const c = await launch(9334);
