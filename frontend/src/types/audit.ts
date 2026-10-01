@@ -60,6 +60,10 @@ export interface AuditRecord {
     awsRequestId?: string; // 실행한 AWS API의 요청 ID = CloudTrail 이벤트의 requestID
     cloudTrailEvent?: string; // 예: "logs.amazonaws.com:PutRetentionPolicy"
     taintedBy?: TaintedBy[]; // 승인 요청 행: 이 변경 전에 같은 질문에서 읽은 의심 결과 (체류층)
+    // 승인 요청 행: 대상 · 지금 값 · 바뀔 값 (미리 보기). 역추적이 '사용자가 묻지 않은 감시 장치 약화'를 본다
+    target?: string;
+    before?: string;
+    after?: string;
     // 사용자 관리의 사건 (kind: 'admin', services/llm/user_admin.py). event: invited·group_added·group_removed·disabled·enabled
     targetUser?: string; // 바꾼 사용자의 Cognito 사용자 이름
     targetEmail?: string;
@@ -112,12 +116,15 @@ export interface AuditPage {
 // 역추적 (GET /audit?trace=<actionId>, services/llm/audit_trace.py): 변경 작업 하나를 층 하나씩 아래에서 위로 묻는다
 export type TraceLayer = 'effect' | 'egress' | 'residence' | 'deliberation' | 'ingress' | 'interface' | 'mediation';
 export type TraceStatus = 'ok' | 'warn' | 'fail' | 'info';
+// 판정의 근거: 기록(코드가 확정하는 사실) · 탐지(문구 패턴이라 놓칠 수 있다) · 앱 밖(CloudTrail)
+export type TraceBasis = 'record' | 'detection' | 'outside';
 
 export interface TraceStep {
     layer: TraceLayer;
     question: string;
     status: TraceStatus;
     answer: string;
+    basis?: TraceBasis[]; // 예전 서버의 응답에는 없다
     evidence: string[]; // 근거가 된 행의 at (events·rows 안에 있다)
 }
 

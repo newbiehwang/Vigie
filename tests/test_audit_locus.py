@@ -29,7 +29,7 @@ def write_call(tool_id, days=1):
             "input": {"log_group_name": LOG_GROUP, "retention_days": days}}
 
 
-def run(env, monkeypatch, replies, log_text=ATTACK_KO):
+def run(env, monkeypatch, replies, log_text=ATTACK_KO, question="최근 오류 로그 보여줘"):
     """모델 응답(replies)을 차례로 돌려주며 질문 하나를 처리한다. 로그 도구는 log_text를 돌려준다."""
     llm = env["llm"]
     import mcp_anthropic_client
@@ -51,7 +51,7 @@ def run(env, monkeypatch, replies, log_text=ATTACK_KO):
     client.tools = json.loads(env["mcp"]._rpc("tools/list")["body"])["result"]["tools"]
     monkeypatch.setattr(client.mcp_client, "call_tool", call_tool)
     monkeypatch.setattr(llm, "get_client", lambda *_: client)
-    return json.loads(llm.handle_llm1_with_mcp({"text": "최근 오류 로그 보여줘"}, ORIGIN, caller_id="alice")["body"])
+    return json.loads(llm.handle_llm1_with_mcp({"text": question}, ORIGIN, caller_id="alice")["body"])
 
 
 def audit_items(env):

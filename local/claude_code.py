@@ -173,7 +173,8 @@ def make_client_class():
                     if not self._can_use(name):
                         result = tool_access.denied_result(name)
                     elif prepared["risk"] == "write":
-                        result = self._request_approval(name, prepared["input"], self._tainted_by(prepared["call_no"]))
+                        result = self._request_approval(name, prepared["input"],
+                                                        self._tainted_by(prepared["call_no"], prepared["input"]))
                     else:
                         restored = self.redactor.restore(prepared["input"]) if prepared["restore"] else prepared["input"]
                         result = self._call_tool_timed(name, restored)
@@ -184,13 +185,14 @@ def make_client_class():
                     self._tool_failed(tool_use, error)
                     return {"isError": True, "content": [{"type": "text", "text": self.redactor.text(str(error))}]}
                 text = json.dumps(result, ensure_ascii=False) if isinstance(result, (dict, list)) else str(result)
+                read = self.redactor.text(text)  # 모델이 읽는 글 (가린 글)
                 if finished["suspicious"]:
+                    # 글은 요청 값의 출처를 보려고 메모리에만 둔다 (배포의 _seen_suspicious와 같다)
                     self._seen_suspicious = (self._seen_suspicious + [
                         {"toolUseId": finished["tool_id"], "tool": name, "kinds": finished["suspicious"],
-                         "callNo": finished["call_no"]}])[-MAX_TAINTED:]
+                         "callNo": finished["call_no"], "text": read}])[-MAX_TAINTED:]
                 # 계정 밖(모델)으로 나가는 곳: 가리고, 데이터 영역으로 감싼다 (배포의 tool_result와 같다)
-                return {"content": [{"type": "text", "text": injection.wrap(name, self.redactor.text(text),
-                                                                             finished["suspicious"])}],
+                return {"content": [{"type": "text", "text": injection.wrap(name, read, finished["suspicious"])}],
                         "isError": isinstance(result, dict) and result.get("isError") is True}
 
         # ------------------------------------------------------------ 모델 (claude -p)
@@ -205,7 +207,7 @@ def make_client_class():
             self.total_input_tokens = self.total_output_tokens = 0
             self.total_cache_read_tokens = self.total_cache_write_tokens = 0
             self.model_calls, self.tool_search_count = [], 0
-            self._tool_calls, self._seen_suspicious = 0, []
+            self._tool_calls, self._seen_suspicious, self._question = 0, [], prompt
 
             token = self.gateway.open(self)
             try:

@@ -63,10 +63,17 @@ def is_registered(tool_definition: Optional[Dict[str, Any]]) -> bool:
 
 
 def tainted_view(tainted_by: Any) -> List[Dict[str, Any]]:
-    """저장된 taintedBy를 화면·감사 로그에 줄 모양으로 (DynamoDB의 숫자는 Decimal로 온다)."""
-    return [{"toolUseId": entry.get("toolUseId"), "tool": entry.get("tool"),
-             "kinds": [str(kind) for kind in entry.get("kinds") or []],
-             "callsAgo": int(entry.get("callsAgo") or 0)} for entry in tainted_by or []]
+    """저장된 taintedBy를 화면·감사 로그에 줄 모양으로 (DynamoDB의 숫자는 Decimal로 온다).
+    matchedArgs(요청 값 중 그 의심 결과 안에 그대로 있고 질문에는 없던 인자)는 있을 때만 붙인다."""
+    view = []
+    for entry in tainted_by or []:
+        row = {"toolUseId": entry.get("toolUseId"), "tool": entry.get("tool"),
+               "kinds": [str(kind) for kind in entry.get("kinds") or []],
+               "callsAgo": int(entry.get("callsAgo") or 0)}
+        if entry.get("matchedArgs"):
+            row["matchedArgs"] = [str(name) for name in entry["matchedArgs"]]
+        view.append(row)
+    return view
 
 
 def approval_mode(environment: str) -> str:
