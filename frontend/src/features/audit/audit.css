@@ -1243,7 +1243,9 @@
   line-height: 1.55;
   color: var(--ink-3);
   overflow-wrap: anywhere;
-  text-wrap: pretty; /* 마지막 줄에 한두 글자만 남지 않게 (판단 단계 설명처럼 긴 글) */
+  /* 단어 중간에서 끊지 않고, 마지막 줄에 한두 글자만 남지 않게 (판단 단계 설명처럼 긴 글) */
+  word-break: keep-all;
+  text-wrap: pretty;
 }
 
 /* 근거(주 색 옅은 바탕): 이 기록이 그 단계에 있는 까닭, 흔적(흰 바탕 점선): 다른 단계에 남긴 표시. 둘 다 단계 › 단계 › 단계 */
