@@ -1,10 +1,10 @@
 # Vigie 포트폴리오
 
-Vigie를 소개하는 21쪽짜리 PDF의 원본입니다. 쪽 하나가 1280×720인 HTML 한 장(`index.html`)이고, 헤드리스 Chrome으로 인쇄해 PDF를 만듭니다.
+Vigie를 소개하는 25쪽짜리 PDF의 원본입니다. 흐름은 포트폴리오 웹(vigie-portfolio.vercel.app)과 같습니다: 문제와 목표 → 설계 → 구현 과정 → 문제와 해결 → 예시 시나리오 → 마치며. 쪽 하나가 1280×720인 HTML 한 장(`index.html`)이고, 헤드리스 Chrome으로 인쇄해 PDF를 만듭니다.
 
 | 파일 | 내용 |
 |:--|:--|
-| `index.html` | 포트폴리오 본문과 스타일. 색은 웹과 같은 Midnight Ink(`frontend/src/styles.css`), 글꼴은 Pretendard(jsDelivr에서 불러옴), 로고는 `frontend/src/assets/brand/vigie-logo.svg` |
+| `index.html` | 포트폴리오 본문과 스타일. 색은 웹과 같은 Midnight Ink(`frontend/src/styles.css`), 글꼴은 Pretendard(jsDelivr에서 불러옴), 로고는 `frontend/src/assets/brand/vigie-logo.svg`, 구조 그림은 README와 같은 `images/architecture.svg` |
 | `shots/` | 쪽에 넣는 화면 캡처. `n-*` · `home` · `landing` · `diag-alb`는 mock 모드 앱, `local-*` · `inj-*`는 로컬 장애 재현(`local/`)을 찍은 것 |
 | `shoot.mjs` | `shots/`를 다시 찍는다 |
 | `render.mjs` | PDF로 인쇄한다 (`Vigie-portfolio.pdf`, 저장소에는 올리지 않음) |
@@ -35,5 +35,6 @@ node portfolio/render.mjs
 
 ## 쓸 때 지킬 것
 
-- 관리형 서비스가 나오기 전에 직접 만든 토이 프로젝트로 소개합니다. 기능이 독창적이라고 주장하지 않습니다(20쪽 "이제는 관리형 서비스가 있지만…").
+- 관리형 서비스가 나오기 전에 직접 만든 토이 프로젝트로 소개합니다. 기능이 독창적이라고 주장하지 않습니다(24쪽 "이제는 관리형 서비스가 있어도…").
 - 강조색은 주 색(`--accent`, #1E5AA8) 하나만 씁니다.
+- 포트폴리오 웹의 글이 바뀌면 이 PDF의 같은 쪽도 맞춰 고칩니다. 숫자(도구 73개, 테스트 842개, 장애 시나리오 44개)는 코드에서 다시 세어 봅니다.
