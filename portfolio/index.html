@@ -137,6 +137,18 @@ table.t td:first-child { color: var(--ink); font-weight: 700; }
 
 table.t.tight td { padding: 7px 12px; }
 
+/* 문제와 목표: 목표 카드 두 장이 쪽 아래까지 찬다 */
+.goals { gap: 20px; }
+.goals .card { padding: 32px 34px; display: flex; flex-direction: column; gap: 16px; }
+.goals .card .tag { align-self: flex-start; font-size: 13px; padding: 4px 11px; }
+.goals .card h3 { font-size: 23px; line-height: 1.4; margin: 0; letter-spacing: -0.01em; }
+.goals .card p { font-size: 17px; line-height: 1.7; }
+/* 카드 바닥: 이 목표를 구현한 쪽 */
+.goal-how { list-style: none; margin-top: auto; border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 9px; }
+.goal-how li { display: flex; justify-content: space-between; gap: 16px; font-size: 15px; color: var(--ink-2); }
+.goal-how li b { color: var(--ink); }
+.goal-how li span { color: var(--ink-3); font-size: 13.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
 /* 구조 그림 옆 번호 설명 */
 .legend { list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; color: var(--ink-2); line-height: 1.45; }
 .legend li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; }
@@ -202,10 +214,19 @@ table.t.tight td { padding: 7px 12px; }
 <section class="page">
   <h2>AI에게 운영을 맡길 때 어려운 건 조회가 아니라,<br>무엇을 바꾸게 둘지였습니다</h2>
   <p class="lead">"어젯밤 누가 보안 그룹을 열었지?"에 답하려면 CloudWatch에서 알람 시각을 보고, CloudTrail 이벤트를 뒤지고, IAM에서 사용자를 확인한 뒤 EC2 콘솔에서 규칙이 남았는지 다시 봐야 합니다. 이 과정을 AI에게 맡기는 건 어렵지 않았지만, AI가 무언가를 바꾸게 두면 로그에 심어 둔 문장 하나가 AWS를 바꿀 수 있습니다.</p>
-  <div class="body" style="flex-direction: column; gap: 20px; margin-top: 26px">
-    <div class="grid2">
-      <div class="card"><span class="tag">목표 1</span><h3 style="margin-top:10px">AI가 도구를 쓴 흔적을 구조화해, 어느 계층에서 어긋났는지 남긴다</h3><p>운영 도구의 답은 틀릴 수 있습니다. 답만 봐서는 어느 도구가 실패했는지, 모델이 무엇을 읽고 그렇게 판단했는지 알 수 없어서 질문, 도구 호출, 결과를 모두 감사 기록으로 남기고 처리 단계를 거꾸로 따라갈 수 있게 했습니다.</p></div>
-      <div class="card"><span class="tag">목표 2</span><h3 style="margin-top:10px">AI를 결정론적, 비결정론적 계층으로 나눠, AWS를 바꾸는 실행은 승인을 거친다</h3><p>모델은 같은 질문에도 다른 도구를 부르고, 로그에 심긴 문장과 사용자의 지시를 확실히 구분하지 못합니다. 판단은 모델에게 맡기되, 실행은 정해진 코드가 하고 사람이 버튼으로 승인해야만 진행되게 했습니다.</p></div>
+  <div class="body" style="margin-top: 26px">
+    <div class="grid2 goals" style="flex: 1">
+      <div class="card"><span class="tag">목표 1</span><h3>AI가 도구를 쓴 흔적을 구조화해, 어느 계층에서 어긋났는지 남긴다</h3><p>운영 도구의 답은 틀릴 수 있습니다. 답만 봐서는 어느 도구가 실패했는지, 모델이 무엇을 읽고 그렇게 판단했는지 알 수 없어서 질문, 도구 호출, 결과를 모두 감사 기록으로 남기고 처리 단계를 거꾸로 따라갈 수 있게 했습니다.</p>
+        <ul class="goal-how">
+          <li><div><b>감사 7계층 역추적</b> · 변경 하나를 실행된 쪽부터 거슬러 오름</div><span>10쪽</span></li>
+          <li><div><b>진단 7층</b> · 층마다 판정과 근거 API를 남김</div><span>11쪽</span></li>
+        </ul></div>
+      <div class="card"><span class="tag">목표 2</span><h3>AI를 결정론적, 비결정론적 계층으로 나눠, AWS를 바꾸는 실행은 승인을 거친다</h3><p>모델은 같은 질문에도 다른 도구를 부르고, 로그에 심긴 문장과 사용자의 지시를 확실히 구분하지 못합니다. 판단은 모델에게 맡기되, 실행은 정해진 코드가 하고 사람이 버튼으로 승인해야만 진행되게 했습니다.</p>
+        <ul class="goal-how">
+          <li><div><b>판단과 실행 분리</b> · 도구 호출은 제안, 실행은 코드</div><span>7쪽</span></li>
+          <li><div><b>변경 승인</b> · 인증된 버튼, 실행 직전 재확인</div><span>8쪽</span></li>
+          <li><div><b>로그 속 지시문</b> · 속아도 승인 없이는 안 바뀜</div><span>9쪽</span></li>
+        </ul></div>
     </div>
   </div>
   <div class="foot"><span>2</span></div>
