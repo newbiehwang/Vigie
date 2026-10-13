@@ -126,3 +126,6 @@ installer/macos/VigieInstaller/Resources/VigieInstaller.entitlements
 
 # 공식 MCP 도구 목록 스냅샷: 이미지를 만들 때 생긴다 (mcp/Dockerfile, mcp/lambda_mcp/official.py)
 mcp/lambda_mcp/official_tools.json
+
+# 포트폴리오 PDF 원본과 화면 캡처: 로컬에만 둔다 (저장소에 올리지 않음)
+portfolio/
