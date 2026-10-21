@@ -173,7 +173,20 @@ export const resultRankOf = (record: AuditRecord) => {
 
 const SOURCE_LABELS: Record<string, string> = { web: '웹', slack: 'Slack', direct: '직접 호출' };
 
+// 보안 게이트웨이의 질문 판정 (services/llm/jev.py Plan.decision)
+export const GATEWAY_LABELS: Record<string, string> = {
+    blocked: '거절 (숨은 지시)',
+    guided: '관리자에게 요청 안내',
+    flagged: '의심 질문 (진행)',
+    allowed: '진행',
+    unavailable: 'Jev를 쓰지 못해 기존 방어로 진행',
+};
+// 의심 문구 종류 이름 (injection.py의 패턴 이름은 그대로, Jev 판정만 풀어 쓴다)
+export const kindLabel = (kind: string) => (kind === 'jev' ? 'Jev 판정' : kind);
+
 const FLAG_LABELS: Record<string, string> = {
+    blocked: '게이트웨이 거절',
+    flagged: '의심 질문',
     suspicious: '의심 문구',
     tainted: '의심 뒤 요청',
     unregistered: '미등록 도구',
@@ -181,6 +194,8 @@ const FLAG_LABELS: Record<string, string> = {
 };
 export const flagsOf = (record: AuditRecord) => {
     const flags: string[] = [];
+    // 보안 게이트웨이의 질문 판정 (질문 행)
+    if (record.gateway?.decision === 'blocked' || record.gateway?.decision === 'flagged') flags.push(record.gateway.decision);
     if (suspiciousOf(record)) flags.push('suspicious');
     if (record.taintedBy?.length) flags.push('tainted');
     if (record.locus === 'interface') flags.push('unregistered');

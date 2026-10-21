@@ -11,6 +11,21 @@ export type AuditLocus = 'interface' | 'ingress' | 'egress' | 'effect';
 // 관문: 화면과 역추적이 묶는 단위 (egress · effect는 실행 관문 하나)
 export type AuditGate = 'interface' | 'ingress' | 'execution';
 
+// 보안 게이트웨이 (docs/security-gateway.md, services/llm/jev.py). Jev를 켰을 때만 있다. 확률은 백분율 정수
+//   질문 행: 판정 decision과 숨은 지시 확률 threat, 관리자 도구가 필요할 확률 admin(일반 사용자만), 먼저 찾은 도구 routed
+//   도구 행: 결과 검사 threat 또는 unavailable, 검사에 걸린 시간 ms
+export type GatewayDecision = 'blocked' | 'guided' | 'flagged' | 'allowed' | 'unavailable';
+export interface AuditGateway {
+    decision?: GatewayDecision;
+    model?: string;
+    threat?: number;
+    admin?: number;
+    routed?: string[];
+    reason?: string; // decision이 unavailable일 때 까닭
+    unavailable?: boolean; // 도구 행: 검사하지 못함
+    ms?: number;
+}
+
 // 토큰 네 종류 (입력에는 캐시에서 읽은·캐시에 쓴 입력이 들어 있지 않다)
 export interface TokenCounts {
     input: number;
@@ -40,6 +55,7 @@ export interface AuditRecord {
     diagnosis?: Diagnosis; // 진단 도구(diagnoseService)의 층별 판정. 팝업창이 관문 대신 서비스 진단 층을 그린다
     // 지시문처럼 보이는 문구 (services/llm/injection.py). 도구 호출은 종류 목록, 질문은 그런 도구 결과의 수
     injectionSuspected?: string[] | number;
+    gateway?: AuditGateway; // 보안 게이트웨이의 판정 (질문 행) · 결과 검사 (도구 행)
     // 질문 (kind: 'request')
     question?: string;
     model?: string;

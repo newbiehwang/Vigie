@@ -1753,6 +1753,39 @@ function seedScenarios(): AuditRecord[] {
 }
 auditRecords = [...auditRecords, ...seedScenarios()];
 
+// 화면 확인용: 주소에 ?mock-gateway=on을 붙이면 보안 게이트웨이(Jev, docs/security-gateway.md)를 켠 것처럼 질문 · 도구 행에
+// 판정을 붙인다. 기본 데모에는 없다 (실제 배포에서 Jev는 기본 꺼짐). 값은 기록의 시각으로 정해 새로 고쳐도 같다
+//   질문 행: 진행(숨은 지시 0~7%), 시나리오 4의 질문만 의심 질문(68%). 먼저 찾게 한 도구는 그 질문에서 부른 조회 도구
+//   조회 도구 행: 숨은 지시 0~9%, 패턴이 의심 문구를 찾은 결과는 86%와 의심 문구 종류 jev. 검사 0.15~0.45초
+const MOCK_GATEWAY = new URLSearchParams(window.location.search).get("mock-gateway") === "on";
+const spread = (text: string, size: number) => [...text].reduce((sum, ch) => (sum * 31 + ch.charCodeAt(0)) % 9973, 7) % size;
+const withGateway = (record: AuditRecord, toolsOf: Map<string, string[]>): AuditRecord => {
+  if (record.kind === "request") {
+    const flagged = (record.question ?? "").includes("로그에 적힌 조치");
+    return { ...record, gateway: {
+      decision: flagged ? "flagged" : "allowed", model: "jev-1.13.0", threat: flagged ? 68 : spread(record.at, 8),
+      routed: (toolsOf.get(record.requestId ?? "") ?? []).slice(0, 8),
+    } };
+  }
+  if (record.kind === "tool" && record.locus === "ingress") {
+    const kinds = Array.isArray(record.injectionSuspected) ? record.injectionSuspected : [];
+    const ms = 150 + spread(record.at, 300);
+    return kinds.length
+      ? { ...record, injectionSuspected: [...kinds, "jev"], gateway: { threat: 86, ms } }
+      : { ...record, gateway: { threat: spread(record.at, 10), ms } };
+  }
+  return record;
+};
+if (MOCK_GATEWAY) {
+  const toolsOf = new Map<string, string[]>();
+  for (const r of auditRecords) {
+    if (r.kind === "tool" && r.locus === "ingress" && r.requestId && r.tool) {
+      toolsOf.set(r.requestId, [...new Set([...(toolsOf.get(r.requestId) ?? []), r.tool])]);
+    }
+  }
+  auditRecords = auditRecords.map((record) => withGateway(record, toolsOf));
+}
+
 const usersRoute = (method: string, parts: string[], body: RequestBody, params: Record<string, string>): Result => {
   if (!mockIsAdmin()) return [403, { error: "사용자 관리는 관리자(admins 그룹)만 할 수 있습니다" }];
   if (parts.length === 1 && method === "get") {
@@ -1897,9 +1930,19 @@ const traceAudit = (actionId: string): Result => {
         ? found("warn", `도구 결과 ${ingress.length}건 중 ${suspicious.length}건에 의심 문구가 있었습니다 (${[...new Set(suspicious.flatMap(kindsOf))].sort().join(", ")}).`, suspicious.map((r) => r.at))
         : found("ok", `도구 결과 ${ingress.length}건, 탐지된 의심 문구 없음.`, ingress.map((r) => r.at)),
   ];
-  if (tainted.length) {
-    ingressFindings.push(found("warn", `의심 결과를 읽은 뒤 변경을 요청했습니다 (${tainted.map((t) => `${t.tool} 결과 뒤 ${distance(t.callsAgo)}`).join(", ")}).`, at(requested)));
-  } else if (requested) {
+  // 보안 게이트웨이(Jev)가 질문을 숨은 지시로 의심했나, 의심 질문에서 나온 변경 요청인가 (taintedBy의 출처 user_question)
+  const questionRow = rows.find((r) => r.kind === "request");
+  if (questionRow?.gateway?.decision === "flagged") {
+    ingressFindings.push(found("warn", `보안 게이트웨이가 질문을 숨은 지시로 의심했습니다 (Jev ${questionRow.gateway.threat}%).`, at(questionRow)));
+  }
+  const fromResults = tainted.filter((t) => t.tool !== "user_question");
+  if (fromResults.length) {
+    ingressFindings.push(found("warn", `의심 결과를 읽은 뒤 변경을 요청했습니다 (${fromResults.map((t) => `${t.tool} 결과 뒤 ${distance(t.callsAgo)}`).join(", ")}).`, at(requested)));
+  }
+  if (fromResults.length < tainted.length) {
+    ingressFindings.push(found("warn", "의심 질문에서 나온 변경 요청입니다.", at(requested)));
+  }
+  if (requested && !tainted.length) {
     ingressFindings.push(found("ok", "탐지된 의심 결과 뒤의 요청이 아닙니다."));
   }
   const matched = tainted.filter((t) => t.matchedArgs?.length);

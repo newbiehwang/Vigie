@@ -8,7 +8,9 @@ import { AuditGates } from './AuditGates';
 import {
     ACTION_EVENTS,
     ADMIN_EVENTS,
+    GATEWAY_LABELS,
     GROUP_NAMES,
+    kindLabel,
     kindTextOf,
     REDACTED_LABELS,
     redactedTotal,
@@ -42,7 +44,18 @@ export function Details({ record }: { record: AuditRecord }) {
                     : '없음',
             ]);
         if (Array.isArray(record.injectionSuspected) && record.injectionSuspected.length)
-            rows.push(['의심 문구', `지시문처럼 보이는 문구 (${record.injectionSuspected.join(', ')}). 데이터로만 다뤘습니다`]);
+            rows.push([
+                '의심 문구',
+                `지시문처럼 보이는 문구 (${record.injectionSuspected.map(kindLabel).join(', ')}). 데이터로만 다뤘습니다`,
+            ]);
+        // 보안 게이트웨이의 결과 검사 (Jev): 숨은 지시 확률과 검사에 걸린 시간
+        if (record.gateway)
+            rows.push([
+                '보안 게이트웨이',
+                record.gateway.unavailable
+                    ? `Jev 검사를 쓰지 못해 패턴 탐지만 썼습니다 (${secondsOf(record.gateway.ms)})`
+                    : `숨은 지시 확률 ${record.gateway.threat ?? 0}% · Jev 검사 ${secondsOf(record.gateway.ms)}`,
+            ]);
     } else if (record.kind === 'action') {
         rows.push(['사건', ACTION_EVENTS[record.event ?? '']?.label ?? record.event ?? '']);
         rows.push(['변경 내용', record.summary ?? '']);
@@ -132,6 +145,20 @@ export function Details({ record }: { record: AuditRecord }) {
                 ),
             ]);
         }
+        // 보안 게이트웨이의 질문 판정 (Jev): 판정, 숨은 지시 · 관리자 도구 확률, 먼저 찾게 한 도구
+        if (record.gateway) {
+            const gateway = record.gateway;
+            const parts = [
+                GATEWAY_LABELS[gateway.decision ?? ''] ?? gateway.decision,
+                gateway.threat !== undefined ? `숨은 지시 ${gateway.threat}%` : null,
+                gateway.admin !== undefined ? `관리자 도구 필요 ${gateway.admin}%` : null,
+                gateway.reason ? `까닭: ${gateway.reason}` : null,
+            ].filter(Boolean);
+            rows.push(['보안 게이트웨이', parts.join(' · ')]);
+            if (gateway.routed?.length)
+                rows.push(['먼저 찾게 한 도구', gateway.routed.map((name) => labelOf(name)).join(', ')]);
+            if (gateway.model) rows.push(['판정 모델', <code key="jev">{gateway.model}</code>]);
+        }
         rows.push(['도구 호출', `${record.toolCount ?? 0}번`]);
         if (record.injectionSuspected) rows.push(['의심 문구가 든 도구 결과', `${record.injectionSuspected}건`]);
         const redacted = Object.entries(record.redacted ?? {});
@@ -190,6 +217,15 @@ export function Flags({ record }: { record: AuditRecord }) {
     return (
         <>
             {record.source === 'slack' ? <span className="audit-flag">Slack</span> : null}
+            {record.gateway?.decision === 'blocked' ? (
+                <span className="audit-flag is-suspicious" title="보안 게이트웨이가 숨은 지시로 분류해 모델을 부르지 않았습니다">
+                    게이트웨이 거절
+                </span>
+            ) : record.gateway?.decision === 'flagged' ? (
+                <span className="audit-flag is-suspicious" title="보안 게이트웨이가 질문을 숨은 지시로 의심했습니다 (진행)">
+                    의심 질문
+                </span>
+            ) : null}
             {suspiciousOf(record) ? (
                 <span className="audit-flag is-suspicious" title="도구 결과에 지시문처럼 보이는 문구가 있었습니다">
                     의심 문구

@@ -20,7 +20,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { fetchTrace } from '@/api/audit';
 import type { AuditGate, AuditRecord, AuditTrace, TraceBasis, TraceStatus, TraceStep } from '@/types/audit';
 import { KST } from './timeWindow';
-import { ACTION_EVENTS, GATES, gateOf, requesterOf, toolLabelOf } from './auditModel';
+import { ACTION_EVENTS, GATES, gateOf, kindLabel, requesterOf, toolLabelOf } from './auditModel';
 
 // ---------------------------------------------------------------- 판정
 const STATUS_LABELS: Record<TraceStatus, string> = { ok: '정상', warn: '주의', fail: '실패', info: '참고' };
@@ -229,12 +229,15 @@ function Evidence({ title, flows, variant }: { title: string; flows: EvidenceSte
 const kindsStep = (kinds: string[]): EvidenceStep => ({
     label: '의심 문구',
     value: `${kinds.length}종`,
-    sub: kinds.length > 1 ? `${kinds[0]} 외 ${kinds.length - 1}` : kinds[0],
-    hint: kinds.join(', '),
+    sub: kinds.length > 1 ? `${kindLabel(kinds[0])} 외 ${kinds.length - 1}` : kindLabel(kinds[0]),
+    hint: kinds.map(kindLabel).join(', '),
     tone: 'bad',
 });
 
-// 흔적: 이 기록이 유입 관문에 남긴 표시 (도구 결과의 의심 문구, 승인 요청 행의 '의심 뒤 요청')
+// 보안 게이트웨이가 질문 자체를 숨은 지시로 의심한 경우의 출처 이름 (services/llm/jev.py QUESTION_SOURCE)
+const QUESTION_SOURCE = 'user_question';
+
+// 흔적: 이 기록이 유입 관문에 남긴 표시 (도구 결과의 의심 문구, 승인 요청 행의 '의심 뒤 요청'. 출처가 의심 질문일 수도 있다)
 function ingressMarksOf(record: AuditRecord): EvidenceStep[][] {
     const flows: EvidenceStep[][] = [];
     if (Array.isArray(record.injectionSuspected) && record.injectionSuspected.length)
@@ -244,7 +247,11 @@ function ingressMarksOf(record: AuditRecord): EvidenceStep[][] {
             { label: '처리', value: '데이터로만 다룸', tone: 'good' },
         ]);
     for (const seen of record.taintedBy ?? [])
-        flows.push([
+        flows.push(seen.tool === QUESTION_SOURCE ? [
+            { label: '읽은 것', value: '의심 질문' },
+            { label: '판정', value: 'Jev', tone: 'bad' },
+            { label: '변경 요청', value: '이 질문에서' },
+        ] : [
             { label: '읽은 결과', value: toolLabelOf(seen.tool), sub: seen.toolUseId },
             kindsStep(seen.kinds),
             { label: '변경 요청', value: seen.callsAgo <= 1 ? '바로 다음 호출' : `${seen.callsAgo}번째 뒤 호출` },
