@@ -72,6 +72,8 @@ const callText = (action: PendingAction) =>
 
 // 작업 이름: '로그 보존 기간 변경 요청' → '로그 보존 기간 변경'
 const toolName = (tool: string) => labelOf(tool).replace(/ 요청$/, '');
+// 보안 게이트웨이가 질문 자체를 숨은 지시로 의심한 경우의 출처 이름 (services/llm/jev.py QUESTION_SOURCE)
+const QUESTION_SOURCE = 'user_question';
 
 // 글 복사: 클립보드 API를 먼저 쓰고, 막혀 있으면(권한·포커스·http 등) 숨긴 입력 칸을 골라 복사하는 옛 방식으로
 async function copyText(text: string) {
@@ -228,11 +230,17 @@ export function ApprovalCard({ action: initial, entering = false }: { action: Pe
                         <path d="M10 8v4M10 14.4v.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                     </svg>
                     <div className="approval-alert-body">
-                        <p className="approval-alert-title">앞서 읽은 도구 결과에 지시문처럼 보이는 문구가 있었습니다</p>
+                        <p className="approval-alert-title">
+                            {action.taintedBy!.every((seen) => seen.tool === QUESTION_SOURCE)
+                                ? '보안 게이트웨이가 이 질문을 숨은 지시로 의심했습니다'
+                                : '앞서 읽은 도구 결과에 지시문처럼 보이는 문구가 있었습니다'}
+                        </p>
                         <ul className="approval-alert-list">
                             {action.taintedBy!.map((seen) => (
                                 <li key={seen.toolUseId} title={seen.kinds.join(', ')}>
-                                    {labelOf(seen.tool)} 결과 · {distanceText(seen)}에서 이 변경을 요청
+                                    {seen.tool === QUESTION_SOURCE
+                                        ? '의심 질문 · 이 질문에서 변경을 요청'
+                                        : `${labelOf(seen.tool)} 결과 · ${distanceText(seen)}에서 이 변경을 요청`}
                                 </li>
                             ))}
                         </ul>

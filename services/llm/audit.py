@@ -10,6 +10,7 @@
   진단 도구(diagnoseService)는 층별 판정(diagnosis)도 남긴다: 서비스, 자원, 층마다 판정·찾은 것·확인 항목.
   감사 로그 화면이 이것으로 그 서비스의 진단 층 그림을 그린다 (도구 결과 전체는 남기지 않으므로 판정만 따로 떼어 둔다)
 - 질문 하나 = 항목 하나 (kind "request"): 질문, 모델, 성공·실패, 도구 호출 수, 가린 값의 수, 걸린 시간,
+  보안 게이트웨이의 판정(gateway: 거절·안내·의심·진행·쓸 수 없음, Jev 확률은 백분율 정수, Jev를 켰을 때만),
   답변 미리보기(answerPreview)와 답변 글자 수(answerChars), 쓴 토큰(tokens·modelCalls)과 예상 비용(costMicroUsd·price)
 - 질문 하나의 답변 = 항목 하나 (kind "answer"): 사용자가 받은 답변 전체. 아래 '답변' 참고
 - 변경 작업의 사건 하나 = 항목 하나 (kind "action"): 요청·승인·거절·실행·실패, 작업 ID, 도구, 인자, 결정한 사람
@@ -196,6 +197,8 @@ class AuditLog:
         self._tools: Dict[str, Tuple[datetime, str, Any, str]] = {}  # 도구 호출 ID → (시작 시각, 이름, 입력, 층)
         self.tool_count = 0
         self.suspicious_count = 0  # 지시문처럼 보이는 문구가 든 도구 결과 수 (injection.py)
+        # 보안 게이트웨이의 질문 판정 (jev.Plan.record 또는 unavailable). Jev가 꺼져 있으면 None이라 남기지 않는다
+        self.gateway: Optional[Dict[str, Any]] = None
 
     # ---------------------------------------------------------------- 도구 반복에서 부르는 메서드
     def tool_started(self, tool_id: str, name: str, tool_input: Any, restore: bool = True,
@@ -250,6 +253,8 @@ class AuditLog:
         }
         if error:
             record["error"] = _clip(self._redactor.secrets_only(str(error)), ERROR_LIMIT)
+        if self.gateway:
+            record["gateway"] = dict(self.gateway)
         if usage and usage.get("tokens"):
             tokens = {kind: int(usage["tokens"].get(kind) or 0) for kind in ("input", "output", "cacheWrite", "cacheRead")}
             record["tokens"] = tokens

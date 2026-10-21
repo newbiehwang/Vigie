@@ -972,16 +972,29 @@ class AnthropicMCPClient:
                 "content": prompt
             })
 
-        # 모델에 넘기기 전에 Jev로 분류한다 (jev.py, 기본 꺼짐): 먼저 찾을 도구와, 일반 사용자면 관리자 도구가 필요한지.
-        # 가린 질문만 보낸다. 실패하면 None이라 아무것도 바뀌지 않는다. 막는 것은 여전히 tool_access다
+        # 보안 게이트웨이의 질문 분류 (jev.py, docs/security-gateway.md, 기본 꺼짐): 숨은 지시(위협), 먼저 찾을 도구,
+        # 일반 사용자면 관리자 도구가 필요한지. 가린 질문만 보낸다. 실패하면 None이라 아무것도 바뀌지 않고, 그 사실을
+        # 감사 로그에 남긴다. 막는 것은 여전히 tool_access와 승인이다
         self._jev_plan = self.jev.plan(prompt, self.tools or [], self.role) if self.jev else None
+        if self.jev is not None and self.audit is not None:
+            self.audit.gateway = (self._jev_plan.record() if self._jev_plan
+                                  else {"decision": jev.UNAVAILABLE, "reason": self.jev.last_error or "알 수 없음"})
         if self._jev_plan:
+            decision = self._jev_plan.decision()
             self.debug_log.append({"type": "jev_plan", "model": self._jev_plan.model, "routed": self._jev_plan.routed,
-                                   "admin": self._jev_plan.admin, "timestamp": time.time()})
-            if self._jev_plan.needs_admin():
-                # 일반 사용자의 질문이 관리자 도구 없이는 답할 수 없어 보인다: 모델을 부르지 않고 관리자에게 요청하라고 안내
-                self.messages.append({"role": "assistant", "content": jev.ADMIN_GUIDE})
-                return {"output": {"message": {"content": [{"text": jev.ADMIN_GUIDE}]}}}
+                                   "admin": self._jev_plan.admin, "threat": self._jev_plan.threat,
+                                   "decision": decision, "timestamp": time.time()})
+            refusal = {jev.BLOCKED: jev.THREAT_BLOCKED, jev.GUIDED: jev.ADMIN_GUIDE}.get(decision)
+            if refusal:
+                # 숨은 지시로 분류된 질문(거절)이나, 일반 사용자의 질문이 관리자 도구 없이는 답할 수 없어 보이면(안내)
+                # 모델을 부르지 않는다
+                self.messages.append({"role": "assistant", "content": refusal})
+                return {"output": {"message": {"content": [{"text": refusal}]}}}
+            if decision == jev.FLAGGED:
+                # 의심 질문: 진행하되, 이 질문에서 나온 변경 요청의 승인 카드에 경고를 붙인다 (의심 결과를 읽은 뒤의
+                # 요청과 같은 신호. 출처는 질문 자체라 요청 값의 출처(matchedArgs)는 생기지 않는다)
+                self._seen_suspicious.append({"toolUseId": jev.QUESTION_SOURCE, "tool": jev.QUESTION_SOURCE,
+                                              "kinds": ["jev"], "callNo": 0, "text": prompt})
 
         # Anthropic 도구 형식으로 변환
         anthropic_tools = self._convert_tools_format()
