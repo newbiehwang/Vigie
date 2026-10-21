@@ -16,7 +16,7 @@
 // - 조각의 색: 판정이 있으면 판정(정상 회색 · 주의 노랑 · 실패 빨강 · 참고 흰색), 없으면 흔적이 있는 관문만 옅은 파랑
 // - 고른 조각은 살짝 떠오르고, 다른 관문을 고르면 나머지는 옅어진다. 고른 조각을 다시 누르면 이 기록의 관문으로 돌아온다
 // - 판정 (변경 작업 행만, GET /audit?trace=): 팝업창을 열면 바로 받아 이 그림에 얹는다. 요청·승인·실행 행은 같은 판정
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { fetchTrace } from '@/api/audit';
 import type { AuditGate, AuditRecord, AuditTrace, TraceBasis, TraceStatus, TraceStep } from '@/types/audit';
 import { KST } from './timeWindow';
@@ -263,28 +263,50 @@ const premiseFlowOf = (record: AuditRecord): EvidenceStep[] | null =>
         : null;
 
 // ---------------------------------------------------------------- 셰브런의 모양
-const W = 600; // 그림 폭 (viewBox)
+// 그림 폭은 고정하지 않고 그림이 놓인 칸의 실제 폭(px)을 쓴다 (useWidth). viewBox를 고정 폭으로 두면 좁은 화면(휴대폰)에서
+// 그림 전체가 줄어 관문 이름이 몇 px로 작아진다. 폭을 실제 px로 맞추면 글자와 높이는 어느 폭에서나 그대로이고 조각만 좁아진다
+const W_DEFAULT = 600; // 폭을 재기 전(첫 그림)의 폭
+const W_MIN = 240; // 이보다 좁아도 이 폭으로 그린다 (조각 셋이 겹치지 않게)
 const H = 56; // 조각 높이
 const TIP = 16; // 셰브런의 뾰족한 끝이 나아가는 거리
 const GAP = 6; // 조각 사이 틈
 const POP = 3; // 고른 조각을 위로 띄우는 거리
 const PAD = POP + 6; // 그림 둘레의 여백 (떠오른 조각과 그림자가 잘리지 않게)
-const SEG = (W - TIP - GAP * (GATES.length - 1)) / GATES.length; // 조각 하나의 몸통 폭
+const segOf = (width: number) => (width - TIP - GAP * (GATES.length - 1)) / GATES.length; // 조각 하나의 몸통 폭
 
 // 조각 i: 왼쪽은 오목한 홈(첫 조각은 반듯하게), 오른쪽은 뾰족한 끝
-function segmentPath(index: number) {
-    const x0 = index * (SEG + GAP);
-    const x1 = x0 + SEG;
+function segmentPath(index: number, width: number) {
+    const seg = segOf(width);
+    const x0 = index * (seg + GAP);
+    const x1 = x0 + seg;
     const notch = index === 0 ? 0 : TIP;
     return `M ${x0} 0 H ${x1} L ${x1 + TIP} ${H / 2} L ${x1} ${H} H ${x0} L ${x0 + notch} ${H / 2} Z`;
 }
-const labelX = (index: number) => index * (SEG + GAP) + (SEG + TIP + (index === 0 ? 0 : TIP)) / 2;
+const labelX = (index: number, width: number) => {
+    const seg = segOf(width);
+    return index * (seg + GAP) + (seg + TIP + (index === 0 ? 0 : TIP)) / 2;
+};
+
+// 그림이 놓인 칸의 폭에서 둘레 여백을 뺀 그림 폭 (칸이 바뀌면 다시 잰다: 창 크기, 팝업창 폭)
+function useWidth() {
+    const ref = useRef<HTMLDivElement>(null);
+    const [width, setWidth] = useState(W_DEFAULT);
+    useEffect(() => {
+        const element = ref.current;
+        if (!element || typeof ResizeObserver === 'undefined') return;
+        const observer = new ResizeObserver(([entry]) => setWidth(Math.max(W_MIN, Math.round(entry.contentRect.width) - PAD * 2)));
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, []);
+    return [ref, width] as const;
+}
 
 export function AuditGates({ record }: { record: AuditRecord }) {
     const here = gateOf(record.locus);
     const hereIndex = GATES.findIndex((gate) => gate.value === here);
     // 고른 관문: 누른 조각, 누르기 전에는 이 기록의 관문
     const [picked, setPicked] = useState<AuditGate | null>(null);
+    const [figureRef, W] = useWidth();
     const selectedIndex = picked ? GATES.findIndex((gate) => gate.value === picked) : hereIndex;
     const selected = GATES[selectedIndex];
     const marks = ingressMarksOf(record);
@@ -332,7 +354,7 @@ export function AuditGates({ record }: { record: AuditRecord }) {
             </div>
             {trace?.question ? <p className="audit-layers-question">질문 “{trace.question}”</p> : null}
 
-            <div className="audit-gates">
+            <div className="audit-gates" ref={figureRef}>
                 <svg
                     className={`audit-cycle-svg audit-gates-svg${picked ? ' has-pick' : ''}`}
                     viewBox={`${-PAD} ${-PAD} ${W + PAD * 2} ${H + PAD * 2}`}
@@ -369,11 +391,11 @@ export function AuditGates({ record }: { record: AuditRecord }) {
                                     choose();
                                 }}
                             >
-                                <path className="audit-cycle-shape" d={segmentPath(index)} />
-                                <text className="audit-cycle-no" x={labelX(index)} y={H / 2 - 6} textAnchor="middle">
+                                <path className="audit-cycle-shape" d={segmentPath(index, W)} />
+                                <text className="audit-cycle-no" x={labelX(index, W)} y={H / 2 - 6} textAnchor="middle">
                                     {index + 1}
                                 </text>
-                                <text className="audit-cycle-label" x={labelX(index)} y={H / 2 + 11} textAnchor="middle">
+                                <text className="audit-cycle-label" x={labelX(index, W)} y={H / 2 + 11} textAnchor="middle">
                                     {gate.label}
                                 </text>
                             </g>
