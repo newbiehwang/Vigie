@@ -6,8 +6,10 @@ export type AuditStatus = 'ok' | 'error';
 // group_added·group_removed는 권한 세 단계 전의 기록이다 (지금은 role_changed)
 export type AdminEvent = 'invited' | 'role_changed' | 'group_added' | 'group_removed' | 'disabled' | 'enabled';
 export type AuditScope = 'mine' | 'all' | 'user';
-// 층: 도구 반복 위의 자리 (services/llm/audit.py 모듈 설명). residence는 조회 조건으로만 쓴다 (taintedBy가 있는 승인 요청)
-export type AuditLocus = 'interface' | 'ingress' | 'residence' | 'egress' | 'effect';
+// 행에 적는 자리 (services/llm/audit.py 모듈 설명): 경계 · 유입 · 실행의 앞(egress, 승인 요청) · 실행의 뒤(effect, 결정·실행)
+export type AuditLocus = 'interface' | 'ingress' | 'egress' | 'effect';
+// 관문: 화면과 역추적이 묶는 단위 (egress · effect는 실행 관문 하나)
+export type AuditGate = 'interface' | 'ingress' | 'execution';
 
 // 토큰 네 종류 (입력에는 캐시에서 읽은·캐시에 쓴 입력이 들어 있지 않다)
 export interface TokenCounts {
@@ -22,7 +24,7 @@ export interface AuditRecord {
     at: string; // 시각(UTC, 밀리초까지) + '#' + 도구 호출 ID 또는 'request#<질문 ID>'
     day: string; // YYYY-MM-DD (UTC)
     kind: AuditKind;
-    locus?: Exclude<AuditLocus, 'residence'>; // 질문 행(요약)에는 없다
+    locus?: AuditLocus; // 질문 행(요약)에는 없다
     status: AuditStatus;
     source?: 'web' | 'slack' | 'direct';
     email?: string;
@@ -35,7 +37,7 @@ export interface AuditRecord {
     toolUseId?: string;
     input?: Record<string, unknown> | string; // 길어서 잘린 입력은 글자로 온다
     resultChars?: number;
-    diagnosis?: Diagnosis; // 진단 도구(diagnoseService)의 층별 판정. 팝업창이 처리 단계 대신 서비스 진단 층을 그린다
+    diagnosis?: Diagnosis; // 진단 도구(diagnoseService)의 층별 판정. 팝업창이 관문 대신 서비스 진단 층을 그린다
     // 지시문처럼 보이는 문구 (services/llm/injection.py). 도구 호출은 종류 목록, 질문은 그런 도구 결과의 수
     injectionSuspected?: string[] | number;
     // 질문 (kind: 'request')
@@ -59,8 +61,8 @@ export interface AuditRecord {
     result?: string; // 실행 결과
     awsRequestId?: string; // 실행한 AWS API의 요청 ID = CloudTrail 이벤트의 requestID
     cloudTrailEvent?: string; // 예: "logs.amazonaws.com:PutRetentionPolicy"
-    taintedBy?: TaintedBy[]; // 승인 요청 행: 이 변경 전에 같은 질문에서 읽은 의심 결과 (체류층)
-    // 승인 요청 행: 대상 · 지금 값 · 바뀔 값 (미리 보기). 역추적이 '사용자가 묻지 않은 감시 장치 약화'를 본다
+    taintedBy?: TaintedBy[]; // 승인 요청 행: 이 변경 전에 같은 질문에서 읽은 의심 결과 (유입 관문의 '의심 뒤 요청')
+    // 승인 요청 행: 대상 · 지금 값 · 바뀔 값 (미리 보기). 역추적이 '사용자가 묻지 않은 감시 장치 약화'를 본다 (실행 관문)
     target?: string;
     before?: string;
     after?: string;
@@ -113,25 +115,40 @@ export interface AuditPage {
     to: string;
 }
 
-// 역추적 (GET /audit?trace=<actionId>, services/llm/audit_trace.py): 변경 작업 하나를 층 하나씩 아래에서 위로 묻는다
-export type TraceLayer = 'effect' | 'egress' | 'residence' | 'deliberation' | 'ingress' | 'interface' | 'mediation';
+// 역추적 (GET /audit?trace=<actionId>, services/llm/audit_trace.py): 변경 작업 하나를 관문 셋으로 판정한다.
+// 판단(모델 안)은 가정, 매개(CloudTrail)는 전제라 판정하지 않고 글로만 온다
 export type TraceStatus = 'ok' | 'warn' | 'fail' | 'info';
-// 판정의 근거: 기록(코드가 확정하는 사실) · 탐지(문구 패턴이라 놓칠 수 있다) · 앱 밖(CloudTrail)
-export type TraceBasis = 'record' | 'detection' | 'outside';
+// 판정의 근거: 기록(코드가 확정하는 사실) · 탐지(문구 패턴이라 놓칠 수 있다)
+export type TraceBasis = 'record' | 'detection';
+
+export interface TraceFinding {
+    status: TraceStatus;
+    text: string;
+}
 
 export interface TraceStep {
-    layer: TraceLayer;
+    gate: AuditGate;
     question: string;
-    status: TraceStatus;
-    answer: string;
-    basis?: TraceBasis[]; // 예전 서버의 응답에는 없다
+    status: TraceStatus; // 찾은 것 중 가장 무거운 판정
+    answer: string; // 찾은 것을 차례로 이은 글
+    findings?: TraceFinding[];
+    basis?: TraceBasis[];
     evidence: string[]; // 근거가 된 행의 at (events·rows 안에 있다)
+}
+
+export interface TracePremise {
+    text: string;
+    evidence: string[];
+    awsRequestId?: string;
+    cloudTrailEvent?: string;
 }
 
 export interface AuditTrace {
     actionId: string;
-    steps: TraceStep[]; // 효과 → 유출 → 체류 → 판단 → 유입 → 경계 → 매개
+    steps: TraceStep[]; // 경계 → 유입 → 실행
     verdict: string;
+    assumption?: string; // 판단: 모델은 언제든 속을 수 있다는 가정
+    premise?: TracePremise; // 매개: 모든 변경은 MCP 역할로만 나간다는 전제와 대조할 단서
     question?: string | null; // 이 변경을 낳은 사용자의 질문
     events: AuditRecord[]; // 작업의 사건 (요청자·승인자)
     rows: AuditRecord[]; // 같은 질문의 질문·도구 행
@@ -145,7 +162,7 @@ export interface AuditQuery {
     tool?: string;
     status?: AuditStatus;
     kind?: AuditKind;
-    locus?: AuditLocus;
+    locus?: AuditGate;
     limit?: number;
     cursor?: string;
 }

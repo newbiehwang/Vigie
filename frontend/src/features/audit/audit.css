@@ -1031,9 +1031,9 @@
 
 /* ---------------------------------------------------------------- 역추적 (AuditTrace) */
 
-/* ---------------------------------------------------------------- 층 다이어그램 (AuditLayers.tsx)
-   처리 단계의 순환 다이어그램(셰브런 조각 7개의 고리)과 오른쪽 설명 칸. 팝업창 본문 맨 위에 있고, 아래 항목 표와 줄로 나눈다.
-   이 기록의 층은 파랑으로 채우고 바깥으로 밀어내며, 흔적은 옅은 주황, 기록으로 남지 않는 층(판단·매개)은 점선 */
+/* ---------------------------------------------------------------- 관문 그림 (AuditGates.tsx)
+   관문 셋(경계 › 유입 › 실행)의 셰브런 조각, 그 아래 가정(판단) · 전제(매개)의 점선 상자, 설명 칸. 팝업창 본문 맨 위에 있고,
+   아래 항목 표와 줄로 나눈다. 조각과 설명 칸의 클래스(audit-cycle-*)는 서비스 진단 층 그림(AuditDiagnosis.tsx)과 같이 쓴다 */
 .audit-layers {
   margin: 0 0 16px;
   padding-bottom: 16px;
@@ -1048,12 +1048,89 @@
   color: var(--ink);
 }
 
+/* 그림 왼쪽, 설명 칸 오른쪽 (서비스 진단 층 그림이 쓴다) */
 .audit-cycle {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   align-items: center;
   gap: 24px;
 }
+
+.audit-gates {
+  display: grid;
+  gap: 12px;
+}
+
+/* 셰브런 띠는 아래 가정 · 전제 상자와 같은 폭으로 */
+.audit-gates-svg {
+  max-width: none;
+}
+
+/* 관문이 아닌 둘: 판단(가정)과 매개(전제). 흰 바탕 점선 상자 (기록으로 판정하지 않는다) */
+.audit-gate-notes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.audit-gate-note {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px dashed var(--slate);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.audit-gate-note-tag {
+  font-family: var(--font-label);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.audit-gate-note .audit-evidence {
+  margin-top: 2px;
+}
+
+/* 설명 칸의 찾은 것: 줄마다 판정 점 (실패 빨강 · 주의 노랑 · 정상 파랑 · 참고 옅은 선 색) */
+.audit-trace-findings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+
+.audit-trace-findings li {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  overflow-wrap: anywhere;
+}
+
+.audit-trace-finding-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--status-none);
+  transform: translateY(-1px);
+}
+
+.audit-trace-findings .is-ok .audit-trace-finding-dot { background: var(--status-ok); }
+.audit-trace-findings .is-warn .audit-trace-finding-dot { background: var(--status-warn); }
+.audit-trace-findings .is-fail .audit-trace-finding-dot { background: var(--status-fail); }
 
 .audit-cycle-svg {
   display: block;
@@ -1138,53 +1215,6 @@
 
 .audit-cycle-seg.is-marked .audit-cycle-no {
   fill: var(--primary);
-}
-
-/* 기록으로 남지 않는 층: 흰 바탕에 점선 테두리, 옅은 글자 (흔적이 있으면 바탕은 흔적을 따른다) */
-.audit-cycle-seg.is-off-record .audit-cycle-shape {
-  stroke: var(--slate);
-  stroke-width: 1.2;
-  stroke-dasharray: 3 2.5;
-}
-
-.audit-cycle-seg.is-off-record:not(.is-marked) .audit-cycle-shape {
-  fill: var(--surface);
-}
-
-.audit-cycle-seg.is-off-record:not(.is-marked) .audit-cycle-label {
-  fill: var(--ink-3);
-}
-
-.audit-cycle-seg.is-off-record.is-marked:not(.is-selected) .audit-cycle-shape {
-  stroke: var(--primary);
-}
-
-/* 가운데: 옅은 원판 위에 고른 단계의 이름 */
-.audit-cycle-hub {
-  fill: var(--canvas);
-  stroke: var(--line);
-  stroke-width: 1.2;
-}
-
-.audit-cycle-center {
-  animation: audit-cycle-center-in 260ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
-}
-
-.audit-cycle-name {
-  font-family: var(--font-headline);
-  font-size: 19px;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  fill: var(--ink);
-}
-
-.audit-cycle-center.is-marked .audit-cycle-name {
-  fill: var(--primary);
-}
-
-@keyframes audit-cycle-center-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 /* 설명 칸 */
@@ -1359,23 +1389,21 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .audit-cycle-seg,
-  .audit-cycle-center {
+  .audit-cycle-seg {
     animation: none;
     transition: none;
   }
 }
 
-/* 좁은 팝업창: 고리 위, 설명 아래 */
+/* 좁은 팝업창: 진단 층 그림은 그림 위 · 설명 아래, 가정 · 전제 상자는 위아래로 */
 @media (max-width: 640px) {
   .audit-cycle {
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
   }
 
-  .audit-cycle-svg {
-    max-width: 240px;
-    margin: 0 auto;
+  .audit-gate-notes {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .audit-cycle-panel {
@@ -1414,7 +1442,7 @@
   color: var(--danger);
 }
 
-/* ---------------------------------------------------------------- 판정 (AuditLayers.tsx, 변경 작업 행)
+/* ---------------------------------------------------------------- 판정 (AuditGates.tsx, 변경 작업 행)
    제목 줄의 판정 개수, 조각의 바탕색, 설명 칸의 판정 배지·찾은 것·근거 기록 */
 .audit-layers-head {
   display: flex;
@@ -1513,8 +1541,6 @@
 
 .audit-cycle-svg .audit-cycle-seg.has-status .audit-cycle-no { fill: var(--ink-3); }
 
-/* 기록으로 남지 않는 층(점선)도 판정 바탕색을 따른다 */
-.audit-cycle-svg .audit-cycle-seg.has-status.is-off-record .audit-cycle-shape { stroke: var(--slate); }
 
 /* 판정 바탕 위에서는 파란 빛 그림자 대신 중립 그림자 */
 .audit-cycle-svg .audit-cycle-seg.has-status.is-selected .audit-cycle-shape {
@@ -1668,7 +1694,7 @@
 }
 
 /* ---------------------------------------------------------------- 서비스 진단 층 그림 (AuditDiagnosis.tsx)
-   진단 도구 기록의 팝업창 맨 위 (처리 단계 고리 대신). 모양 · 색 · 움직임은 처리 단계 그림(.audit-cycle)을 따른다:
+   진단 도구 기록의 팝업창 맨 위 (관문 그림 대신). 색 · 움직임은 관문 그림의 조각(.audit-cycle-seg)을 따른다:
    왼쪽은 아래를 가리키는 셰브런 7개를 위(L1)에서 아래(L7)로 쌓은 그림, 오른쪽은 고른 층의 설명 칸(.audit-cycle-panel).
    조각 바탕 = 판정 (원인 옅은 빨강 · 의심 옅은 노랑 · 정상 옅은 회색). 고른 조각은 그림자와 함께 오른쪽으로 떠오른다 */
 .audit-diag-target {
@@ -1682,7 +1708,7 @@
   color: var(--ink-2);
 }
 
-/* 그림과 설명 칸: 처리 단계와 같은 두 열. 설명 칸은 그림 높이의 가운데에 (처리 단계처럼) */
+/* 그림과 설명 칸: 두 열(.audit-cycle). 설명 칸은 그림 높이의 가운데에 */
 .audit-diag-body {
   align-items: center;
   column-gap: 32px;
@@ -1720,7 +1746,7 @@
   margin-top: calc(var(--gap) - var(--chev));
 }
 
-/* 처리 단계 조각처럼 두 줄: 작은 번호 위, 이름 아래. 글자는 셰브런 깊이만큼 내려 모양의 가운데에 */
+/* 관문 조각처럼 두 줄: 작은 번호 위, 이름 아래. 글자는 셰브런 깊이만큼 내려 모양의 가운데에 */
 .audit-stack-shape {
   display: flex;
   flex-direction: column;
@@ -1755,7 +1781,7 @@
   word-break: keep-all;
 }
 
-/* 판정 바탕과 이름 색: 원인 옅은 빨강 · 의심 옅은 노랑 · 정상 옅은 회색 (처리 단계 조각의 판정 색과 같다) */
+/* 판정 바탕과 이름 색: 원인 옅은 빨강 · 의심 옅은 노랑 · 정상 옅은 회색 (관문 조각의 판정 색과 같다) */
 .audit-stack-seg.is-cause .audit-stack-shape { background: var(--danger-soft); }
 .audit-stack-seg.is-suspect .audit-stack-shape { background: var(--warning-soft); }
 .audit-stack-seg.is-cause .audit-stack-label { color: var(--danger); }
@@ -1804,7 +1830,7 @@
   }
 }
 
-/* 설명 칸: 처리 단계 설명 칸(.audit-cycle-panel)에 판정 상자 · 확인한 다른 항목 */
+/* 설명 칸: 관문 설명 칸(.audit-cycle-panel)에 판정 상자 · 확인한 다른 항목 */
 .audit-diag-panel {
   min-height: 0;
   align-content: center;
@@ -1905,7 +1931,7 @@
   overflow-wrap: anywhere;
 }
 
-/* 좁은 팝업창: 그림 위, 설명 아래 (처리 단계와 같다) */
+/* 좁은 팝업창: 그림 위, 설명 아래 */
 @media (max-width: 640px) {
   /* 가운데에 두고, 고른 조각이 떠오를 자리는 양쪽에 같게 */
   .audit-stack {
@@ -1924,4 +1950,10 @@
     display: block;
     margin: 2px 0 0;
   }
+}
+
+/* 관문 그림의 설명 칸은 그림 아래에 붙는다 (진단 층 그림은 옆) */
+.audit-gates .audit-cycle-panel {
+  min-height: 0;
+  align-content: start;
 }

@@ -1121,7 +1121,7 @@
   border-top-color: var(--danger);
 }
 
-/* 의심 신호: 카드 맨 위를 가로지르는 빨간 띠 (체류 신호, services/llm/approvals.py) */
+/* 의심 신호: 카드 맨 위를 가로지르는 빨간 띠 (의심 뒤 요청, services/llm/approvals.py) */
 .approval-alert {
   margin: 0 -16px;
   padding: 10px 16px;

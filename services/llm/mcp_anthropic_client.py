@@ -18,7 +18,7 @@ import tool_search
 MAX_TOKENS = 16000
 # 승인 요청에 적는 '먼저 읽은 의심 결과'의 최대 수 (최근 것부터). 승인 테이블 항목 크기를 제한한다
 MAX_TAINTED = 5
-# 요청 값의 출처 (체류 신호의 matchedArgs): 이 길이 이상인 글 값만 의심 결과 안에 그대로 있는지 본다.
+# 요청 값의 출처 (의심 뒤 요청 신호의 matchedArgs): 이 길이 이상인 글 값만 의심 결과 안에 그대로 있는지 본다.
 # 짧은 값("1", "true")은 어느 글에나 있어 출처를 말해 주지 못한다. 로그 그룹 · 알람 · 버킷 이름, 인스턴스 ID 등이 대상이다
 MIN_MATCHED_VALUE = 6
 # Messages API 연결을 컨테이너 안에서 다시 쓴다 (요청마다 TLS 연결을 새로 맺지 않게). requests.post는 부를 때마다
@@ -97,7 +97,7 @@ class AnthropicMCPClient:
         self.approvals = None
         # 요청마다 llm_service가 넣어 주는 결과물 목록 (artifacts.Artifacts). 없으면 예전처럼 주소를 모델에 넘긴다
         self.artifacts = None
-        # 이번 질문에서 부른 도구 수와, 모델이 이미 읽은 의심 결과 (체류 신호, invoke_with_tools가 질문마다 비운다).
+        # 이번 질문에서 부른 도구 수와, 모델이 이미 읽은 의심 결과 (의심 뒤 요청 신호, invoke_with_tools가 질문마다 비운다).
         # 의심 결과의 글(text)은 요청 값의 출처를 보려고 메모리에만 둔다 (저장하지 않는다). 질문은 가린 글
         self._tool_calls = 0
         self._seen_suspicious: List[Dict[str, Any]] = []
@@ -142,7 +142,7 @@ class AnthropicMCPClient:
         return risk_of(self._tool_definition(name))
 
     def _tainted_by(self, call_no: int, tool_input: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-        """체류 신호: 이 변경 요청 전에 모델이 읽은 의심 결과와, 그 뒤로 몇 번째 도구 호출인지 (approvals 모듈 설명).
+        """의심 뒤 요청 신호: 이 변경 요청 전에 모델이 읽은 의심 결과와, 그 뒤로 몇 번째 도구 호출인지 (approvals 모듈 설명).
         같은 응답에서 함께 부른 도구의 결과는 모델이 아직 보지 못했으므로 넣지 않는다 (배치가 끝난 뒤에 더한다).
         matchedArgs: 요청 값 중 그 의심 결과 안에 그대로 있고 사용자의 질문에는 없는 인자 (_matched_args)."""
         entries = []
@@ -937,7 +937,7 @@ class AnthropicMCPClient:
         self.total_cache_write_tokens = 0
         self.model_calls = []
         self.tool_search_count = 0
-        # 체류 신호도 질문마다 새로 센다 (이전 질문에서 읽은 것은 대화 기록에 도구 결과로 남지 않는다)
+        # 의심 뒤 요청 신호도 질문마다 새로 센다 (이전 질문에서 읽은 것은 대화 기록에 도구 결과로 남지 않는다)
         self._tool_calls = 0
         self._seen_suspicious = []
 
@@ -1129,7 +1129,7 @@ class AnthropicMCPClient:
 
                 # Append user tool_result message in the required format
                 tool_results_list = []
-                read_texts = {}  # 모델이 읽는 결과 글 (가린 글). 의심 결과만 체류 신호에 남긴다
+                read_texts = {}  # 모델이 읽는 결과 글 (가린 글). 의심 결과만 의심 뒤 요청 신호에 남긴다
                 for res in tool_results:
                     # determine content value and ensure it's a string
                     if "error" in res:
@@ -1156,7 +1156,7 @@ class AnthropicMCPClient:
                     "role": "user",
                     "content": tool_results_list
                 })
-                # 이제 모델이 이 결과들을 읽는다: 의심 결과를 이후 변경 요청의 체류 신호로 남긴다 (최근 것 몇 개만)
+                # 이제 모델이 이 결과들을 읽는다: 의심 결과를 이후 변경 요청의 의심 뒤 요청 신호로 남긴다 (최근 것 몇 개만)
                 self._seen_suspicious = (self._seen_suspicious + [
                     {"toolUseId": res["tool_id"], "tool": res["name"], "kinds": res["suspicious"],
                      "callNo": res["call_no"], "text": read_texts[res["tool_id"]]}

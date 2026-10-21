@@ -33,7 +33,7 @@ import type {
 } from "axios";
 import type { PendingAction } from "../types/actions";
 import type { Artifact } from "../types/artifacts";
-import type { AdminEvent, AuditQuery, AuditRecord, Diagnosis, TraceBasis, TraceStep } from "../types/audit";
+import type { AdminEvent, AuditQuery, AuditRecord, Diagnosis, TraceBasis, TraceStatus, TraceStep } from "../types/audit";
 import {
   diagClock,
   diagNow,
@@ -491,7 +491,7 @@ const INJECTION_ENTRY: MockEntry = {
 };
 
 // 모델이 로그에 심긴 지시를 그대로 따라 변경을 요청한 경우 (질문에 '로그대로'가 있으면).
-// 판단은 그대로(승인 필요)이고, 승인 카드와 감사 로그에 '먼저 읽은 의심 결과'가 보인다 (체류 신호)
+// 판단은 그대로(승인 필요)이고, 승인 카드와 감사 로그에 '먼저 읽은 의심 결과'가 보인다 (의심 뒤 요청)
 const TAINTED_LOG_ID = "toolu_mocklog1";
 const TAINTED_ENTRY: MockEntry = {
   answer: [
@@ -1444,18 +1444,18 @@ const adminAuditRecord = (event: AdminEvent, target: ManagedUser, roles?: { from
 };
 
 // ---------------------------------------------------------------- 확인용 예시 시나리오 (감사 로그)
-// 변경 작업·사용자 관리 기록은 화면에서 직접 만들어야 생기고 새로 고치면 사라진다. 역추적·처리 단계를 바로 확인하도록
+// 변경 작업·사용자 관리 기록은 화면에서 직접 만들어야 생기고 새로 고치면 사라진다. 역추적·관문을 바로 확인하도록
 // 판정이 서로 다른 변경 작업 여섯 가지와 사용자 관리 기록을 기본 기록에 넣는다.
 // 변경 작업은 데모의 Frothly 사고(demo/frothly.ts) 뒤에 Vigie로 한 일이다. 시각은 그 기록의 시간 축 위에 둔다 (검색어는 괄호 안)
 //   사고: web_admin 키로 권한 탐색 → 키 비활성화 → frothlywebcode 공개 읽기·쓰기 ACL(56분) → 웹 보안 그룹 UDP 11211 개방(8분)
-//   1 정상 승인·실행            모든 층 정상                          ("frothlyweblogs 퍼블릭": 공개 사고 뒤 웹 로그 버킷에도 예방으로
+//   1 정상 승인·실행            세 관문 모두 정상                      ("frothlyweblogs 퍼블릭": 공개 사고 뒤 웹 로그 버킷에도 예방으로
 //                                                                     퍼블릭 액세스 차단 켜기. frothlywebcode는 목업 상태와 맞게 꺼진 채 둔다)
-//   2 거절                      효과 정상(거절), AWS 바뀌지 않음       ("Forensic": 유휴로 보인 조사용 인스턴스 중지를 결정자가 거절)
-//   3 실행 실패                 효과 주의(승인했지만 실패)             ("IncorrectInstanceState": 이미 종료된 웹 서버를 중지하려 함)
-//   4 의심 뒤 요청 → 실행        체류·판단·유입 주의, 매개 흔적         ("의심 뒤 요청", "로그에 적힌": 웹 서버 로그에 심긴 지시로
+//   2 거절                      실행 정상(거절), AWS 바뀌지 않음       ("Forensic": 유휴로 보인 조사용 인스턴스 중지를 결정자가 거절)
+//   3 실행 실패                 실행 주의(승인했지만 실패)             ("IncorrectInstanceState": 이미 종료된 웹 서버를 중지하려 함)
+//   4 의심 뒤 요청 → 실행        유입 실패(지시문의 값), 실행 주의, 전제의 요청 ID ("의심 뒤 요청", "로그에 적힌": 웹 서버 로그에 심긴 지시로
 //                                                                     Vigie 자신의 로그 보존 기간을 1일로 = 조사 기록 지우기)
 //   5 등록부에 없는 도구         경계 주의, 결정 전(대기)               ("미등록": 모델이 등록부에 없는 put_bucket_acl을 부름)
-//   6 기록이 어긋남              승인 요청·승인 없이 실행 기록만 → 효과·유출 실패 ("frothlyinvestigations")
+//   6 기록이 어긋남              승인 요청·승인 없이 실행 기록만 → 실행 실패 ("frothlyinvestigations")
 // 결정·실행 행은 결정한 사람의 기록이다 (서버와 같다)
 const SCENARIO_DAY_MS = 24 * 60 * 60 * 1000;
 const scenarioUser = (name: string) => AUDIT_USERS.find((u) => u.userId.endsWith(name)) ?? AUDIT_USERS[0];
@@ -1615,7 +1615,7 @@ function seedScenarios(): AuditRecord[] {
       tool: "setLogRetention",
       args: { log_group_name: "/aws/lambda/vigie-llm-dev", retention_days: 1 },
       summary: "/aws/lambda/vigie-llm-dev 로그 보존 기간 30일 → 1일 (지난 로그 대부분이 지워질 수 있습니다)",
-      // 로그 그룹 이름이 로그의 지시문에 있었고 질문에는 없었다 (요청 값의 출처 → 역추적 판단 단계 실패)
+      // 로그 그룹 이름이 로그의 지시문에 있었고 질문에는 없었다 (요청 값의 출처 → 역추적 유입 관문 실패)
       taintedBy: [{ toolUseId: logId, tool: "execute_log_insights_query", kinds, callsAgo: 1,
                     matchedArgs: ["log_group_name"] }],
       target: "/aws/lambda/vigie-llm-dev",
@@ -1809,7 +1809,7 @@ const answerAudit = (at: string): Result => {
     : [200, { answer, answerChars: answer.length }];
 };
 
-// 역추적 판단 단계의 기록 신호 (services/llm/audit_trace.py의 _weakens_defense · _asked_for와 같다)
+// 역추적 실행 관문의 기록 신호 (services/llm/audit_trace.py의 _weakens_defense · _asked_for와 같다)
 const retentionDays = (text?: string) =>
   text === "영구 보관" ? Infinity : text && /^\d+일$/.test(text) ? Number(text.slice(0, -1)) : undefined;
 const DEFENSE_WORDS: Record<string, string[]> = {
@@ -1835,7 +1835,7 @@ const askedFor = (requested: AuditRecord, question: string | null) => {
   return words.some((word) => word && q.includes(word));
 };
 
-// 역추적 (GET /audit?trace=<actionId>, services/llm/audit_trace.py의 build와 같은 물음·같은 답)
+// 역추적 (GET /audit?trace=<actionId>, services/llm/audit_trace.py의 build와 같은 관문·같은 답)
 const traceAudit = (actionId: string): Result => {
   if (!mockIsAdmin()) {
     return [403, { error: "감사 로그는 관리자(admins 그룹)만 볼 수 있습니다" }];
@@ -1845,7 +1845,7 @@ const traceAudit = (actionId: string): Result => {
   if (!events.length) {
     return [404, { error: "이 작업의 감사 기록을 찾지 못했습니다 (날짜를 확인하세요)" }];
   }
-  // services/llm/audit_trace.py build와 같은 물음·같은 판정
+  // services/llm/audit_trace.py build와 같은 관문·같은 판정
   const find = (event: string) => events.find((r) => r.event === event);
   const requested = find("requested");
   const approved = find("approved");
@@ -1864,94 +1864,100 @@ const traceAudit = (actionId: string): Result => {
   const at = (...records: (AuditRecord | undefined)[]) =>
     records.filter((r): r is AuditRecord => !!r).map((r) => r.at);
   const distance = (n: number) => (n <= 1 ? "바로 다음 호출" : `${n}번째 뒤 호출`);
-  const R: TraceBasis = "record";
-  const D: TraceBasis = "detection";
-  const step = (layer: TraceStep["layer"], q: string, status: TraceStep["status"], answer: string, basis: TraceBasis[],
-                evidence: string[] = []): TraceStep => ({ layer, question: q, status, answer, basis, evidence });
-
-  const effectQ = "실행됐는가? 사람이 승인했는가?";
-  const egressQ = "게이트를 거친 승인 요청 기록이 있는가?";
-  const residenceQ = "요청 전에 의심 문구가 든 결과를 읽었는가?";
-  const deliberationQ = "모델이 도구 결과 속 지시를 따랐을 가능성이 있는가?";
-  const ingressQ = "이 질문에서 읽은 결과는 무엇이고, 의심 문구가 있었나?";
-  const interfaceQ = "등록부에 없는 도구를 불렀나?";
-  const mediationQ = "AWS 쪽 기록(CloudTrail)과 맞는가?";
   const kindsOf = (r: AuditRecord) => (Array.isArray(r.injectionSuspected) ? r.injectionSuspected : []);
+  const asked = question ? ` 사용자의 질문("${question}")이 이 변경을 원했는지 비교하세요` : "";
+  const WEIGHT: Record<TraceStatus, number> = { info: 0, ok: 1, warn: 2, fail: 3 };
+  type Found = { status: TraceStatus; text: string; rows: string[] };
+  const found = (status: TraceStatus, text: string, rows: string[] = []): Found => ({ status, text, rows });
+  // 찾은 것들을 관문 하나로: 판정은 가장 무거운 것, 답은 찾은 것을 이은 글, 근거 행은 모두
+  const gate = (name: TraceStep["gate"], q: string, basis: TraceBasis[], findings: Found[]): TraceStep => ({
+    gate: name,
+    question: q,
+    status: findings.reduce<TraceStatus>((worst, f) => (WEIGHT[f.status] > WEIGHT[worst] ? f.status : worst), "info"),
+    basis,
+    findings: findings.map(({ status, text }) => ({ status, text })),
+    answer: findings.map((f) => f.text).join(" "),
+    evidence: [...new Set(findings.flatMap((f) => f.rows))],
+  });
 
-  // 판단 단계의 신호: 요청 값의 출처(탐지) · 체류(탐지) · 사용자가 묻지 않은 감시 장치 약화(기록)
+  // 경계 (기록: 등록부)
+  const interfaceGate = gate("interface", "등록부에 있는 도구만 불렀나?", ["record"], [
+    unregistered.length
+      ? found("warn", `등록부에 없는 도구를 불렀습니다: ${unregistered.map((r) => r.tool).join(", ")}. 변경 도구로 다뤄 승인을 거쳤습니다`, unregistered.map((r) => r.at))
+      : rows.length
+        ? found("ok", "등록부에 있는 도구만 불렀습니다")
+        : found("info", "같은 질문의 도구 기록이 없어 알 수 없습니다"),
+  ]);
+
+  // 유입 (탐지: 읽은 결과의 의심 문구 · 그 뒤의 요청 · 요청 값의 출처)
+  const ingressFindings: Found[] = [
+    !rows.length
+      ? found("info", "같은 질문의 도구 기록을 찾지 못했습니다 (보관 기간이 지났거나 승인 요청 기록이 없음)")
+      : suspicious.length
+        ? found("warn", `도구 결과 ${ingress.length}건 중 ${suspicious.length}건에 의심 문구가 있었습니다 (${[...new Set(suspicious.flatMap(kindsOf))].sort().join(", ")}).`, suspicious.map((r) => r.at))
+        : found("ok", `도구 결과 ${ingress.length}건, 탐지된 의심 문구 없음.`, ingress.map((r) => r.at)),
+  ];
+  if (tainted.length) {
+    ingressFindings.push(found("warn", `의심 결과를 읽은 뒤 변경을 요청했습니다 (${tainted.map((t) => `${t.tool} 결과 뒤 ${distance(t.callsAgo)}`).join(", ")}).`, at(requested)));
+  } else if (requested) {
+    ingressFindings.push(found("ok", "탐지된 의심 결과 뒤의 요청이 아닙니다."));
+  }
   const matched = tainted.filter((t) => t.matchedArgs?.length);
-  const unasked = !!requested && weakensDefense(requested) && !askedFor(requested, question);
+  if (requested && matched.length) {
+    ingressFindings.push(found("fail",
+      `지시문에서 온 값으로 요청했습니다: ${matched.map((t) => `${(t.matchedArgs ?? []).join(", ")} 값이 ${t.tool} 결과의 의심 문구에`).join(", ")} 그대로 있었고, 사용자의 질문에는 없었습니다.`,
+      [...suspicious.map((r) => r.at), ...at(requested)]));
+  }
+  const ingressGate = gate("ingress", "무엇을 읽었고, 그 뒤 변경을 요청했나?", ["detection"], ingressFindings);
+
+  // 실행 (기록: 승인 요청 → 결정 → 실행, 그리고 바뀌는 것 자체)
+  const warned = tainted.length ? " 승인 카드에 의심 경고가 떠 있던 요청입니다." : "";
   const change = requested?.target && requested.before && requested.after
     ? `${requested.target} ${requested.before} → ${requested.after}`
     : requested?.summary ?? requested?.tool;
-  const weakening = unasked ? `사용자가 묻지 않은 Vigie 감시 장치 약화입니다 (${change}).` : "";
-  const asked = question ? ` 사용자의 질문("${question}")이 이 변경을 원했는지 비교하세요` : "";
-  const suspiciousAt = [...suspicious.map((r) => r.at), ...(requested ? [requested.at] : [])];
-  const warned = tainted.length ? ". 승인 카드에 의심 경고가 떠 있던 요청입니다" : "";
-
-  const steps: TraceStep[] = [
-    finished && !approved
-      ? step("effect", effectQ, "fail", "승인 기록 없이 실행 기록이 있습니다. 승인 테이블과 MCP 로그를 확인하세요", [R], at(finished))
-      : finished && finished.event === "executed"
-        ? step("effect", effectQ, tainted.length ? "warn" : "ok", `사람이 승인해 실행했습니다 (승인: ${who(approved)})${warned}`, [R], at(approved, finished))
-        : finished
-          ? step("effect", effectQ, "warn", `승인했지만 실행에 실패했습니다 (승인: ${who(approved)})`, [R], at(approved, finished))
-          : approved
-            ? step("effect", effectQ, "warn", "승인했지만 실행 결과 기록이 없습니다 (실행 중이거나 결과를 남기지 못함)", [R], at(approved))
-            : denied
-              ? step("effect", effectQ, "ok", `거절해 실행하지 않았습니다 (거절: ${who(denied)})`, [R], at(denied))
-              : step("effect", effectQ, "ok", "결정하지 않아(만료 포함) 실행하지 않았습니다", [R]),
+  const executionFindings: Found[] = [
     requested
-      ? step("egress", egressQ, "ok", `승인 요청이 있습니다: ${requested.summary ?? requested.tool}`, [R], at(requested))
+      ? found("ok", `승인 요청을 거쳤습니다 (${requested.summary ?? requested.tool}).`, at(requested))
       : approved || finished
-        ? step("egress", egressQ, "fail", "결정·실행 기록은 있는데 승인 요청 기록이 없습니다. 게이트 밖의 변경일 수 있어 CloudTrail과 대조하세요 (7 매개)", [R], at(approved, finished))
-        : step("egress", egressQ, "fail", "이 작업의 승인 요청 기록을 찾지 못했습니다", [R]),
-    tainted.length
-      ? step("residence", residenceQ, "warn",
-          `예: ${tainted.map((t) => `${t.tool} 결과 뒤 ${distance(t.callsAgo)}`).join(", ")}에서 이 변경을 요청했습니다`, [D], at(requested))
-      : requested
-        ? step("residence", residenceQ, "ok", "아니오: 탐지된 의심 결과 뒤의 요청이 아닙니다", [D])
-        : step("residence", residenceQ, "info", "승인 요청 기록이 없어 알 수 없습니다", [D]),
-    requested && matched.length
-      ? step("deliberation", deliberationQ, "fail",
-          `지시문을 따른 요청입니다: ${matched.map((t) => `${(t.matchedArgs ?? []).join(", ")} 값이 ${t.tool} 결과의 의심 문구에`).join(", ")} 그대로 있었고, 사용자의 질문에는 없었습니다.${unasked ? ` ${weakening}` : ""}`,
-          unasked ? [D, R] : [D], suspiciousAt)
-      : requested && tainted.length
-        ? step("deliberation", deliberationQ, "warn",
-            `유입·체류·유출이 함께 성립합니다: 의심 결과를 읽은 뒤 변경을 요청했습니다.${unasked ? ` ${weakening}` : ""}${asked}`,
-            unasked ? [D, R] : [D], suspiciousAt)
-        : unasked
-          ? step("deliberation", deliberationQ, "warn", `${weakening} 탐지된 의심 문구는 없었지만 탐지가 놓쳤을 수 있습니다.${asked}`, [R], at(requested))
-          : step("deliberation", deliberationQ, "ok", "성립하지 않습니다: 탐지된 의심 결과 뒤의 요청도, 묻지 않은 감시 장치 약화도 아닙니다", [D, R]),
-    !rows.length
-      ? step("ingress", ingressQ, "info", "같은 질문의 도구 기록을 찾지 못했습니다 (보관 기간이 지났거나 승인 요청 기록이 없음)", [D])
-      : suspicious.length
-        ? step("ingress", ingressQ, "warn",
-            `도구 결과 ${ingress.length}건 중 ${suspicious.length}건에 의심 문구가 있었습니다 (${[...new Set(suspicious.flatMap(kindsOf))].sort().join(", ")})`,
-            [D], suspicious.map((r) => r.at))
-        : step("ingress", ingressQ, "ok", `도구 결과 ${ingress.length}건, 탐지된 의심 문구 없음`, [D], ingress.map((r) => r.at)),
-    unregistered.length
-      ? step("interface", interfaceQ, "warn", `예: ${unregistered.map((r) => r.tool).join(", ")}`, [R], unregistered.map((r) => r.at))
-      : rows.length
-        ? step("interface", interfaceQ, "ok", "아니오", [R])
-        : step("interface", interfaceQ, "info", "같은 질문의 도구 기록이 없어 알 수 없습니다", [R]),
-    finished?.awsRequestId
-      ? step("mediation", mediationQ, "info",
-          `앱에서는 확인할 수 없습니다. CloudTrail에서 요청 ID ${finished.awsRequestId}(${finished.cloudTrailEvent}) 이벤트를 찾고, 같은 시간대에 MCP 역할이 만든 다른 변경 이벤트가 없는지 대조하세요`,
-          ["outside"], at(finished))
-      : step("mediation", mediationQ, "info",
-          "실행 기록이 없어 대조할 요청 ID가 없습니다. 같은 시간대에 MCP 역할이 만든 변경 이벤트가 없는지 CloudTrail에서 확인할 수 있습니다",
-          ["outside"]),
+        ? found("fail", "결정·실행 기록은 있는데 승인 요청 기록이 없습니다. 승인 관문 밖의 변경일 수 있어 CloudTrail과 대조하세요.", at(approved, finished))
+        : found("fail", "이 작업의 승인 요청 기록을 찾지 못했습니다."),
+    finished && !approved
+      ? found("fail", "승인 기록 없이 실행 기록이 있습니다. 승인 테이블과 MCP 로그를 확인하세요.", at(finished))
+      : finished && finished.event === "executed"
+        ? found(tainted.length ? "warn" : "ok", `사람이 승인해 실행했습니다 (승인: ${who(approved)}).${warned}`, at(approved, finished))
+        : finished
+          ? found("warn", `승인했지만 실행에 실패했습니다 (승인: ${who(approved)}).`, at(approved, finished))
+          : approved
+            ? found("warn", "승인했지만 실행 결과 기록이 없습니다 (실행 중이거나 결과를 남기지 못함).", at(approved))
+            : denied
+              ? found("ok", `거절해 실행하지 않았습니다 (거절: ${who(denied)}).`, at(denied))
+              : found("ok", "결정하지 않아(만료 포함) 실행하지 않았습니다."),
   ];
-  const failed = steps.filter((s) => s.status === "fail").map((s) => s.layer);
-  const verdict = failed.some((layer) => layer !== "deliberation")
-    ? "기록이 어긋납니다. 실패한 단계부터 확인하세요"
-    : failed.length
-      ? "지시문을 따른 요청입니다. 판단 단계부터 확인하세요"
+  if (requested && weakensDefense(requested) && !askedFor(requested, question)) {
+    const missed = tainted.length ? "" : " 탐지된 의심 문구는 없었지만 탐지가 놓쳤을 수 있습니다.";
+    executionFindings.push(found("warn", `사용자가 묻지 않은 Vigie 감시 장치 약화입니다 (${change}).${missed}${asked}`, at(requested)));
+  }
+  const executionGate = gate("execution", "승인 요청을 거쳐, 사람이 결정했나?", ["record"], executionFindings);
+  const steps = [interfaceGate, ingressGate, executionGate];
+
+  // 판단은 가정, 매개는 전제 (판정하지 않는다)
+  const assumption = "모델 안은 볼 수 없어, 모델은 언제든 도구 결과 속 지시에 속을 수 있다고 가정합니다. 그래서 판정하지 않고, AWS를 바꾸는 실행은 언제나 사람의 승인을 거칩니다";
+  const premise = {
+    text: "모든 변경은 MCP 역할로만 나간다는 전제입니다. 앱 밖(IAM · CloudTrail)이라 판정하지 않습니다. " +
+      (finished?.awsRequestId
+        ? `CloudTrail에서 요청 ID ${finished.awsRequestId}(${finished.cloudTrailEvent}) 이벤트를 찾고, 같은 시간대에 MCP 역할이 만든 다른 변경 이벤트가 없는지 대조하세요`
+        : "실행 기록이 없어 대조할 요청 ID가 없습니다. 같은 시간대에 MCP 역할이 만든 변경 이벤트가 없는지 CloudTrail에서 확인할 수 있습니다"),
+    evidence: finished?.awsRequestId ? [finished.at] : [],
+    ...(finished?.awsRequestId ? { awsRequestId: finished.awsRequestId, cloudTrailEvent: finished.cloudTrailEvent } : {}),
+  };
+  const verdict = interfaceGate.status === "fail" || executionGate.status === "fail"
+    ? "기록이 어긋납니다. 실패한 관문부터 확인하세요"
+    : ingressGate.status === "fail"
+      ? "지시문에서 온 값으로 요청한 변경입니다. 유입 관문부터 확인하세요"
       : steps.some((s) => s.status === "warn")
-        ? "주의할 단계가 있습니다. 경고가 붙은 단계부터 확인하세요"
-        : "모든 단계가 정상입니다. 사용자가 요청하고 사람이 결정한 변경입니다 (유입과 체류는 탐지 결과를 기준으로 봤습니다. 탐지가 놓친 표현은 드러나지 않습니다)";
-  return [200, { actionId, steps, verdict, question, events, rows }];
+        ? "주의할 관문이 있습니다. 주의가 붙은 관문부터 확인하세요"
+        : "세 관문 모두 정상입니다. 사용자가 요청하고 사람이 결정한 변경입니다 (유입은 탐지 결과를 기준으로 봤습니다. 탐지가 놓친 표현은 드러나지 않습니다)";
+  return [200, { actionId, steps, verdict, question, assumption, premise, events, rows }];
 };
 
 const queryAudit = (query: AuditQuery): Result => {
@@ -1973,12 +1979,12 @@ const queryAudit = (query: AuditQuery): Result => {
     .filter((r) => !query.tool || r.tool === query.tool)
     .filter((r) => !query.status || r.status === query.status)
     .filter((r) => !query.kind || r.kind === query.kind)
-    // 체류층은 행이 따로 없다: 의심 결과를 읽은 뒤의 승인 요청 행 (services/llm/audit.py)
+    // 관문: 실행 관문은 승인 관문의 앞(egress)과 뒤(effect) 두 자리 (services/llm/audit.py의 GATES)
     .filter((r) =>
       !query.locus
         ? true
-        : query.locus === "residence"
-          ? !!r.taintedBy?.length
+        : query.locus === "execution"
+          ? r.locus === "egress" || r.locus === "effect"
           : r.locus === query.locus,
     )
     .sort((a, b) => (a.at < b.at ? 1 : -1)); // 최신 기록부터

@@ -16,16 +16,16 @@
 - 사용자 관리의 사건 하나 = 항목 하나 (kind "admin"): 초대·권한 변경(전→후)·정지·정지 해제, 대상, 한 사람
 두 종류 모두 요청자(sub, 이메일, 웹·Slack), 질문 ID(requestId), 대화 ID(sessionId)를 함께 남긴다.
 
-층 (locus): 사고가 났을 때 "어디가 뚫렸나"를 층 하나씩 좁히려고, 기록마다 도구 반복 위의 자리를 적는다.
-fingate-x의 '원인의 계층'(상태 변화에서 거꾸로 세운 층)을 이 앱에 맞춰 옮겼다. 판단은 바꾸지 않고 기록만 나눈다.
-    interface  경계  등록부(위험도)에 없는 도구를 불렀다 (변경 도구로 다룬다)
-    ingress    유입  조회·결과물 도구의 결과가 들어왔다. 의심 문구(injectionSuspected)가 이 층의 흔적
-    residence  체류  의심 결과를 읽은 뒤 같은 질문에서 변경을 요청했다 (요청 행의 taintedBy. 따로 행을 두지 않는다)
-    egress     유출  변경 도구를 부르려 했다 (그 도구 호출 행과 승인 요청 행)
-    effect     효과  승인·거절·실행·실패
-    (판단층은 모델 안이라 기록할 수 없다. 역추적(audit_trace.py)이 요청 값의 출처 · 체류 · 사용자가 묻지 않은
-     감시 장치 약화로 추론한다. 요청 값이 탐지된 지시문에서 왔을 때만 실패로 보고, 나머지는 주의다)
-질문 행(kind "request")은 요약이라 층이 없다.
+관문 (locus): 사고가 났을 때 "어디서 무엇이 보였나"를 좁히려고, 기록마다 도구 반복 위의 자리를 적는다.
+판단은 바꾸지 않고 기록만 나눈다. 행에 적는 자리는 넷이고, 화면과 역추적(audit_trace.py)은 관문 셋으로 묶는다.
+    경계  interface  등록부(위험도)에 없는 도구를 불렀다 (변경 도구로 다룬다)
+    유입  ingress    조회·결과물 도구의 결과가 들어왔다. 의심 문구(injectionSuspected)가 이 관문의 흔적.
+                     의심 결과를 읽은 뒤의 변경 요청은 요청 행의 taintedBy로 남는다 (따로 행을 두지 않는다)
+    실행  egress     변경 도구를 부르려 했다 (그 도구 호출 행과 승인 요청 행). 승인 관문의 앞
+          effect     승인·거절·실행·실패. 승인 관문의 뒤
+    (모델의 판단은 볼 수 없어 관문이 아니다. 언제나 속을 수 있다고 가정하고 변경은 승인을 거친다.
+     모든 변경이 MCP 역할로만 나간다는 것은 앱 밖(IAM · CloudTrail)의 전제다)
+질문 행(kind "request")은 요약이라 관문이 없다.
 
 가리기 (redaction.py)
 - 비밀 값은 감사 로그에도 남기지 않는다.
@@ -69,8 +69,10 @@ from approvals import tainted_view
 from llm_cost import cost_micro_usd, price_of
 from llm_progress import _plain
 
-# 층 (모듈 설명). residence는 조회 조건으로만 쓴다 (taintedBy가 있는 승인 요청 행)
-LOCI = ("interface", "ingress", "residence", "egress", "effect")
+# 관문 → 행에 적는 자리 (모듈 설명). 조회(locus=)는 관문 이름을 받는다
+GATES = {"interface": ("interface",), "ingress": ("ingress",), "execution": ("egress", "effect")}
+# 예전 처리 단계 이름도 받는다 (공유된 링크): 행의 자리 그대로, residence는 taintedBy가 있는 승인 요청 행
+LEGACY_LOCI = ("egress", "effect", "residence")
 
 AUDIT_TTL_DAYS = 90  # DynamoDB 보관 기간. CloudWatch Logs는 1년 (llm.yaml의 AuditLogGroup)
 ADMIN_GROUP = "admins"  # 감사 로그는 이 Cognito 그룹의 사용자만 본다 (자기 것 포함 모든 사람의 기록)
@@ -287,7 +289,7 @@ class AuditLog:
             "summary": action.get("summary"),
             "status": "error" if event == "failed" else "ok",
             "decidedBy": decided_by,
-            # 이 변경을 요청하기 전에 같은 질문에서 읽은 의심 결과 (체류층, approvals 모듈 설명). 요청 행에만 있다
+            # 이 변경을 요청하기 전에 같은 질문에서 읽은 의심 결과 (유입 관문의 '의심 뒤 요청', approvals 모듈 설명). 요청 행에만 있다
             "taintedBy": (tainted_view(action.get("taintedBy")) or None) if event == "requested" else None,
         }
         if event == "requested":
@@ -435,7 +437,7 @@ def query_audit(table, caller_id: Optional[str], claims: Dict[str, Any], params:
     일반 사용자는 자기 기록도 볼 수 없다 (403). 화면이 탭을 숨기는 것은 편의일 뿐이고, 막는 곳은 여기다.
 
     params (쿼리 문자열): from, to (YYYY-MM-DD, UTC), scope (mine|all), user, tool, status (ok|error),
-                          kind (tool|request|action), locus (LOCI), limit, cursor
+                          kind (tool|request|action), locus (GATES), limit, cursor
     """
     if table is None:
         raise AuditQueryError(503, "감사 로그 테이블이 설정되지 않았습니다")
@@ -475,10 +477,12 @@ def query_audit(table, caller_id: Optional[str], claims: Dict[str, Any], params:
             conditions.append(Attr(name).eq(params[field]))
     locus = params.get("locus")
     if locus:
-        if locus not in LOCI:
-            raise AuditQueryError(400, f"locus는 {', '.join(LOCI)} 중 하나여야 합니다")
-        # 체류층은 행이 따로 없다: 의심 결과를 읽은 뒤의 승인 요청 행
-        conditions.append(Attr("taintedBy").exists() if locus == "residence" else Attr("locus").eq(locus))
+        if locus not in GATES and locus not in LEGACY_LOCI:
+            raise AuditQueryError(400, f"locus는 {', '.join(GATES)} 중 하나여야 합니다")
+        if locus == "residence":  # 예전 이름: 의심 결과를 읽은 뒤의 승인 요청 행
+            conditions.append(Attr("taintedBy").exists())
+        else:
+            conditions.append(Attr("locus").is_in(list(GATES.get(locus, (locus,)))))
     base: Dict[str, Any] = {"ScanIndexForward": False}  # 최신 기록부터
     if conditions:
         expression = conditions[0]
