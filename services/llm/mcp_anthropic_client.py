@@ -1227,6 +1227,10 @@ class AnthropicMCPClient:
         self._ensure_connected()
         results: List[Optional[Dict[str, Any]]] = [None] * len(tool_uses)
         running = {}
+        # 보안 게이트웨이의 도구 결과 검사 (jev.result_threat, Jev를 켰을 때만): 결과가 나오는 대로 Jev에 맡겨 함께 돌리고,
+        # 모든 도구가 끝난 뒤 결과마다 Jev 판정을 기다려 끝을 알린다. 그래서 Jev를 켜면 도구가 끝났다는 표시가 검사만큼 늦다
+        checking = []
+        checks = ThreadPoolExecutor(max_workers=MAX_PARALLEL_TOOLS) if self.jev is not None else None
         with ThreadPoolExecutor(max_workers=max(1, min(MAX_PARALLEL_TOOLS, len(tool_uses)))) as pool:
             for index, tool_use in enumerate(tool_uses):
                 try:
@@ -1251,10 +1255,28 @@ class AnthropicMCPClient:
                     # 결과물은 주소·그릴 내용을 떼어 두고 모델에는 참조(artifact://…)만 준다
                     if prepared["risk"] == "artifact" and self.artifacts is not None:
                         result = self.artifacts.take(prepared["name"], result)
-                    results[index] = self._finish_tool(prepared, result)
+                    if checks is not None and prepared["risk"] == "read":
+                        # Jev에는 모델이 읽을 것과 같은 가린 글을 보낸다 (가리기는 이 스레드에서만 한다)
+                        text = self.redactor.text(json.dumps(result, ensure_ascii=False, default=str))
+                        checking.append((index, prepared, result, checks.submit(self._jev_check, text)))
+                    else:
+                        results[index] = self._finish_tool(prepared, result)
                 except Exception as error:
                     results[index] = self._tool_failed(prepared["tool_use"], error)
+        for index, prepared, result, check in checking:
+            try:
+                results[index] = self._finish_tool(prepared, result, check.result())
+            except Exception as error:
+                results[index] = self._tool_failed(prepared["tool_use"], error)
+        if checks is not None:
+            checks.shutdown(wait=False)
         return [result for result in results if result is not None]
+
+    def _jev_check(self, text: str) -> Dict[str, Any]:
+        """도구 결과 하나를 Jev로 검사한다 (다른 스레드에서 돈다). threat: 확률(실패면 None), ms: 걸린 시간."""
+        started = time.time()
+        threat = self.jev.result_threat(text)
+        return {"threat": threat, "ms": int((time.time() - started) * 1000)}
 
     def _call_tool_timed(self, name: str, arguments: Dict[str, Any]) -> Any:
         """도구 하나를 MCP로 부른다 (다른 스레드에서 돈다. 진행 상황·감사 로그는 건드리지 않는다)."""
@@ -1287,8 +1309,10 @@ class AnthropicMCPClient:
         return {"tool_use": tool_use, "id": tool_use_id, "name": tool_name, "input": tool_input, "risk": risk,
                 "restore": restore, "call_no": call_no}
 
-    def _finish_tool(self, prepared: Dict[str, Any], result: Any) -> Dict[str, Any]:
-        """도구 하나가 끝난 뒤: 실패·의심 문구를 살피고 끝을 알린다. 모델에 돌려줄 결과 항목을 만든다."""
+    def _finish_tool(self, prepared: Dict[str, Any], result: Any,
+                     jev_check: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """도구 하나가 끝난 뒤: 실패·의심 문구를 살피고 끝을 알린다. 모델에 돌려줄 결과 항목을 만든다.
+        jev_check: 보안 게이트웨이의 도구 결과 검사 (_jev_check). 패턴 탐지와 합친다: 어느 하나라도 의심이면 의심"""
         is_write = prepared["risk"] == "write"
         print(f"도구 결과: {self.redactor.text(json.dumps(result, ensure_ascii=False))[:200]}...")
         # MCP 도구는 실패를 예외 대신 결과의 isError로 알리기도 한다
@@ -1296,10 +1320,15 @@ class AnthropicMCPClient:
         # 도구 결과(제3자가 쓴 글)에 지시문처럼 보이는 문구가 있는지 (injection.py).
         # 승인 요청 결과는 이 서비스가 만든 글이라 보지 않는다
         suspicious = [] if is_write else injection.scan(json.dumps(result, ensure_ascii=False))
+        threat = (jev_check or {}).get("threat")
+        if threat is not None and threat >= jev.THREAT_FLAG and jev.KIND not in suspicious:
+            suspicious = suspicious + [jev.KIND]
+        gateway = ({"threat": jev.percent(threat), "ms": jev_check["ms"]} if jev_check and threat is not None
+                   else {"unavailable": True, "ms": jev_check["ms"]} if jev_check else None)
         self._report("tool_finished", prepared["id"], not failed,
                      self._tool_error_text(result) if failed else None,
                      len(json.dumps(result, ensure_ascii=False, default=str)), suspicious,
-                     None if failed else diagnosis_of(prepared["name"], result))
+                     None if failed else diagnosis_of(prepared["name"], result), gateway)
         self.debug_log.append({"type": "tool_result", "tool_name": prepared["name"], "input": prepared["input"],
                                "output": result, "timestamp": time.time()})
         return {"tool_id": prepared["id"], "name": prepared["name"], "result": result, "suspicious": suspicious,
