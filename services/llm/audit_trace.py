@@ -5,6 +5,7 @@
     경계  등록부에 있는 도구만 불렀나?                         (interface 행)                       근거: 기록
     유입  무엇을 읽었고, 의심 문구가 있었나? 그 뒤 변경을 요청했나? (같은 질문의 도구 행, 요청 행의 taintedBy)  탐지
           요청 값이 탐지된 지시문에서 왔나? (taintedBy의 matchedArgs)
+          질문 자체가 숨은 지시로 의심됐나? (질문 행의 gateway, 보안 게이트웨이 docs/security-gateway.md)
     실행  승인 요청을 거쳐, 사람이 결정했나? 묻지 않은 감시 장치 약화인가?  (요청·승인·거절·실행·실패 행)     기록
 
 관문이 아닌 둘은 판정하지 않고 글로만 돌려준다
@@ -41,6 +42,7 @@ from typing import Any, Dict, List, Optional
 from boto3.dynamodb.conditions import Attr, Key
 
 from audit import DAY_INDEX, AuditQueryError, _day, _now, _output, _query_pages, is_admin
+from jev import FLAGGED, QUESTION_SOURCE
 
 MAX_TRACE_ROWS = 200  # 작업 하나·질문 하나의 기록은 이보다 훨씬 적다
 MAX_TRACE_PAGES = 20  # 날짜 하나를 거를 때 읽는 최대 페이지 (하루치 기록이 많아도 한 번의 조회는 여기서 끊는다)
@@ -211,10 +213,17 @@ def build(events: List[Dict[str, Any]], question_rows: List[Dict[str, Any]]) -> 
                                     f"({', '.join(kinds)}).", suspicious))
     else:
         findings.append(found(OK, f"도구 결과 {len(ingress)}건, 탐지된 의심 문구 없음.", ingress))
-    if tainted:
-        names = ", ".join(f"{entry.get('tool')} 결과 뒤 {_distance(entry.get('callsAgo'))}" for entry in tainted)
+    gateway = (request_row or {}).get("gateway") or {}
+    if gateway.get("decision") == FLAGGED:
+        findings.append(found(WARN, f"보안 게이트웨이가 질문을 숨은 지시로 의심했습니다 (Jev {gateway.get('threat')}%).",
+                              [request_row]))
+    from_results = [entry for entry in tainted if entry.get("tool") != QUESTION_SOURCE]
+    if from_results:
+        names = ", ".join(f"{entry.get('tool')} 결과 뒤 {_distance(entry.get('callsAgo'))}" for entry in from_results)
         findings.append(found(WARN, f"의심 결과를 읽은 뒤 변경을 요청했습니다 ({names}).", [requested]))
-    elif requested:
+    if len(from_results) < len(tainted):
+        findings.append(found(WARN, "의심 질문에서 나온 변경 요청입니다.", [requested]))
+    if requested and not tainted:
         findings.append(found(OK, "탐지된 의심 결과 뒤의 요청이 아닙니다."))
     matched = [entry for entry in tainted if entry.get("matchedArgs")]
     if requested and matched:
