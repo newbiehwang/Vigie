@@ -1,10 +1,10 @@
-// 감사 기록 한 건을 자세히 보이는 조각들: 항목 표(Details, 맨 위에 처리 단계와 역추적), 결과 배지, 종류 이름, 표시 배지.
+// 감사 기록 한 건을 자세히 보이는 조각들: 항목 표(Details, 맨 위에 관문과 역추적), 결과 배지, 종류 이름, 표시 배지.
 // 목록 행(AuditPage)과 기록 팝업창(AuditDetailModal)이 같이 쓴다
 import { Fragment, type ReactNode } from 'react';
 import type { AuditRecord } from '@/types/audit';
 import { labelOf } from '@/utils/toolTrace';
 import { AuditDiagnosis } from './AuditDiagnosis';
-import { AuditLayers } from './AuditLayers';
+import { AuditGates } from './AuditGates';
 import {
     ACTION_EVENTS,
     ADMIN_EVENTS,
@@ -151,12 +151,12 @@ export function Details({ record }: { record: AuditRecord }) {
 
     return (
         <>
-            {/* 맨 위 그림: 진단 도구 기록은 그 서비스의 진단 층(판정), 나머지 도구 호출·변경 작업은 처리 단계에서 이 기록의 자리.
-                질문·사용자 관리 행에는 층이 없다 */}
+            {/* 맨 위 그림: 진단 도구 기록은 그 서비스의 진단 층(판정), 나머지 도구 호출·변경 작업은 관문 셋에서 이 기록의 자리.
+                질문·사용자 관리 행에는 관문이 없다 */}
             {record.diagnosis ? (
                 <AuditDiagnosis diagnosis={record.diagnosis} />
             ) : record.locus ? (
-                <AuditLayers record={record} />
+                <AuditGates record={record} />
             ) : null}
             <dl className="audit-details">
                 {rows.map(([name, value]) => (
@@ -198,7 +198,7 @@ export function Flags({ record }: { record: AuditRecord }) {
             {record.taintedBy?.length ? (
                 <span
                     className="audit-flag is-suspicious"
-                    title="의심 문구가 든 도구 결과를 읽은 뒤 같은 질문에서 요청한 변경입니다 (체류)"
+                    title="의심 문구가 든 도구 결과를 읽은 뒤 같은 질문에서 요청한 변경입니다 (유입 관문)"
                 >
                     의심 뒤 요청
                 </span>

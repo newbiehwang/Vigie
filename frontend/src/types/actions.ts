@@ -1,7 +1,7 @@
 // 변경 작업 승인 요청 (services/llm/approvals.py의 public_view와 같은 모양).
 // 답변의 inference.pendingActions와 GET·POST /actions/{actionId}의 응답이 이 모양이다
 
-// 이 변경을 요청하기 전에 같은 질문에서 모델이 읽은 도구 결과 중 지시문처럼 보이는 문구가 있던 것 (체류 신호).
+// 이 변경을 요청하기 전에 같은 질문에서 모델이 읽은 도구 결과 중 지시문처럼 보이는 문구가 있던 것 (의심 뒤 요청).
 // 판단은 바꾸지 않는다 (변경은 원래 모두 승인이 필요하다). 승인자에게 요청의 출처를 의심하라고 알린다
 export interface TaintedBy {
     toolUseId: string;
