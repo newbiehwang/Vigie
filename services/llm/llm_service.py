@@ -19,6 +19,7 @@ from approvals import (APPROVED, DENIED, FINISHED, ApprovalError, ApprovalReques
 from mcp_client import MCPClient
 from common.dashboard_store import DashboardStore
 from dashboard_view import app_changes_from_audit, build_view, pending_approvals
+import jev
 import metrics
 import tool_access
 from system_prompt import build_system_blocks, build_system_prompt
@@ -455,6 +456,8 @@ def handle_llm1_with_mcp(body, origin, caller_id=None, caller_email=None, caller
         # 그룹별로 쓸 수 있는 도구 (tool_access.py): 관리자가 아니면 CloudTrail·IAM·네트워크 등을 모델에게 보이지 않는다.
         # Slack 봇 요청은 그룹이 없어 일반 사용자다. 클라이언트는 여러 요청이 함께 쓰므로 요청마다 넣는다
         client.role = tool_access.role_of(caller_groups if caller_id else None)
+        # 질문을 모델에 넘기기 전의 분류 (jev.py): JEV=on이고 키가 있을 때만. 없으면 None (지금처럼 돈다)
+        client.jev = jev.current(lambda: get_config().get('typesafe', {}).get('api_key'))
         audit.model_id = getattr(client, "model_id", None) or model_id
 
         # 사용자 입력 처리 시작 시간 기록

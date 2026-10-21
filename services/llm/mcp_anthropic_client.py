@@ -10,6 +10,7 @@ from redaction import Redactor
 from approvals import PREVIEW_META, is_registered, risk_of
 from audit import diagnosis_of
 import injection
+import jev
 import tool_access
 import tool_search
 
@@ -107,6 +108,9 @@ class AnthropicMCPClient:
         # 요청마다 llm_service가 넣어 주는 요청자의 권한 (tool_access.role_of). 관리자가 아니면 관리자 전용 도구를
         # 모델에게 보이지 않고, 불러도 거절한다. 넣어 주지 않으면(Slack 등) 일반 사용자로 본다
         self.role = tool_access.MEMBER
+        # 질문을 모델에 넘기기 전의 분류 (jev.py, 기본 꺼짐). 요청마다 llm_service가 넣고, 분류는 질문마다 새로 한다
+        self.jev = None
+        self._jev_plan = None
 
     # system에 블록 목록(system_prompt.build_system_blocks: 캐시되는 본문 + 요청 시각)을 받는다
     supports_system_blocks = True
@@ -314,14 +318,17 @@ class AnthropicMCPClient:
         if not system_prompt:
             return system_prompt
         note = tool_access.MEMBER_NOTE if self.role != tool_access.ADMIN else ""
+        # Jev가 고른 도구 (jev.py): 질문마다 달라서 권한 안내처럼 캐시 표시 뒤의 마지막 블록에 둔다
+        routing = self._jev_plan.note() if self._jev_plan else ""
         if isinstance(system_prompt, list):
             blocks = [dict(block) for block in system_prompt]
             if self.tool_search:
                 blocks[0]["text"] = blocks[0]["text"] + tool_search.SYSTEM_HINT
-            if note:
-                blocks.append({"type": "text", "text": note.strip()})
+            for tail in (note, routing):
+                if tail:
+                    blocks.append({"type": "text", "text": tail.strip()})
             return blocks
-        return system_prompt + (tool_search.SYSTEM_HINT if self.tool_search else "") + note
+        return system_prompt + (tool_search.SYSTEM_HINT if self.tool_search else "") + note + routing
 
     def _post(self, payload: Dict[str, Any], system_prompt: Optional[str]):
         """Messages API 요청 (스트리밍). 모델이 도구 검색을 받지 않으면(400) 끄고 모든 도구를 실어 한 번 다시 보낸다.
@@ -964,6 +971,17 @@ class AnthropicMCPClient:
                 "role": "user",
                 "content": prompt
             })
+
+        # 모델에 넘기기 전에 Jev로 분류한다 (jev.py, 기본 꺼짐): 먼저 찾을 도구와, 일반 사용자면 관리자 도구가 필요한지.
+        # 가린 질문만 보낸다. 실패하면 None이라 아무것도 바뀌지 않는다. 막는 것은 여전히 tool_access다
+        self._jev_plan = self.jev.plan(prompt, self.tools or [], self.role) if self.jev else None
+        if self._jev_plan:
+            self.debug_log.append({"type": "jev_plan", "model": self._jev_plan.model, "routed": self._jev_plan.routed,
+                                   "admin": self._jev_plan.admin, "timestamp": time.time()})
+            if self._jev_plan.needs_admin():
+                # 일반 사용자의 질문이 관리자 도구 없이는 답할 수 없어 보인다: 모델을 부르지 않고 관리자에게 요청하라고 안내
+                self.messages.append({"role": "assistant", "content": jev.ADMIN_GUIDE})
+                return {"output": {"message": {"content": [{"text": jev.ADMIN_GUIDE}]}}}
 
         # Anthropic 도구 형식으로 변환
         anthropic_tools = self._convert_tools_format()
