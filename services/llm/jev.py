@@ -50,6 +50,11 @@ THREAT_BLOCK = 0.9  # 질문을 모델 없이 거절하는 기준. 오탐이면 
 THREAT_FLAG = 0.5  # 진행하되 '의심 질문'으로 표시하는 기준 (변경은 어차피 승인을 거친다)
 # 의심 질문을 '의심 뒤 요청' 신호(taintedBy)의 출처로 적을 때의 이름. 도구 이름과 겹치지 않는다
 QUESTION_SOURCE = "user_question"
+# 도구 결과 검사 (result_threat): 결과가 길면 이 글자 수씩 나눠 묻고 가장 높은 확률을 쓴다. 한 번의 입력 한도(상태와 가장 긴
+# 물음 합쳐 32k 토큰)보다 넉넉히 작게 잡는다 (한글은 한 글자가 한 토큰 가까이 된다). 그보다 길면 앞의 MAX_CHUNKS 조각만 본다
+CHUNK_CHARS = 20000
+MAX_CHUNKS = 5
+KIND = "jev"  # 도구 결과의 의심 문구 종류 (injection.py의 패턴 이름들과 나란히 감사 로그 · 화면에 남는다)
 DESCRIPTION_CHARS = 160  # 도구 설명은 첫 문장만, 이 길이까지
 
 ADMIN_QUESTION = ("Answering this question needs administrator-only AWS data: CloudTrail events (who changed what), "
@@ -139,6 +144,24 @@ class Jev:
         self.transport = transport
         self.model = model
         self.last_error: Optional[str] = None  # 마지막 분류가 실패한 까닭 (감사 로그의 unavailable에 남긴다)
+
+    def result_threat(self, text: str) -> Optional[float]:
+        """도구 결과(가린 글)에 숨은 지시가 있을 확률 (docs/security-gateway.md 4.3). 길면 나눠 묻고 가장 높은 값.
+        실패하면 None (부르는 쪽은 패턴 탐지만 쓴다)."""
+        chunks = [text[start:start + CHUNK_CHARS] for start in range(0, len(text), CHUNK_CHARS)][:MAX_CHUNKS] or [""]
+        highest: Optional[float] = None
+        try:
+            for chunk in chunks:
+                response = self.transport({"model": self.model, "state": chunk,
+                                           "questions": {"threat": {"type": "noul", "instructions": THREAT_QUESTION}}})
+                probability = _probability((response.get("answers") or {}).get("threat"))
+                if probability is None:
+                    raise ValueError("모양이 다른 답")
+                highest = probability if highest is None else max(highest, probability)
+        except Exception as error:
+            print(f"Jev 도구 결과 검사 실패, 패턴 탐지만 씁니다: {error}")
+            return None
+        return highest
 
     def plan(self, question: str, tools: List[Dict[str, Any]], role: str) -> Optional[Plan]:
         """가린 질문과 이 요청자가 볼 수 있는 도구로 분류한다. 실패하면 None (부르는 쪽은 아무것도 바꾸지 않는다)."""

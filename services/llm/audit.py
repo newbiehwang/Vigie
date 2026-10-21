@@ -211,8 +211,10 @@ class AuditLog:
 
     def tool_finished(self, tool_id: str, ok: bool, error: Optional[str] = None,
                       result_chars: Optional[int] = None, suspicious: Optional[List[str]] = None,
-                      diagnosis: Optional[Dict[str, Any]] = None) -> None:
-        """diagnosis: 진단 도구의 층별 판정 (diagnosis_of). 비밀 값만 가린 뒤 남긴다."""
+                      diagnosis: Optional[Dict[str, Any]] = None, gateway: Optional[Dict[str, Any]] = None) -> None:
+        """diagnosis: 진단 도구의 층별 판정 (diagnosis_of). 비밀 값만 가린 뒤 남긴다.
+        gateway: 보안 게이트웨이의 도구 결과 검사 {threat(백분율 정수) | unavailable, ms}. Jev를 켰을 때 조회 도구만.
+        ms(도구 행의 걸린 시간)에는 검사를 기다린 시간도 들어간다 (Jev 검사는 gateway.ms)"""
         started, name, tool_input, locus = self._tools.pop(tool_id, (_now(), "unknown", {}, "ingress"))
         self.tool_count += 1
         record = {
@@ -233,6 +235,8 @@ class AuditLog:
             self.suspicious_count += 1
         if diagnosis:
             record["diagnosis"] = self._redactor.secrets_only(diagnosis)
+        if gateway:
+            record["gateway"] = dict(gateway)
         self._write(started, tool_id, record)
 
     # ---------------------------------------------------------------- 요청이 끝날 때 (llm_service)
