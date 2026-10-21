@@ -112,5 +112,5 @@ pip install -r requirements-dev.txt && pytest     # 백엔드 테스트 (moto로
 
 - **데모**: [vigie-opal-chi.vercel.app](https://vigie-opal-chi.vercel.app) (로그인 없이 써 볼 수 있습니다. 공개된 가상 회사의 AWS 운영 기록으로 답합니다)
 - **포트폴리오**: [vigie-portfolio.vercel.app](https://vigie-portfolio.vercel.app)
-- **문서**: [기능 상세](docs/features.md) · [배포와 운영](docs/deployment.md) · [개발과 테스트](docs/development.md) · [위협 모델](docs/threat-model.md)
+- **문서**: [기능 상세](docs/features.md) · [배포와 운영](docs/deployment.md) · [개발과 테스트](docs/development.md) · [위협 모델](docs/threat-model.md) · [보안 게이트웨이 설계](docs/security-gateway.md)
 - **이슈**: [GitHub Issues](https://github.com/newbiehwang/Vigie/issues)
