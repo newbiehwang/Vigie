@@ -1,11 +1,11 @@
-"""감사 로그의 층(locus)과 체류 신호(taintedBy) (services/llm/audit.py, approvals.py, mcp_anthropic_client.py)
+"""감사 로그의 관문(locus)과 의심 뒤 요청 신호(taintedBy) (services/llm/audit.py, approvals.py, mcp_anthropic_client.py)
 
 사고가 났을 때 "어디가 뚫렸나"를 층 하나씩 좁히려고 기록마다 도구 반복 위의 자리를 적는다
-(fingate-x의 '원인의 계층'을 참고). 판단은 바꾸지 않는다: 변경은 원래 모두 승인이 필요하다.
+(관문 셋: 경계 · 유입 · 실행). 판단은 바꾸지 않는다: 변경은 원래 모두 승인이 필요하다.
 
 - 경계(interface): 위험도 등록부에 없는 도구 / 유입(ingress): 도구 결과 / 유출(egress): 승인 요청 /
   효과(effect): 승인·거절·실행·실패
-- 체류(residence): 의심 결과를 읽은 뒤 같은 질문에서 나온 변경 요청. 승인 카드·감사 로그에 '먼저 읽은 의심 결과'로 보인다
+- 의심 뒤 요청(taintedBy, 유입 관문): 의심 결과를 읽은 뒤 같은 질문에서 나온 변경 요청. 승인 카드·감사 로그에 '먼저 읽은 의심 결과'로 보인다
 - 같은 응답에서 함께 부른 도구의 결과는 모델이 아직 보지 못했으므로 체류 신호가 아니다
 """
 import copy
@@ -82,7 +82,7 @@ def test_change_requested_after_reading_an_injected_log_is_flagged(env, monkeypa
     status, view = decide(env, pending["actionId"], "get", "alice")
     assert status == 200 and view["taintedBy"] == pending["taintedBy"]
 
-    # 감사 로그: 조회 결과는 유입, 변경 도구 호출과 승인 요청은 유출이고 요청 행에 체류 신호가 있다
+    # 감사 로그: 조회 결과는 유입, 변경 도구 호출과 승인 요청은 실행 관문의 앞(egress)이고 요청 행에 의심 뒤 요청 신호가 있다
     items = audit_items(env)
     log_row = next(i for i in items if i.get("tool") == LOG_TOOL)
     write_row = next(i for i in items if i["kind"] == "tool" and i.get("tool") == "setLogRetention")
@@ -92,17 +92,20 @@ def test_change_requested_after_reading_an_injected_log_is_flagged(env, monkeypa
     assert requested["locus"] == "egress" and requested["taintedBy"][0]["toolUseId"] == "toolu_1"
     assert "locus" not in next(i for i in items if i["kind"] == "request")  # 질문 행은 요약이라 층이 없다
 
-    # 판단은 그대로: 승인자가 승인해야 실행되고, 결정·실행 행은 효과층이며 체류 신호를 되풀이하지 않는다
+    # 판단은 그대로: 승인자가 승인해야 실행되고, 결정·실행 행은 실행 관문의 뒤(effect)이며 신호를 되풀이하지 않는다
     assert retention() == 30
     status, done = decide(env, pending["actionId"], "approve", "alice", groups="approvers")
     assert status == 200 and done["status"] == "executed" and retention() == 1
     effects = [i for i in audit_items(env) if i.get("event") in ("approved", "executed")]
     assert len(effects) == 2 and all(i["locus"] == "effect" and "taintedBy" not in i for i in effects)
 
-    # 관리자는 층으로 거른다: 체류는 의심 결과 뒤의 승인 요청만
+    # 관리자는 관문으로 거른다 (예전 이름 residence · effect도 받는다: 공유된 링크)
     assert [i["event"] for i in query(env, locus="residence")] == ["requested"]
     assert {i["tool"] for i in query(env, locus="ingress")} == {LOG_TOOL}
     assert sorted(i["event"] for i in query(env, locus="effect")) == ["approved", "executed"]
+    # 실행 관문 = 승인 관문의 앞(변경 도구 호출 · 승인 요청)과 뒤(승인 · 실행)
+    execution = query(env, locus="execution")
+    assert sorted(i.get("event") or i["tool"] for i in execution) == ["approved", "executed", "requested", "setLogRetention"]
 
 
 def test_clean_log_leaves_no_residence_signal(env, monkeypatch):
@@ -171,5 +174,5 @@ def test_every_listed_tool_is_registered(env):
 def test_unknown_locus_is_rejected(env):
     from audit import AuditQueryError
     with pytest.raises(AuditQueryError) as error:
-        query(env, locus="deliberation")  # 판단층은 기록할 수 없다
+        query(env, locus="deliberation")  # 모델의 판단은 볼 수 없어 관문이 아니다
     assert error.value.status == 400

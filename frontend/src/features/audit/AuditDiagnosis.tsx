@@ -1,6 +1,6 @@
-// 서비스 진단 층 그림(제목 '진단 단계'): 진단 도구(diagnoseService) 기록의 팝업창 맨 위에, 처리 단계 고리 대신 보인다.
+// 서비스 진단 층 그림(제목 '진단 단계'): 진단 도구(diagnoseService) 기록의 팝업창 맨 위에, 관문 그림 대신 보인다.
 // 판정은 서버의 진단 절차(mcp/lambda_mcp/diagnose.py)가 낸 그대로이고, 여기서는 일곱 층을 위에서 아래로 쌓아 그린다.
-// 모양 · 색 · 움직임은 처리 단계 그림(AuditLayers.tsx)을 따른다: 왼쪽 그림, 오른쪽 설명 칸.
+// 색 · 움직임 · 설명 칸은 관문 그림(AuditGates.tsx)과 같은 클래스(audit-cycle-*)를 쓴다: 왼쪽 그림, 오른쪽 설명 칸.
 //
 //   진단 단계  Application Load Balancer · web-alb · 최근 1시간              ● 원인 2  ● 의심 1  ● 정상 4
 //    ╲ L1 AWS ╱                          [L5] 인스턴스·실행 환경  대상 EC2              ● 원인
@@ -34,7 +34,7 @@ import {
 // 본 시간: 하루 단위면 날로 (자격 증명 24시간 → 1일, 비용 72시간 → 3일)
 const periodText = (hours: number) => (hours >= 24 && hours % 24 === 0 ? `${hours / 24}일` : `${hours}시간`);
 
-// 처리 단계 그림의 판정 색 이름 (판정 개수의 점 · 설명 칸 판정 상자의 왼쪽 선): 원인 실패 빨강 · 의심 주의 노랑 · 정상 파랑
+// 관문 그림의 판정 색 이름 (판정 개수의 점 · 설명 칸 판정 상자의 왼쪽 선): 원인 실패 빨강 · 의심 주의 노랑 · 정상 파랑
 const TONE: Record<ViewStatus, 'fail' | 'warn' | 'ok'> = { cause: 'fail', suspect: 'warn', ok: 'ok' };
 
 function StatusBadge({ status, className = '' }: { status: DiagnosisStatus; className?: string }) {
@@ -148,7 +148,7 @@ export function AuditDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
                         · 최근 {periodText(diagnosis.hours)}
                     </span>
                 </h4>
-                {/* 판정 개수: 처리 단계 그림과 같은 점 (원인 빨강 · 의심 노랑 · 정상 파랑) */}
+                {/* 판정 개수: 관문 그림과 같은 점 (원인 빨강 · 의심 노랑 · 정상 파랑) */}
                 <ul className="audit-counts" aria-label="층별 판정 개수">
                     {counts.map(({ view, n }) => (
                         <li key={view} className={`is-${TONE[view]}`}>
@@ -197,7 +197,7 @@ export function AuditDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
                     })}
                 </div>
 
-                {/* key: 층을 바꾸면 설명 칸이 새로 나타난다 (처리 단계 그림처럼 옅게 떠오름) */}
+                {/* key: 층을 바꾸면 설명 칸이 새로 나타난다 (관문 그림처럼 옅게 떠오름) */}
                 {selected ? <LayerPanel key={selected.id} layer={selected} description={map.descriptions[selected.id]} /> : null}
             </div>
         </section>
