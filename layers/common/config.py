@@ -66,6 +66,10 @@ def load_config():
         },
         'anthropic': {
             'api_key': ''
+        },
+        # Jev (services/llm/jev.py, 기본 꺼짐): 질문을 모델에 넘기기 전에 분류한다
+        'typesafe': {
+            'api_key': ''
         }
     }
 
@@ -116,7 +120,8 @@ def load_config():
             'McpFunctionUrl': ('mcp', 'function_url'),
             'KnowledgeBaseId': ('kb', 'kb_id'),
             'ChatHistoryTable': ('db', 'chat_history_table'),  # 새로 추가된 SSM 파라미터
-            'ANTHROPIC_API_KEY': ('anthropic', 'api_key')
+            'ANTHROPIC_API_KEY': ('anthropic', 'api_key'),
+            'TYPESAFE_API_KEY': ('typesafe', 'api_key')
         }
 
         for param in parameters:
