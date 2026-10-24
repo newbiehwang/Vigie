@@ -95,10 +95,10 @@ pip install -r requirements-dev.txt && pytest     # 백엔드 테스트 (moto로
 가짜 AWS에 장애를 심고 Vigie 대화창에서 진단해 보는 로컬 재현, 데모 사이트 배포, CI는 [docs/development.md](docs/development.md)에 있습니다.
 
 ## 팀 구성과 담당 범위
-2025년 4~6월 학부 캡스톤디자인(WeGoAWS 팀)에서 AWS 운영을 돕는 AI 챗봇으로 시작했습니다. 본인([@newbiehwang](https://github.com/newbiehwang))은 다음 영역을 맡았습니다.
+2025년 3~6월 학부 캡스톤디자인(WeGoAWS 팀)에서 AWS 운영을 돕는 AI 챗봇으로 시작했습니다. 본인([@newbiehwang](https://github.com/newbiehwang))은 프론트엔드를 제외한 MCP 서버와 클라이언트 개발, CI/CD 배포 자동화를 맡았습니다.
 - **인프라 / IaC**: `cloudformation/` 전체 스택 설계 및 작성
 - **배포 자동화**: `deploy.sh` 통합 배포 스크립트, CodeBuild 기반 MCP 컨테이너 이미지 빌드
-- **LLM·MCP 백엔드**: `services/llm`, `layers/common`, `mcp/` (MCP 서버는 팀원과 나눠 작업)
+- **LLM·MCP 백엔드**: `services/llm`, `layers/common`, `mcp/`
 
 2026년 9월부터는 혼자 고도화했습니다. API 인증과 IAM 최소 권한, GitHub OIDC 배포, React 화면, AWS 공식 MCP 서버 전환, 도구 검색, 민감정보 가리기, 변경 승인, 감사 로그와 역추적, 프롬프트 인젝션 방어, 서비스 진단 절차, 로컬 장애 재현, 배포 도구가 이때 만든 것입니다.
 
